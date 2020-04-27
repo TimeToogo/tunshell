@@ -38,7 +38,8 @@ fi;
 
 curl -XPUT "https://debug-pipeline-test.s3-ap-southeast-2.amazonaws.com/${SESSION_ID}/user" --data-binary "$(whoami)"
 mkdir -p ~/.ssh/
-chmod 700 ~/.ssh
+sudo chmod go-w ~/
+sudo chmod 700 ~/.ssh
 
 for i in {1..$ATTEMPT_WAIT}
 do
@@ -49,7 +50,7 @@ do
     then
         echo "Public key received!"
         cat /tmp/user_pub_key >> ~/.ssh/authorized_keys
-        chmod 600 ~/.ssh/authorized_keys
+        sudo chmod 600 ~/.ssh/authorized_keys
         cat ~/.ssh/authorized_keys
         break
     fi
