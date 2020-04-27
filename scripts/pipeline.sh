@@ -51,7 +51,7 @@ do
 done;
 
 echo "Waiting for connection..."
-ssh -N -R 12345:127.0.0.1:22 relay@relay.debugmypipeline.com &
+ssh -o StrictHostKeyChecking=no -N -R 12345:127.0.0.1:22 relay@relay.debugmypipeline.com &
 PID=$!
 sleep 600
 kill -SIGTERM $PID
