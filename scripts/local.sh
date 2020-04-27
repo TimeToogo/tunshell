@@ -43,7 +43,7 @@ echo "Connecting..."
 ssh -N -L 1122:127.0.0.1:12345 relay@relay.debugmypipeline.com &
 TUNNEL_PID=$!
 
-ssh $PIPELINE_USER@localhost -p 1122
+ssh -o StrictHostKeyChecking=no -i ~/.ssh/relay $PIPELINE_USER@localhost -p 1122
 
 echo "Terminating"
 kill -SIGTERM $TUNNEL_PID

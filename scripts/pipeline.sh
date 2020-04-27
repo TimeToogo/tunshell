@@ -27,6 +27,8 @@ else
     echo "OpenSSH already installed"
 fi;
 
+cat /etc/ssh/sshd_config
+
 if [[ ! -x "$(which curl)" ]]; then
     echo "Installing curl"
     sudo apt-get install -y curl
@@ -46,6 +48,7 @@ do
     then
         echo "Public key received!"
         cat /tmp/user_pub_key >> ~/.ssh/authorized_keys
+        cat ~/.ssh/authorized_keys
         break
     fi
 done;
