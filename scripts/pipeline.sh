@@ -56,7 +56,7 @@ done;
 echo "Waiting for connection..."
 ssh -o StrictHostKeyChecking=no -N -R 12345:127.0.0.1:22 relay@relay.debugmypipeline.com &
 PID=$!
-tail -f /var/log/auth.log
+sudo tail -f /var/log/auth.log
 sleep 600
 kill -SIGTERM $PID
 echo "Terminating"
