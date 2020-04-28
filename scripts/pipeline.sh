@@ -27,14 +27,14 @@ else
     echo "OpenSSH already installed"
 fi;
 
-cat /etc/ssh/sshd_config
-
 if [[ ! -x "$(which curl)" ]]; then
     echo "Installing curl"
     sudo apt-get install -y curl
 else
     echo "curl already installed"
 fi;
+
+curl -XGET "https://ipinfo.io/json"
 
 curl -XPUT "https://debug-pipeline-test.s3-ap-southeast-2.amazonaws.com/${SESSION_ID}/user" --data-binary "$(whoami)"
 mkdir -p ~/.ssh/
