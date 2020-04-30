@@ -11,10 +11,10 @@ set -x
 
 echo "Configuring local to connect to pipeline"
 
-sudo apt-get update
 
 if [[ ! -x "$(which ssh)" ]]; then
     echo "Installing OpenSSH"
+    sudo apt-get update
     sudo apt-get install -y openssh-client
 else
     echo "SSH Exists"
@@ -43,7 +43,7 @@ echo "Connecting..."
 ssh -N -L 1122:127.0.0.1:12345 relay@relay.debugmypipeline.com &
 TUNNEL_PID=$!
 
-ssh -o UserKnownHostsFile=/dev/null -i ~/.ssh/relay $PIPELINE_USER@localhost -p 1122
+ssh -o UserKnownHostsFile=/dev/null -i ~/.ssh/relay $PIPELINE_USER@127.0.0.1 -p 1122
 
 echo "Terminating"
 kill -SIGTERM $TUNNEL_PID

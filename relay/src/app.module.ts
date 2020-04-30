@@ -1,0 +1,17 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { SessionModule } from './session/session.module';
+import { TlsModule } from './tls/tls.module';
+
+@Module({
+  imports: [
+    MongooseModule.forRoot('mongodb://mongo/relay', {
+      user: process.env.MONGO_USER,
+      pass: process.env.MONGO_PASS,
+      useNewUrlParser: true,
+    }),
+    SessionModule,
+    TlsModule,
+  ],
+})
+export class AppModule {}

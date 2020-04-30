@@ -1,14 +1,14 @@
-name: Feasibility test
+# name: Feasibility test
 
-on:
-  push:
-    branches:
-      - master
+# on:
+#   push:
+#     branches:
+#       - master
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - run: chmod +x scripts/pipeline.sh
-    - run: scripts/pipeline.sh
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#     - uses: actions/checkout@v2
+#     - run: chmod +x scripts/pipeline.sh
+#     - run: scripts/pipeline.sh

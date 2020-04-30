@@ -54,7 +54,12 @@ Resources:
           - - IPAddress=
             - Ref: IPAddress
           - |
-            curl https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/setup-ec2.sh | sh
+            sudo mkdir /app
+            sudo chown -R $USER:$USER /app
+            cd /app 
+            git clone https://github.com/TimeToogo/debug-my-pipeline .
+            chmod +x /setup-ec2.sh
+            sh aws/setup-ec2.sh
       InstanceType:
         Ref: InstanceType
       SecurityGroups:
@@ -70,11 +75,16 @@ Resources:
     Properties:
       GroupDescription: Enable SSH access
       SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: '22'
-        ToPort: '22'
-        CidrIp:
-          Ref: SSHLocation
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:
+            Ref: SSHLocation
+        - IpProtocol: tcp
+          FromPort: '5000'
+          ToPort: '5000'
+          CidrIp:
+            Ref: 0.0.0.0/0
   IPAddress:
     Type: AWS::EC2::EIP
   IPAssoc:

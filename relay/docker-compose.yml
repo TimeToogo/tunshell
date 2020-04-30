@@ -1,0 +1,32 @@
+version: '3.3'
+services:
+  relay:
+    image: node
+    restart: unless-stopped
+    depends_on: 
+      - mongo
+    entrypoint: sh -c 'cd /app && npm i && npm run dev'
+    volumes:
+      - .:/app:delegated
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    environment:
+      MONGO_USER: relay
+      MONGO_PASS: password
+      TLS_RELAY_PRIVATE_KEY: /app/certs/development.key
+      TLS_RELAY_CERT: /app/certs/development.cert
+  
+  mongo:
+    image: mongo
+    restart: unless-stopped
+    volumes:
+      - ./mongo:/docker-entrypoint-initdb.d:ro
+      - mongodb:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: relay
+
+volumes:
+  mongodb:

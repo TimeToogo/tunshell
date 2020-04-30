@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "node-pty": "^0.9.0",
+    "ssh2": "^0.8.9"
+  }
+}

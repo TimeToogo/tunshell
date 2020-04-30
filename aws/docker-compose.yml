@@ -1,0 +1,12 @@
+version: '3.0'
+services:
+  relay:
+    image: timetoogo/debug-my-pipeline--relay
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+  api:
+    image: timetoogo/debug-my-pipeline--api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
