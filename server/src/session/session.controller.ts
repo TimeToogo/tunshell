@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Document } from 'mongoose';
 import { Session, CreateSessionResponse } from './session.model';
 import { IKeyGenerator } from '../services/key-generator.service';
-import { IClock } from 'src/services/clock.service';
+import { IClock } from '../services/clock.service';
 
 @Controller('/sessions')
 export class SessionController {

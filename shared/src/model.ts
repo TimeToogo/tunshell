@@ -19,6 +19,11 @@ export interface TlsRelayMessage<T = number> {
   data?: Buffer; // uint8[]
 }
 
+export interface TlsRelayJsonMessage<TData, T = number> {
+  type: T; // uint8
+  data: TData;
+}
+
 export enum TlsRelayServerMessageType {
   CLOSE = 0,
   KEY_ACCEPTED = 1,
@@ -28,6 +33,7 @@ export enum TlsRelayServerMessageType {
   TIME_PLEASE = 5,
   ATTEMPT_DIRECT_CONNECT = 6,
   START_RELAY_MODE = 7,
+  RELAY = 8,
 }
 
 export enum TlsRelayClientMessageType {
@@ -44,3 +50,9 @@ export interface TlsRelayServerMessage
 
 export interface TlsRelayClientMessage
   extends TlsRelayMessage<TlsRelayClientMessageType> {}
+
+export interface TlsRelayServerJsonMessage<TData>
+  extends TlsRelayJsonMessage<TData, TlsRelayServerMessageType> {}
+
+export interface TlsRelayClientJsonMessage<TData>
+  extends TlsRelayJsonMessage<TData, TlsRelayClientMessageType> {}

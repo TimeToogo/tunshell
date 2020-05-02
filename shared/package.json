@@ -1,11 +1,12 @@
 {
-  "name": "@timetoogo/debug-my-proxy--shared",
+  "name": "@timetoogo/debug-my-pipeline--shared",
   "version": "0.1.0",
   "license": "MIT",
   "scripts": {
+    "build": "rm -rf ./dist/ && tsc --build tsconfig.build.json",
     "test": "jest"
   },
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "devDependencies": {
     "@types/jest": "^25.1.4",
     "@types/node": "^13.9.1",

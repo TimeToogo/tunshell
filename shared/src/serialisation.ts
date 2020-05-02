@@ -1,13 +1,7 @@
-import {
-  TlsRelayMessage,
-  TlsRelayClientMessage,
-  TlsRelayServerMessage,
-} from './model';
+import { TlsRelayMessage, TlsRelayJsonMessage } from './model';
 
 export class TlsRelayMessageSerialiser {
-  public serialise = (
-    message: TlsRelayClientMessage | TlsRelayServerMessage,
-  ): Buffer => {
+  public serialise = (message: TlsRelayMessage): Buffer => {
     const length = 3 + message.length;
     const buffer = Buffer.alloc(length);
     buffer[0] = message.type;
@@ -25,7 +19,19 @@ export class TlsRelayMessageSerialiser {
     return buffer;
   };
 
-  public deserialise<T extends TlsRelayMessage>(buffer: Buffer): T {
+  public serialiseJson = <T extends TlsRelayJsonMessage<{}>>(
+    message: T,
+  ): Buffer => {
+    const json = Buffer.from(JSON.stringify(message.data), 'utf8');
+
+    return this.serialise({
+      type: message.type,
+      length: json.length,
+      data: json,
+    });
+  };
+
+  public deserialise = <T extends TlsRelayMessage>(buffer: Buffer): T => {
     if (buffer.length < 3) {
       throw new Error(`Buffer too small`);
     }
@@ -40,5 +46,25 @@ export class TlsRelayMessageSerialiser {
     } as T;
 
     return message;
-  }
+  };
+
+  public deserialiseJson = <TData>(
+    buffer: Buffer | TlsRelayMessage,
+  ): TlsRelayJsonMessage<Partial<TData>> => {
+    const message =
+      buffer instanceof Buffer ? this.deserialise(buffer) : buffer;
+
+    let parsedData: Partial<TData> | null = null;
+
+    try {
+      parsedData = JSON.parse(message.data.toString('utf8'));
+    } catch (e) {
+      throw new Error(`Failed to parse JSON from message: ${e.message}`);
+    }
+
+    return {
+      type: message.type,
+      data: parsedData!,
+    } as TlsRelayJsonMessage<Partial<TData>>;
+  };
 }

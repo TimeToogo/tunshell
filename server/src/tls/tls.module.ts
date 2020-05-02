@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { tlsConfigProvider } from './tls.config';
-import { tlsRelayServiceProvider } from './tls.service';
-import { SessionModule } from 'src/session/session.module';
-import { ServicesModule } from 'src/services/services.module';
+import { tlsRelayServerProvider } from './tls.server';
+import { SessionModule } from '../session/session.module';
+import { ServicesModule } from '../services/services.module';
 
 @Module({
   imports: [SessionModule, ServicesModule],
-  providers: [tlsConfigProvider, tlsRelayServiceProvider],
-  exports: [tlsRelayServiceProvider],
+  providers: [tlsConfigProvider, tlsRelayServerProvider],
+  exports: [tlsRelayServerProvider],
 })
 export class TlsModule {}
