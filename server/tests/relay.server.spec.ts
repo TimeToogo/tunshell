@@ -237,7 +237,7 @@ describe('TlsRelayServer', () => {
 
       switch (message.type) {
         case TlsRelayServerMessageType.KEY_ACCEPTED:
-          log.push(['Key accepted!']);
+          log.push(['Key accepted!', JSON.parse(message.data.toString())]);
           break;
         case TlsRelayServerMessageType.PEER_JOINED:
           log.push(['Peer joined', JSON.parse(message.data.toString())]);
@@ -308,7 +308,7 @@ describe('TlsRelayServer', () => {
       expect(connection.getSession().client.joined).toBe(true);
 
       expect(socketLog).toStrictEqual([
-        ['Key accepted!'],
+        ['Key accepted!', { keyType: 'client' }],
         [
           'Peer joined',
           {
@@ -320,7 +320,7 @@ describe('TlsRelayServer', () => {
         ['Attempt direct connect'],
       ]);
       expect(peerLog).toStrictEqual([
-        ['Key accepted!'],
+        ['Key accepted!', { keyType: 'host' }],
         [
           'Peer joined',
           {
@@ -382,7 +382,7 @@ describe('TlsRelayServer', () => {
 
       switch (message.type) {
         case TlsRelayServerMessageType.KEY_ACCEPTED:
-          log.push(['Key accepted!']);
+          log.push(['Key accepted!', JSON.parse(message.data.toString())]);
           break;
         case TlsRelayServerMessageType.PEER_JOINED:
           log.push(['Peer joined', JSON.parse(message.data.toString())]);
@@ -478,7 +478,7 @@ describe('TlsRelayServer', () => {
       peerSocket.off('data', peerSocketHandler);
 
       expect(socketLog).toStrictEqual([
-        ['Key accepted!'],
+        ['Key accepted!', { keyType: 'client' }],
         [
           'Peer joined',
           {
@@ -492,7 +492,7 @@ describe('TlsRelayServer', () => {
         ['Received relayed data', 'hello from peer'],
       ]);
       expect(peerLog).toStrictEqual([
-        ['Key accepted!'],
+        ['Key accepted!', { keyType: 'host' }],
         [
           'Peer joined',
           {

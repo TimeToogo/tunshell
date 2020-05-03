@@ -7,14 +7,14 @@ export enum TlsRelayConnectionState {
   DIRECT_CONNECT_FAILED,
   DIRECT_CONNECTION,
   RELAYED_CONNECTION,
-  CLOSED
+  CLOSED,
 }
 
 export interface LatencyEstimation {
   // Server --> Client latency
-  sendLatency: number
+  sendLatency: number;
   // Client --> Server latency
-  receiveLatency: number
+  receiveLatency: number;
   // Relative to server's time
-  timeDiff: number
+  timeDiff: number;
 }

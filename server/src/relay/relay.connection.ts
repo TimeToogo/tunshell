@@ -16,6 +16,7 @@ import {
   TlsRelayServerJsonMessage,
   ServerDirectConnectAttemptPayload,
   ServerPeerJoinedPayload,
+  KeyAcceptedPayload,
 } from '@timetoogo/debug-my-pipeline--shared';
 
 export class TlsRelayConnection extends EventEmitter {
@@ -135,9 +136,11 @@ export class TlsRelayConnection extends EventEmitter {
     participant.ipAddress = this.socket.remoteAddress;
     participant.joined = true;
     await this.session.save();
-    await this.sendMessage({
+    await this.sendJsonMessage<KeyAcceptedPayload>({
       type: TlsRelayServerMessageType.KEY_ACCEPTED,
-      length: 0,
+      data: {
+        keyType: this.isHost() ? 'host' : 'client',
+      },
     });
     this.state = TlsRelayConnectionState.WAITING_FOR_PEER;
     this.timeouts.push(setTimeout(this.timeoutWaitingForPeer, this.config.waitForPeerTimeout));

@@ -192,21 +192,23 @@ describe('TlsRelayConnection', () => {
   it('Accepting key enters WAITING_FOR_PEER state', async () => {
     const config = mockConfig();
     const socket = mockSocket();
-    const mockSession = { host: {}, client: {}, save: jest.fn() } as any;
+    const mockSession = { host: { key: 'host-key' }, client: { key: 'client-key' }, save: jest.fn() } as any;
 
     const connection = new TlsRelayConnection(config, socket, logger);
 
     try {
       connection.waitForKey();
 
+      (connection as any).key = 'host-key';
       await connection.acceptKey(mockSession);
 
       expect(connection.getState()).toBe(TlsRelayConnectionState.WAITING_FOR_PEER);
       expect(connection.getSession()).toBe(mockSession);
-      expect(serialiser.deserialise(socket.write.mock.calls[0][0] as Buffer)).toStrictEqual({
+      expect(serialiser.deserialiseJson(socket.write.mock.calls[0][0] as Buffer)).toStrictEqual({
         type: TlsRelayServerMessageType.KEY_ACCEPTED,
-        length: 0,
-        data: Buffer.alloc(0),
+        data: {
+          keyType: 'host',
+        },
       });
     } finally {
       connection.close();

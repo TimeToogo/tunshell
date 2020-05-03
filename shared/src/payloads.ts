@@ -11,3 +11,7 @@ export interface ServerPeerJoinedPayload {
 export interface ClientTimePayload {
   clientTime: number
 }
+
+export interface KeyAcceptedPayload {
+  keyType: "client"|"host"
+}
