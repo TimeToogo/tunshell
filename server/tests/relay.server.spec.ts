@@ -7,30 +7,25 @@ import { TlsRelayConfig } from '../src/relay/relay.config';
 import { TlsRelayServer } from '../src/relay/relay.server';
 import { Session } from '../src/session/session.model';
 import { TlsRelayConnection } from '../src/relay/relay.connection';
-import {
-  TlsRelayMessageSerialiser,
-  TlsRelayClientMessageType,
-} from '@timetoogo/debug-my-pipeline--shared';
+import { TlsRelayMessageSerialiser, TlsRelayClientMessageType } from '@timetoogo/debug-my-pipeline--shared';
 
 const mockConfig = (config: Partial<TlsRelayConfig> = {}): TlsRelayConfig =>
-  _.defaultsDeep(
-    {
-      server: {
-        key: fs.readFileSync(__dirname + '/../certs/development.key'),
-        cert: fs.readFileSync(__dirname + '/../certs/development.cert'),
-      },
-
-      cleanUpInterval: 60 * 1000,
-      negotiateConnectionTimeout: 10 * 1000,
-
-      connection: {
-        waitForKeyTimeout: 5000,
-        waitForPeerTimeout: 600 * 1000,
-        connectionTimeLimit: 3600 * 1000,
-      },
+  _.defaultsDeep(config, {
+    server: {
+      key: fs.readFileSync(__dirname + '/../certs/development.key'),
+      cert: fs.readFileSync(__dirname + '/../certs/development.cert'),
     },
-    config,
-  );
+
+    cleanUpInterval: 60 * 1000,
+
+    connection: {
+      waitForKeyTimeout: 5 * 1000,
+      waitForPeerTimeout: 600 * 1000,
+      estimateLatencyTimeout: 5 * 1000,
+      attemptDirectConnectTimeout: 10 * 1000,
+      connectionTimeLimit: 3600 * 1000,
+    },
+  });
 
 const logger = new Logger('TlsRelayServerTests');
 
@@ -66,7 +61,7 @@ const closeSocket = async (socket: tls.TLSSocket): Promise<void> => {
 let port = 60000;
 const getPort = () => port++;
 
-describe('TlsServer', () => {
+describe('TlsRelayServer', () => {
   it('Listens to connections on port', async () => {
     const port = getPort();
     const config = mockConfig();
@@ -151,12 +146,12 @@ describe('TlsServer', () => {
     const CURRENT_SESSION: Session & Partial<Document> = {
       host: {
         key: 'host-key--1234567890',
-        ipAddress: '123.123.123.123',
+        ipAddress: null,
         joined: false,
       },
       client: {
         key: 'client-key--1234567890',
-        ipAddress: '123.123.123.123',
+        ipAddress: null,
         joined: false,
       },
       createdAt: new Date(),
@@ -194,6 +189,7 @@ describe('TlsServer', () => {
       expect(connection.getSession()).toBe(CURRENT_SESSION);
       expect(connection.getSession().host.joined).toBe(false);
       expect(connection.getSession().client.joined).toBe(true);
+      expect(connection.getSession().client.ipAddress).toBe(connection.getSocket().remoteAddress);
     } finally {
       await server.close();
       await closeSocket(socket);

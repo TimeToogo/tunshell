@@ -6,11 +6,12 @@ export interface TlsRelayConfig {
   server: tls.TlsOptions;
 
   cleanUpInterval: number;
-  negotiateConnectionTimeout: number;
 
   connection: {
     waitForKeyTimeout: number;
     waitForPeerTimeout: number;
+    estimateLatencyTimeout: number;
+    attemptDirectConnectTimeout: number;
     connectionTimeLimit: number;
   };
 }
@@ -22,11 +23,12 @@ const TlsConfig: TlsRelayConfig = {
   },
 
   cleanUpInterval: 60 * 1000,
-  negotiateConnectionTimeout: 10 * 1000,
 
   connection: {
-    waitForKeyTimeout: 5000,
+    waitForKeyTimeout: 5 * 1000,
     waitForPeerTimeout: 600 * 1000,
+    estimateLatencyTimeout: 5 * 1000,
+    attemptDirectConnectTimeout: 10 * 1000,
     connectionTimeLimit: 3600 * 1000,
   },
 };

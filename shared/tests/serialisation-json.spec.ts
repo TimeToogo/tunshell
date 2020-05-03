@@ -1,10 +1,7 @@
 import {
-  TlsRelayServerMessage,
   TlsRelayServerMessageType,
   TlsRelayClientMessageType,
-  TlsRelayClientMessage,
   TlsRelayJsonMessage,
-  TlsRelayServerJsonMessage,
 } from '../src/model';
 import { TlsRelayMessageSerialiser } from '../src/serialisation';
 

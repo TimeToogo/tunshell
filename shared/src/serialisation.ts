@@ -19,8 +19,8 @@ export class TlsRelayMessageSerialiser {
     return buffer;
   };
 
-  public serialiseJson = <T extends TlsRelayJsonMessage<{}>>(
-    message: T,
+  public serialiseJson = <TData>(
+    message: TlsRelayJsonMessage<TData>,
   ): Buffer => {
     const json = Buffer.from(JSON.stringify(message.data), 'utf8');
 

@@ -29,10 +29,7 @@ export class TlsRelayServer {
 
     this.server.listen(port, () => {
       this.logger.log(`TLS Relay server listening on ${port}`);
-      this.cleanUpIntervalId = setInterval(
-        this.cleanUpOldConnections,
-        this.config.cleanUpInterval,
-      );
+      this.cleanUpIntervalId = setInterval(this.cleanUpOldConnections, this.config.cleanUpInterval);
     });
 
     return new Promise(resolve => (this.listenResolve = resolve));
@@ -46,13 +43,11 @@ export class TlsRelayServer {
     this.logger.log(`Tearing down TLS Relay server`);
     clearInterval(this.cleanUpIntervalId);
 
-    for(const connection of _.values(this.connections)) {
-      connection.close()
+    for (const connection of _.values(this.connections)) {
+      connection.close();
     }
 
-    await new Promise((resolve, reject) =>
-      this.server.close(err => (err ? reject(err) : resolve())),
-    );
+    await new Promise((resolve, reject) => this.server.close(err => (err ? reject(err) : resolve())));
     this.server = null;
     this.listenResolve();
     this.listenResolve = null;
@@ -61,17 +56,13 @@ export class TlsRelayServer {
   private handleConnection = (socket: tls.TLSSocket) => {
     this.logger.log(`Received connection from ${socket.remoteAddress}`);
 
-    const connection = new TlsRelayConnection(
-      this.config.connection,
-      socket,
-      this.logger,
-    );
-
-    connection.init();
+    const connection = new TlsRelayConnection(this.config.connection, socket, this.logger);
 
     connection.on('key-received', () => {
       this.handleConnectionKey(connection);
     });
+
+    connection.waitForKey();
   };
 
   private handleConnectionKey = async (connection: TlsRelayConnection) => {
@@ -82,7 +73,7 @@ export class TlsRelayServer {
     });
 
     if (!session || !this.isSessionValidToJoin(session, key)) {
-      connection.rejectKey();
+      await connection.rejectKey();
       return;
     }
 
@@ -98,82 +89,52 @@ export class TlsRelayServer {
     await connection.acceptKey(session);
 
     if (peerConnection) {
-      this.negotiateConnection(connection, peerConnection);
+      await this.negotiateConnection(connection, peerConnection);
     }
   };
 
-  private negotiateConnection = async (
-    peer1: TlsRelayConnection,
-    peer2: TlsRelayConnection,
-  ) => {
-    peer1.peerJoined(peer2);
-    peer2.peerJoined(peer1);
+  private negotiateConnection = async (peer1: TlsRelayConnection, peer2: TlsRelayConnection) => {
+    await Promise.all([peer1.peerJoined(peer2), peer2.peerJoined(peer1)]);
 
     if (await this.negotiateDirectConnection(peer1, peer2)) {
       return;
     }
 
-    this.configureRelayedConnection(peer1, peer2);
+    await this.configureRelayedConnection(peer1, peer2);
   };
 
-  private negotiateDirectConnection = (
+  private negotiateDirectConnection = async (
     peer1: TlsRelayConnection,
     peer2: TlsRelayConnection,
   ): Promise<boolean> => {
-    return new Promise<boolean>(async (resolve, reject) => {
-      let cancelled: any = false;
+    // All in milliseconds
+    let estimate1: LatencyEstimation | undefined;
+    let estimate2: LatencyEstimation | undefined;
 
-      setTimeout(() => {
-        cancelled = true;
-        resolve(false);
-      }, this.config.negotiateConnectionTimeout);
+    try {
+      [estimate1, estimate2] = await Promise.all([peer1.estimateLatency(), peer2.estimateLatency()]);
+    } catch (e) {
+      this.logger.error(`Error while estimating peer latencies: ${e.message}`, e.stack);
+      return false;
+    }
 
-      // All in milliseconds
-      let estimate1: LatencyEstimation | undefined;
-      let estimate2: LatencyEstimation | undefined;
+    const maxLatencyMs = Math.max(estimate1.sendLatency, estimate2.sendLatency);
+    const bufferMs = 500;
+    const directConnectAttemptTime = Date.now() + maxLatencyMs + bufferMs;
 
-      try {
-        [estimate1, estimate2] = await Promise.all([
-          peer1.estimateLatency(),
-          peer2.estimateLatency(),
-        ]);
-      } catch (e) {
-        this.logger.log(
-          `Error while estimating peer latencies: ${e.message}`,
-          e.stack,
-        );
-        resolve(false);
-      }
+    const directConnectTime1 = directConnectAttemptTime + estimate1.timeDiff;
+    const directConnectTime2 = directConnectAttemptTime + estimate2.timeDiff;
 
-      if (cancelled === true) return;
+    const [success1, success2] = await Promise.all([
+      peer1.attemptDirectConnect(directConnectTime1),
+      peer2.attemptDirectConnect(directConnectTime2),
+    ]);
 
-      const maxLatencyMs = Math.max(
-        estimate1.sendLatency,
-        estimate2.sendLatency,
-      );
-      const bufferMs = 500;
-      const directConnectAttemptTime = Date.now() + maxLatencyMs + bufferMs;
-
-      const directConnectTime1 = directConnectAttemptTime + estimate1.timeDiff;
-      const directConnectTime2 = directConnectAttemptTime + estimate2.timeDiff;
-
-      const [success1, success2] = await Promise.all([
-        peer1.attemptDirectConnect(directConnectTime1),
-        peer2.attemptDirectConnect(directConnectTime2),
-      ]);
-
-      if (cancelled === true) return;
-
-      return resolve(success1 && success2);
-    });
+    return success1 && success2;
   };
 
-  private configureRelayedConnection = (
-    peer1: TlsRelayConnection,
-    peer2: TlsRelayConnection,
-  ) => {
-    peer1.enableRelay();
-    peer2.enableRelay();
+  private configureRelayedConnection = async (peer1: TlsRelayConnection, peer2: TlsRelayConnection) => {
+    await Promise.all([peer1.enableRelay(), peer2.enableRelay()]);
   };
 
   private isSessionValidToJoin = (session: Session, key: string): boolean => {

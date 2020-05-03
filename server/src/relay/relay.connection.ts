@@ -20,6 +20,7 @@ import {
 
 export class TlsRelayConnection extends EventEmitter {
   private state: TlsRelayConnectionState = TlsRelayConnectionState.NEW;
+  private timeouts: NodeJS.Timeout[] = [];
   private serialiser: TlsRelayMessageSerialiser = new TlsRelayMessageSerialiser();
   private key: string | null = null;
   private session: (Session & Document) | null = null;
@@ -35,65 +36,56 @@ export class TlsRelayConnection extends EventEmitter {
     @Inject('Logger') private readonly logger: LoggerService,
   ) {
     super();
+    this.init();
   }
 
   public getState = () => this.state;
   public getKey = () => this.key;
   public getSession = () => this.session;
+  public getSocket = () => this.socket;
   public isHost = () => this.session.host.key === this.key;
   public isClient = () => this.session.client.key === this.key;
-  public getParticipant = () =>
-    this.session.host.key === this.key
-      ? this.session.host
-      : this.session.client;
+  public getParticipant = () => {
+    if (!this.session) {
+      return null;
+    }
 
-  isDead = () =>
-    this.state === TlsRelayConnectionState.CLOSED ||
-    this.state === TlsRelayConnectionState.EXPIRED_WAITING_FOR_KEY ||
-    this.state === TlsRelayConnectionState.EXPIRED_WAITING_FOR_PEER ||
-    this.state === TlsRelayConnectionState.EXPIRED_NEGOTIATING_CONNECTION ||
-    this.state === TlsRelayConnectionState.EXPIRED_CONNECTION;
+    return this.session.host.key === this.key ? this.session.host : this.session.client;
+  };
 
-  public init = async () => {
+  isDead = () => this.state === TlsRelayConnectionState.CLOSED;
+
+  private init = () => {
     this.socket.on('data', this.handleData);
 
     this.socket.on('close', this.handleSocketClose);
-
-    this.state = TlsRelayConnectionState.WAITING_FOR_KEY;
-    this.waitFor([TlsRelayClientMessageType.KEY]).then(this.handleKey).catch(() => {});
-
-    setTimeout(this.timeoutWaitingForKey, this.config.waitForKeyTimeout);
   };
 
-  private timeoutWaitingForKey = () => {
-    if (this.state === TlsRelayConnectionState.WAITING_FOR_KEY) {
-      this.state = TlsRelayConnectionState.EXPIRED_WAITING_FOR_KEY;
-      this.close();
-    }
+  public waitForKey = () => {
+    this.state = TlsRelayConnectionState.WAITING_FOR_KEY;
+    this.waitFor([TlsRelayClientMessageType.KEY], this.config.waitForKeyTimeout)
+      .then(this.handleKey)
+      .catch(() => {});
   };
 
   private handleData = (data: Buffer) => {
-    this.handleMessage(
-      this.serialiser.deserialise<TlsRelayClientMessage>(data),
-    );
+    this.handleMessage(this.serialiser.deserialise<TlsRelayClientMessage>(data));
   };
 
-  private handleMessage = (message: TlsRelayClientMessage) => {
+  private handleMessage = async (message: TlsRelayClientMessage) => {
     if (message.type === TlsRelayClientMessageType.CLOSE) {
-      this.close();
+      await this.close();
       return;
     }
 
-    if (this.waitingForTypes.includes(message.type)) {
+    if (this.waitingForTypes && this.waitingForTypes.includes(message.type)) {
       this.waitingForResolve(message);
     } else {
       this.handleUnexpectedMessage(message);
     }
   };
 
-  private waitFor = (
-    types: TlsRelayClientMessageType[],
-  ): Promise<TlsRelayClientMessage> => {
+  private waitFor = (types: TlsRelayClientMessageType[], timeLimit?: number): Promise<TlsRelayClientMessage> => {
     if (this.waitingForTypes) {
       throw new Error(`Already waiting for message`);
     }
@@ -103,6 +95,19 @@ export class TlsRelayConnection extends EventEmitter {
     return new Promise<TlsRelayClientMessage>((resolve, reject) => {
       this.waitingForResolve = resolve;
       this.waitingForReject = reject;
+
+      this.timeouts.push(
+        setTimeout(() => {
+          reject(
+            new Error(
+              `Connection timed out while waiting for ${types
+                .map(i => TlsRelayClientMessageType[i])
+                .join(', ')} messages`,
+            ),
+          );
+          this.close();
+        }, timeLimit),
+      );
     }).finally(() => {
       this.waitingForTypes = null;
       this.waitingForResolve = null;
@@ -116,11 +121,7 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     if (message.length < 16 || message.length > 64) {
-      this.handleError(
-        new Error(
-          `Key does not meet data length requirements, received length: ${message.length}`,
-        ),
-      );
+      this.handleError(new Error(`Key does not meet data length requirements, received length: ${message.length}`));
       return;
     }
 
@@ -129,22 +130,26 @@ export class TlsRelayConnection extends EventEmitter {
   };
 
   public acceptKey = async (session: Session & Document) => {
-    this.state = TlsRelayConnectionState.WAITING_FOR_PEER;
     this.session = session;
     const participant = this.getParticipant();
     participant.ipAddress = this.socket.remoteAddress;
     participant.joined = true;
     await this.session.save();
-    setTimeout(this.timeoutWaitingForPeer, this.config.waitForPeerTimeout);
+    await this.sendMessage({
+      type: TlsRelayServerMessageType.KEY_ACCEPTED,
+      length: 0,
+    });
+    this.state = TlsRelayConnectionState.WAITING_FOR_PEER;
+    this.timeouts.push(setTimeout(this.timeoutWaitingForPeer, this.config.waitForPeerTimeout));
   };
 
-  public rejectKey = () => {
+  public rejectKey = async () => {
     this.state = TlsRelayConnectionState.KEY_INVALID;
-    this.sendMessage({
+    await this.sendMessage({
       type: TlsRelayServerMessageType.KEY_REJECTED,
       length: 0,
     });
-    this.close();
+    await this.close();
   };
 
   public estimateLatency = async (): Promise<LatencyEstimation> => {
@@ -154,34 +159,23 @@ export class TlsRelayConnection extends EventEmitter {
       length: 0,
     };
 
-    this.sendMessage(timePleaseMessage);
+    await this.sendMessage(timePleaseMessage);
     const requestSentTime = Date.now();
 
-    this.state = TlsRelayConnectionState.NEGOTIATING__WAITING_FOR_TIME;
-    const message = await this.waitFor([TlsRelayClientMessageType.TIME]);
+    const message = await this.waitFor([TlsRelayClientMessageType.TIME], this.config.estimateLatencyTimeout);
 
     const receivedResponseTime = Date.now();
-    const timeMessage = this.serialiser.deserialiseJson<ClientTimePayload>(
-      message,
-    );
+    const timeMessage = this.serialiser.deserialiseJson<ClientTimePayload>(message);
 
-    if (
-      typeof timeMessage.data.clientTime !== 'number' ||
-      timeMessage.data.clientTime < 0
-    ) {
-      throw new Error(
-        `Client returned time payload with incorrect structure: ${JSON.stringify(
-          timeMessage,
-        )}`,
-      );
+    if (typeof timeMessage.data.clientTime !== 'number' || timeMessage.data.clientTime < 0) {
+      throw new Error(`Client returned time payload with incorrect structure: ${JSON.stringify(timeMessage)}`);
     }
 
     const roundTripLatency = receivedResponseTime - requestSentTime;
     // TODO: Remove naive assumption of symmetrical outbound/inbound latency
     const sendLatency = roundTripLatency / 2;
     const receiveLatency = roundTripLatency / 2;
-    const timeDiff =
-      requestSentTime + sendLatency - timeMessage.data.clientTime;
+    const timeDiff = requestSentTime + sendLatency - timeMessage.data.clientTime;
 
     return {
       sendLatency,
@@ -190,24 +184,22 @@ export class TlsRelayConnection extends EventEmitter {
     };
   };
 
-  public attemptDirectConnect = async (
-    coordinatedPeerTime: number,
-  ): Promise<boolean> => {
-    this.sendJsonMessage<ServerDirectConnectAttemptPayload>({
+  public attemptDirectConnect = async (coordinatedPeerTime: number): Promise<boolean> => {
+    await this.sendJsonMessage<ServerDirectConnectAttemptPayload>({
       type: TlsRelayServerMessageType.ATTEMPT_DIRECT_CONNECT,
       data: {
         connectAt: coordinatedPeerTime,
       },
     });
 
-    const message = await this.waitFor([
-      TlsRelayClientMessageType.DIRECT_CONNECT_SUCCEEDED,
-      TlsRelayClientMessageType.DIRECT_CONNECT_FAILED,
-    ]);
+    const message = await this.waitFor(
+      [TlsRelayClientMessageType.DIRECT_CONNECT_SUCCEEDED, TlsRelayClientMessageType.DIRECT_CONNECT_FAILED],
+      this.config.attemptDirectConnectTimeout,
+    );
 
     if (message.type === TlsRelayClientMessageType.DIRECT_CONNECT_SUCCEEDED) {
       this.state = TlsRelayConnectionState.DIRECT_CONNECTION;
-      setTimeout(this.timeoutDirectConnection, this.config.connectionTimeLimit);
+      this.timeouts.push(setTimeout(this.timeoutDirectConnection, this.config.connectionTimeLimit));
       return true;
     } else {
       this.state = TlsRelayConnectionState.DIRECT_CONNECT_FAILED;
@@ -215,27 +207,35 @@ export class TlsRelayConnection extends EventEmitter {
     }
   };
 
-  private timeoutDirectConnection = () => {
+  private timeoutDirectConnection = async () => {
     if (this.state === TlsRelayConnectionState.DIRECT_CONNECTION) {
-      this.state = TlsRelayConnectionState.EXPIRED_CONNECTION;
-      this.close();
+      this.logger.warn(`Direct connection expired`);
+      await this.close();
     }
   };
 
-  public enableRelay = () => {
-    this.sendMessage({
+  public enableRelay = async () => {
+    await this.sendMessage({
       type: TlsRelayServerMessageType.START_RELAY_MODE,
       length: 0,
     });
     this.state = TlsRelayConnectionState.RELAYED_CONNECTION;
     this.waitForRelayMessage();
-    setTimeout(this.timeoutRelay, this.config.connectionTimeLimit);
+    this.timeouts.push(setTimeout(this.timeoutRelay, this.config.connectionTimeLimit));
   };
 
   private waitForRelayMessage = async () => {
-    const message = await this.waitFor([TlsRelayClientMessageType.RELAY]);
+    const message = await this.waitFor([TlsRelayClientMessageType.RELAY], this.config.connectionTimeLimit).catch(() => {
+      return null;
+    });
 
-    this.peer.sendMessage({
+    if (!message) {
+      // We can safely ignore this since the timeout for the connectionTimeLimit
+      // will have already closed the connection
+      return;
+    }
+
+    await this.peer.sendMessage({
       type: TlsRelayServerMessageType.RELAY,
       length: message.length,
       data: message.data,
@@ -244,24 +244,25 @@ export class TlsRelayConnection extends EventEmitter {
     this.waitForRelayMessage();
   };
 
-  private timeoutRelay = () => {
+  private timeoutRelay = async () => {
     if (this.state === TlsRelayConnectionState.RELAYED_CONNECTION) {
-      this.state = TlsRelayConnectionState.EXPIRED_CONNECTION;
-      this.close();
+      this.logger.warn(`Relay connection expired`);
+      await this.close();
     }
   };
 
-  public peerJoined = (peer: TlsRelayConnection) => {
+  public peerJoined = async (peer: TlsRelayConnection) => {
     if (this.state !== TlsRelayConnectionState.WAITING_FOR_PEER) {
       throw new Error(`Not waiting for peer`);
     }
 
     this.peer = peer;
 
-    this.sendJsonMessage<ServerPeerJoinedPayload>({
+    await this.sendJsonMessage<ServerPeerJoinedPayload>({
       type: TlsRelayServerMessageType.PEER_JOINED,
       data: {
-        peerIpAddress: this.peer.socket.remoteAddress,
+        peerKey: peer.getKey(),
+        peerIpAddress: this.peer.getSocket().remoteAddress,
       },
     });
 
@@ -270,23 +271,23 @@ export class TlsRelayConnection extends EventEmitter {
 
   private timeoutWaitingForPeer = () => {
     if (this.state === TlsRelayConnectionState.WAITING_FOR_PEER) {
-      this.state = TlsRelayConnectionState.EXPIRED_WAITING_FOR_PEER;
+      this.logger.warn(`Timeout waiting for peer`);
       this.close();
     }
   };
 
-  private sendMessage = (message: TlsRelayServerMessage | Buffer) => {
+  private sendMessage = (message: TlsRelayServerMessage | Buffer): Promise<void> => {
     if (!this.socket.writable) {
       throw new Error(`Cannot send message, socket is not writable`);
     }
 
-    const buffer =
-      message instanceof Buffer ? message : this.serialiser.serialise(message);
-    this.socket.write(buffer, this.handleError);
+    const buffer = message instanceof Buffer ? message : this.serialiser.serialise(message);
+
+    return new Promise<void>((resolve, reject) => this.socket.write(buffer, err => (err ? reject(err) : resolve())));
   };
 
-  private sendJsonMessage = <T>(message: TlsRelayServerJsonMessage<T>) => {
-    this.sendMessage(this.serialiser.serialiseJson(message));
+  private sendJsonMessage = async <T>(message: TlsRelayServerJsonMessage<T>) => {
+    await this.sendMessage(this.serialiser.serialiseJson(message));
   };
 
   private handleUnexpectedMessage = (message: TlsRelayClientMessage) => {
@@ -301,21 +302,21 @@ export class TlsRelayConnection extends EventEmitter {
 
   private handleError = (error?: Error) => {
     if (error) {
-      this.logger.log(
-        `TLS Relay error received: ${error.message}`,
-        error.stack!,
-      );
+      this.logger.error(`TLS Relay error received: ${error.message}`);
       this.close();
     }
   };
 
-  public close = () => {
+  public close = async () => {
     if (this.state === TlsRelayConnectionState.CLOSED) {
       return;
     }
 
     if (this.socket.writable) {
-      this.sendMessage({ type: TlsRelayServerMessageType.CLOSE, length: 0 });
+      await this.sendMessage({
+        type: TlsRelayServerMessageType.CLOSE,
+        length: 0,
+      });
     }
 
     if (this.waitingForReject) {
@@ -324,8 +325,10 @@ export class TlsRelayConnection extends EventEmitter {
 
     this.state = TlsRelayConnectionState.CLOSED;
     this.socket.end(() => {
-      this.socket.destroy()
+      this.socket.destroy();
     });
+
+    this.timeouts.forEach(clearTimeout);
   };
 
   private handleSocketClose = () => {
@@ -340,4 +343,3 @@ export class TlsRelayConnection extends EventEmitter {
     this.close();
   };
 }
-

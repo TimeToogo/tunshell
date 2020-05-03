@@ -1,18 +1,3 @@
-export enum TlsRelayConnectionState {
-  NEW,
-  WAITING_FOR_KEY,
-  EXPIRED_WAITING_FOR_KEY,
-  KEY_INVALID,
-  WAITING_FOR_PEER,
-  PEER_ALREADY_ENGAGED,
-  EXPIRED_WAITING_FOR_PEER,
-  NEGOTIATING_CONNECTION,
-  EXPIRED_NEGOTIATING_CONNECTION,
-  DIRECT_CONNECTION,
-  RELAYED_CONNECTION,
-  BROKEN_RELAY,
-}
-
 export interface TlsRelayMessage<T = number> {
   type: T; // uint8
   length: number; // uint16

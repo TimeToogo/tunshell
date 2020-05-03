@@ -4,6 +4,7 @@ export interface ServerDirectConnectAttemptPayload {
 }
 
 export interface ServerPeerJoinedPayload {
+  peerKey: string
   peerIpAddress: string
 }
 
