@@ -59,7 +59,7 @@ export class TlsRelayServer {
     const connection = new TlsRelayConnection(this.config.connection, socket, this.logger);
 
     connection.on('key-received', () => {
-      this.handleConnectionKey(connection);
+      this.handleConnectionKey(connection).catch(this.logger.error);
     });
 
     connection.waitForKey();
@@ -141,7 +141,7 @@ export class TlsRelayServer {
 
   private isSessionValidToJoin = (session: Session, key: string): boolean => {
     // Check session has not expired
-    if (Date.now() - session.createdAt.getTime() > 86400) {
+    if (Date.now() - session.createdAt.getTime() > this.config.keyExpiryTime) {
       return false;
     }
 

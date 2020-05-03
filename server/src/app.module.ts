@@ -5,7 +5,7 @@ import { TlsModule } from './relay/relay.module';
 
 @Module({
   imports: [
-    MongooseModule.forRoot('mongodb://mongo/relay', {
+    MongooseModule.forRoot(`mongodb://${process.env.MONGO_HOST}:27017/relay`, {
       user: process.env.MONGO_USER,
       pass: process.env.MONGO_PASS,
       useNewUrlParser: true,

@@ -19,9 +19,7 @@ export class TlsRelayMessageSerialiser {
     return buffer;
   };
 
-  public serialiseJson = <TData>(
-    message: TlsRelayJsonMessage<TData>,
-  ): Buffer => {
+  public serialiseJson = <TData>(message: TlsRelayJsonMessage<TData>): Buffer => {
     const json = Buffer.from(JSON.stringify(message.data), 'utf8');
 
     return this.serialise({
@@ -48,11 +46,8 @@ export class TlsRelayMessageSerialiser {
     return message;
   };
 
-  public deserialiseJson = <TData>(
-    buffer: Buffer | TlsRelayMessage,
-  ): TlsRelayJsonMessage<Partial<TData>> => {
-    const message =
-      buffer instanceof Buffer ? this.deserialise(buffer) : buffer;
+  public deserialiseJson = <TData>(buffer: Buffer | TlsRelayMessage): TlsRelayJsonMessage<Partial<TData>> => {
+    const message = buffer instanceof Buffer ? this.deserialise(buffer) : buffer;
 
     let parsedData: Partial<TData> | null = null;
 
@@ -66,5 +61,20 @@ export class TlsRelayMessageSerialiser {
       type: message.type,
       data: parsedData!,
     } as TlsRelayJsonMessage<Partial<TData>>;
+  };
+
+  public deserialiseStream = <T extends TlsRelayMessage>(buffer: Buffer): T[] => {
+    let bytesLeft = buffer.length;
+    const messages = [];
+
+    while (bytesLeft > 0) {
+      const message = this.deserialise(buffer);
+      messages.push(message);
+      const bytesConsumed = 3 + message.length; // Header + payload
+      bytesLeft -= bytesConsumed;
+      buffer = buffer.slice(bytesConsumed);
+    }
+
+    return messages;
   };
 }

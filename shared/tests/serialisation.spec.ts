@@ -59,9 +59,7 @@ describe('TlsRelayMessageSerialiser', () => {
       length: 5,
     };
 
-    expect(() =>
-      new TlsRelayMessageSerialiser().serialise(message),
-    ).toThrowError();
+    expect(() => new TlsRelayMessageSerialiser().serialise(message)).toThrowError();
   });
 
   it('Deserialises server messages', () => {
@@ -71,9 +69,7 @@ describe('TlsRelayMessageSerialiser', () => {
     buffer[2] = 7;
     buffer.fill('1'.charCodeAt(0), 3);
 
-    const message = new TlsRelayMessageSerialiser().deserialise<
-      TlsRelayClientMessage
-    >(buffer);
+    const message = new TlsRelayMessageSerialiser().deserialise<TlsRelayClientMessage>(buffer);
 
     expect(message.type).toBe(TlsRelayServerMessageType.KEY_REJECTED);
     expect(message.length).toBe(7);
@@ -87,9 +83,7 @@ describe('TlsRelayMessageSerialiser', () => {
     buffer[2] = 5;
     buffer.fill('1'.charCodeAt(0), 3);
 
-    const message = new TlsRelayMessageSerialiser().deserialise<
-      TlsRelayClientMessage
-    >(buffer);
+    const message = new TlsRelayMessageSerialiser().deserialise<TlsRelayClientMessage>(buffer);
 
     expect(message.type).toBe(TlsRelayClientMessageType.KEY);
     expect(message.length).toBe(5);
@@ -97,9 +91,7 @@ describe('TlsRelayMessageSerialiser', () => {
   });
 
   it('Throw error when deserialising buffer that is too small', () => {
-    expect(() =>
-      new TlsRelayMessageSerialiser().deserialise(Buffer.alloc(1)),
-    ).toThrowError();
+    expect(() => new TlsRelayMessageSerialiser().deserialise(Buffer.alloc(1))).toThrowError();
   });
 
   it('Returns the same message after serialise then deserialise', () => {
@@ -115,4 +107,32 @@ describe('TlsRelayMessageSerialiser', () => {
     expect(result).toStrictEqual(message);
   });
 
+  it('Deserialises multiple in stream of messages', () => {
+    const buffer = Buffer.alloc(21);
+    buffer[0] = TlsRelayClientMessageType.RELAY;
+    buffer[1] = 0;
+    buffer[2] = 5;
+    buffer.fill('1'.charCodeAt(0), 3, 8);
+
+    buffer[8] = TlsRelayClientMessageType.RELAY;
+    buffer[9] = 0;
+    buffer[10] = 10;
+    buffer.fill('2'.charCodeAt(0), 11, 21);
+
+    const serialiser = new TlsRelayMessageSerialiser();
+    const messages = serialiser.deserialiseStream(buffer);
+
+    expect(messages).toStrictEqual([
+      {
+        type: TlsRelayClientMessageType.RELAY,
+        length: 5,
+        data: Buffer.from('11111'),
+      },
+      {
+        type: TlsRelayClientMessageType.RELAY,
+        length: 10,
+        data: Buffer.from('2222222222'),
+      },
+    ]);
+  });
 });

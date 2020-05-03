@@ -23,6 +23,7 @@ const mockConfig = (config: Partial<TlsRelayConfig> = {}): TlsRelayConfig =>
     },
 
     cleanUpInterval: 60 * 1000,
+    keyExpiryTime: 86400 * 1000,
 
     connection: {
       waitForKeyTimeout: 5 * 1000,

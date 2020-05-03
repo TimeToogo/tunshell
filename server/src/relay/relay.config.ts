@@ -6,6 +6,7 @@ export interface TlsRelayConfig {
   server: tls.TlsOptions;
 
   cleanUpInterval: number;
+  keyExpiryTime: number;
 
   connection: {
     waitForKeyTimeout: number;
@@ -20,9 +21,12 @@ const TlsConfig: TlsRelayConfig = {
   server: {
     key: fs.readFileSync(process.env.TLS_RELAY_PRIVATE_KEY),
     cert: fs.readFileSync(process.env.TLS_RELAY_CERT),
+    // maxVersion: 'TLSv1.2',
+    // ciphers:'TLS_RSA_WITH_AES_128_CBC_SHA'
   },
 
   cleanUpInterval: 60 * 1000,
+  keyExpiryTime: 86400 * 1000,
 
   connection: {
     waitForKeyTimeout: 5 * 1000,

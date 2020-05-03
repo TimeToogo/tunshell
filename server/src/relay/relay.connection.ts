@@ -70,12 +70,20 @@ export class TlsRelayConnection extends EventEmitter {
   };
 
   private handleData = (data: Buffer) => {
-    this.handleMessage(this.serialiser.deserialise<TlsRelayClientMessage>(data));
+    const messages = this.serialiser.deserialiseStream<TlsRelayClientMessage>(data);
+    for (const message of messages) {
+      this.handleMessage(message);
+    }
   };
 
   private handleMessage = async (message: TlsRelayClientMessage) => {
     if (message.type === TlsRelayClientMessageType.CLOSE) {
       await this.close();
+      return;
+    }
+
+    if (this.state === TlsRelayConnectionState.RELAYED_CONNECTION && message.type === TlsRelayClientMessageType.RELAY) {
+      await this.handleRelayMessage(message);
       return;
     }
 
@@ -92,27 +100,31 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     this.waitingForTypes = types;
+    let timeoutId: NodeJS.Timeout;
 
     return new Promise<TlsRelayClientMessage>((resolve, reject) => {
       this.waitingForResolve = resolve;
       this.waitingForReject = reject;
 
-      this.timeouts.push(
-        setTimeout(() => {
-          reject(
-            new Error(
-              `Connection timed out while waiting for ${types
-                .map(i => TlsRelayClientMessageType[i])
-                .join(', ')} messages`,
-            ),
-          );
-          this.close();
-        }, timeLimit),
-      );
+      if (timeLimit) {
+        this.timeouts.push(
+          (timeoutId = setTimeout(() => {
+            reject(
+              new Error(
+                `Connection timed out while waiting for ${types
+                  .map(i => TlsRelayClientMessageType[i])
+                  .join(', ')} messages`,
+              ),
+            );
+            this.close();
+          }, timeLimit)),
+        );
+      }
     }).finally(() => {
       this.waitingForTypes = null;
       this.waitingForResolve = null;
       this.waitingForReject = null;
+      clearTimeout(timeoutId);
     });
   };
 
@@ -223,28 +235,23 @@ export class TlsRelayConnection extends EventEmitter {
       length: 0,
     });
     this.state = TlsRelayConnectionState.RELAYED_CONNECTION;
-    this.waitForRelayMessage();
     this.timeouts.push(setTimeout(this.timeoutRelay, this.config.connectionTimeLimit));
   };
 
-  private waitForRelayMessage = async () => {
-    const message = await this.waitFor([TlsRelayClientMessageType.RELAY], this.config.connectionTimeLimit).catch(() => {
-      return null;
-    });
-
-    if (!message) {
-      // We can safely ignore this since the timeout for the connectionTimeLimit
-      // will have already closed the connection
-      return;
+  private currentSendingRelayPromise: Promise<void> | undefined;
+  private handleRelayMessage = async (message: TlsRelayClientMessage) => {
+    if (this.currentSendingRelayPromise) {
+      await this.currentSendingRelayPromise;
     }
 
-    await this.peer.sendMessage({
+    this.currentSendingRelayPromise = this.peer.sendMessage({
       type: TlsRelayServerMessageType.RELAY,
       length: message.length,
       data: message.data,
     });
 
-    this.waitForRelayMessage();
+    await this.currentSendingRelayPromise;
+    this.currentSendingRelayPromise = null;
   };
 
   private timeoutRelay = async () => {
