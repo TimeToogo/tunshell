@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SessionModule } from './session/session.module';
-import { TlsModule } from './tls/tls.module';
+import { TlsModule } from './relay/relay.module';
 
 @Module({
   imports: [

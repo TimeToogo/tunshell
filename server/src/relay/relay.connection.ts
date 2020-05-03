@@ -4,8 +4,8 @@ import { Model, Document } from 'mongoose';
 import { Session } from '../session/session.model';
 import * as tls from 'tls';
 import { ClassProvider, Inject, LoggerService, Logger } from '@nestjs/common';
-import { TlsRelayConfig } from './tls.config';
-import { TlsRelayConnectionState, LatencyEstimation } from './tls.model';
+import { TlsRelayConfig } from './relay.config';
+import { TlsRelayConnectionState, LatencyEstimation } from './relay.model';
 import {
   TlsRelayMessageSerialiser,
   TlsRelayClientMessage,

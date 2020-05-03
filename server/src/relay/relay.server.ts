@@ -4,9 +4,9 @@ import { Model, Document } from 'mongoose';
 import { Session } from '../session/session.model';
 import * as tls from 'tls';
 import { ClassProvider, Inject, LoggerService, Logger } from '@nestjs/common';
-import { TlsRelayConfig } from './tls.config';
-import { LatencyEstimation } from './tls.model';
-import { TlsRelayConnection } from './tls.connection';
+import { TlsRelayConfig } from './relay.config';
+import { LatencyEstimation } from './relay.model';
+import { TlsRelayConnection } from './relay.connection';
 import * as _ from 'lodash';
 
 export class TlsRelayServer {

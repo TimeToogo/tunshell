@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { TlsRelayServer } from './tls/tls.server';
+import { TlsRelayServer } from './relay/relay.server';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

@@ -3,10 +3,10 @@ import * as tls from 'tls';
 import * as _ from 'lodash';
 import { Logger } from '@nestjs/common';
 import { Model, Document } from 'mongoose';
-import { TlsRelayConfig } from '../src/tls/tls.config';
-import { TlsRelayServer } from '../src/tls/tls.server';
+import { TlsRelayConfig } from '../src/relay/relay.config';
+import { TlsRelayServer } from '../src/relay/relay.server';
 import { Session } from '../src/session/session.model';
-import { TlsRelayConnection } from '../src/tls/tls.connection';
+import { TlsRelayConnection } from '../src/relay/relay.connection';
 import {
   TlsRelayMessageSerialiser,
   TlsRelayClientMessageType,

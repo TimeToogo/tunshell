@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { tlsConfigProvider } from './tls.config';
-import { tlsRelayServerProvider } from './tls.server';
+import { tlsConfigProvider } from './relay.config';
+import { tlsRelayServerProvider } from './relay.server';
 import { SessionModule } from '../session/session.module';
 import { ServicesModule } from '../services/services.module';
 
