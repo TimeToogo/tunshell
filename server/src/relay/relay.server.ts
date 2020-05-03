@@ -54,7 +54,7 @@ export class TlsRelayServer {
   };
 
   private handleConnection = (socket: tls.TLSSocket) => {
-    this.logger.log(`Received connection from ${socket.remoteAddress}`);
+    this.logger.log(`Received connection from ${socket.remoteAddress}:${socket.remotePort}`);
 
     const connection = new TlsRelayConnection(this.config.connection, socket, this.logger);
 
@@ -97,6 +97,7 @@ export class TlsRelayServer {
     await Promise.all([peer1.peerJoined(peer2), peer2.peerJoined(peer1)]);
 
     if (await this.negotiateDirectConnection(peer1, peer2)) {
+      this.logger.log(`Successfully negotiated direct connection between peers`);
       return;
     }
 
@@ -134,6 +135,7 @@ export class TlsRelayServer {
   };
 
   private configureRelayedConnection = async (peer1: TlsRelayConnection, peer2: TlsRelayConnection) => {
+    this.logger.log(`Falling back to relay connection between peers`);
     await Promise.all([peer1.enableRelay(), peer2.enableRelay()]);
   };
 

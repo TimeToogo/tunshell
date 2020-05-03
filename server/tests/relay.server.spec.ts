@@ -7,7 +7,13 @@ import { TlsRelayConfig } from '../src/relay/relay.config';
 import { TlsRelayServer } from '../src/relay/relay.server';
 import { Session } from '../src/session/session.model';
 import { TlsRelayConnection } from '../src/relay/relay.connection';
-import { TlsRelayMessageSerialiser, TlsRelayClientMessageType } from '@timetoogo/debug-my-pipeline--shared';
+import { TlsRelayConnectionState } from '../src/relay/relay.model';
+import {
+  TlsRelayMessageSerialiser,
+  TlsRelayClientMessageType,
+  TlsRelayServerMessageType,
+  ClientTimePayload,
+} from '@timetoogo/debug-my-pipeline--shared';
 
 const mockConfig = (config: Partial<TlsRelayConfig> = {}): TlsRelayConfig =>
   _.defaultsDeep(config, {
@@ -193,6 +199,323 @@ describe('TlsRelayServer', () => {
     } finally {
       await server.close();
       await closeSocket(socket);
+    }
+  });
+
+  it('Operates correctly during a direct connection', async () => {
+    const CURRENT_SESSION: Session & Partial<Document> = {
+      host: {
+        key: 'host-key--1234567890',
+        ipAddress: null,
+        joined: false,
+      },
+      client: {
+        key: 'client-key--1234567890',
+        ipAddress: null,
+        joined: false,
+      },
+      createdAt: new Date(),
+      save: (async () => {}) as any,
+    };
+
+    const port = getPort();
+    const config = mockConfig();
+    const repo = mockSessionRepo(CURRENT_SESSION);
+    const serialiser = new TlsRelayMessageSerialiser();
+
+    const server = new TlsRelayServer(config, logger, repo);
+    server.listen(port);
+
+    const socket = await connectToServer(port);
+    const peerSocket = await connectToServer(port);
+
+    const socketLog = [];
+    const peerLog = [];
+
+    const handleServerRequests = (socket: tls.TLSSocket, log: any[][], data: Buffer) => {
+      const message = serialiser.deserialise(data);
+
+      switch (message.type) {
+        case TlsRelayServerMessageType.KEY_ACCEPTED:
+          log.push(['Key accepted!']);
+          break;
+        case TlsRelayServerMessageType.PEER_JOINED:
+          log.push(['Peer joined', JSON.parse(message.data.toString())]);
+          break;
+        case TlsRelayServerMessageType.TIME_PLEASE:
+          log.push(['Time please']);
+          socket.write(
+            serialiser.serialiseJson<ClientTimePayload>({
+              type: TlsRelayClientMessageType.TIME,
+              data: { clientTime: Date.now() },
+            }),
+          );
+          break;
+        case TlsRelayServerMessageType.ATTEMPT_DIRECT_CONNECT:
+          log.push(['Attempt direct connect']);
+          socket.write(
+            serialiser.serialise({
+              type: TlsRelayClientMessageType.DIRECT_CONNECT_SUCCEEDED,
+              length: 0,
+            }),
+          );
+          break;
+        default:
+          console.error(log);
+          console.error(message);
+          throw new Error(`Unexpected message type: ${TlsRelayServerMessageType[message.type]}`);
+      }
+    };
+
+    try {
+      const socketHandler = data => handleServerRequests(socket, socketLog, data);
+      const peerSocketHandler = data => handleServerRequests(peerSocket, peerLog, data);
+
+      socket.on('data', socketHandler);
+      peerSocket.on('data', peerSocketHandler);
+
+      socket.write(
+        serialiser.serialise({
+          type: TlsRelayClientMessageType.KEY,
+          length: CURRENT_SESSION.client.key.length,
+          data: Buffer.from(CURRENT_SESSION.client.key),
+        }),
+      );
+
+      peerSocket.write(
+        serialiser.serialise({
+          type: TlsRelayClientMessageType.KEY,
+          length: CURRENT_SESSION.host.key.length,
+          data: Buffer.from(CURRENT_SESSION.host.key),
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      socket.off('data', socketHandler);
+      peerSocket.off('data', peerSocketHandler);
+
+      const connection = server.getConnections()[CURRENT_SESSION.client.key];
+      const peerConnection = server.getConnections()[CURRENT_SESSION.host.key];
+
+      expect(connection).toBeInstanceOf(TlsRelayConnection);
+      expect(connection.getState()).toBe(TlsRelayConnectionState.DIRECT_CONNECTION);
+      expect(peerConnection.getState()).toBe(TlsRelayConnectionState.DIRECT_CONNECTION);
+
+      expect(connection.getSession()).toBe(peerConnection.getSession());
+
+      expect(connection.getSession().host.joined).toBe(true);
+      expect(connection.getSession().client.joined).toBe(true);
+
+      expect(socketLog).toStrictEqual([
+        ['Key accepted!'],
+        [
+          'Peer joined',
+          {
+            peerIpAddress: peerConnection.getSocket().remoteAddress,
+            peerKey: 'host-key--1234567890',
+          },
+        ],
+        ['Time please'],
+        ['Attempt direct connect'],
+      ]);
+      expect(peerLog).toStrictEqual([
+        ['Key accepted!'],
+        [
+          'Peer joined',
+          {
+            peerIpAddress: connection.getSocket().remoteAddress,
+            peerKey: 'client-key--1234567890',
+          },
+        ],
+        ['Time please'],
+        ['Attempt direct connect'],
+      ]);
+
+      // At this point a direct P2P connection is assumed to be made
+      // all data exchanged does not involve the relay server
+      socket.end();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(connection.getState()).toBe(TlsRelayConnectionState.CLOSED);
+      expect(peerConnection.getState()).toBe(TlsRelayConnectionState.CLOSED);
+    } finally {
+      await server.close();
+      await closeSocket(socket);
+      await closeSocket(peerSocket);
+    }
+  });
+
+  it('Operates correctly during a relayed connection', async () => {
+    const CURRENT_SESSION: Session & Partial<Document> = {
+      host: {
+        key: 'host-key--1234567890',
+        ipAddress: null,
+        joined: false,
+      },
+      client: {
+        key: 'client-key--1234567890',
+        ipAddress: null,
+        joined: false,
+      },
+      createdAt: new Date(),
+      save: (async () => {}) as any,
+    };
+
+    const port = getPort();
+    const config = mockConfig();
+    const repo = mockSessionRepo(CURRENT_SESSION);
+    const serialiser = new TlsRelayMessageSerialiser();
+
+    const server = new TlsRelayServer(config, logger, repo);
+    server.listen(port);
+
+    const socket = await connectToServer(port);
+    const peerSocket = await connectToServer(port);
+
+    const socketLog = [];
+    const peerLog = [];
+
+    const handleServerRequests = (socket: tls.TLSSocket, log: any[][], data: Buffer) => {
+      const message = serialiser.deserialise(data);
+
+      switch (message.type) {
+        case TlsRelayServerMessageType.KEY_ACCEPTED:
+          log.push(['Key accepted!']);
+          break;
+        case TlsRelayServerMessageType.PEER_JOINED:
+          log.push(['Peer joined', JSON.parse(message.data.toString())]);
+          break;
+        case TlsRelayServerMessageType.TIME_PLEASE:
+          log.push(['Time please']);
+          socket.write(
+            serialiser.serialiseJson<ClientTimePayload>({
+              type: TlsRelayClientMessageType.TIME,
+              data: { clientTime: Date.now() },
+            }),
+          );
+          break;
+        case TlsRelayServerMessageType.ATTEMPT_DIRECT_CONNECT:
+          log.push(['Attempt direct connect']);
+          socket.write(
+            serialiser.serialise({
+              type: TlsRelayClientMessageType.DIRECT_CONNECT_FAILED,
+              length: 0,
+            }),
+          );
+          break;
+        case TlsRelayServerMessageType.START_RELAY_MODE:
+          log.push(['Relay mode started']);
+          break;
+        case TlsRelayServerMessageType.RELAY:
+          log.push(['Received relayed data', message.data.toString()]);
+          break;
+        default:
+          console.error(log);
+          console.error(message);
+          throw new Error(`Unexpected message type: ${TlsRelayServerMessageType[message.type]}`);
+      }
+    };
+
+    try {
+      const socketHandler = data => handleServerRequests(socket, socketLog, data);
+      const peerSocketHandler = data => handleServerRequests(peerSocket, peerLog, data);
+
+      socket.on('data', socketHandler);
+      peerSocket.on('data', peerSocketHandler);
+
+      socket.write(
+        serialiser.serialise({
+          type: TlsRelayClientMessageType.KEY,
+          length: CURRENT_SESSION.client.key.length,
+          data: Buffer.from(CURRENT_SESSION.client.key),
+        }),
+      );
+
+      peerSocket.write(
+        serialiser.serialise({
+          type: TlsRelayClientMessageType.KEY,
+          length: CURRENT_SESSION.host.key.length,
+          data: Buffer.from(CURRENT_SESSION.host.key),
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const connection = server.getConnections()[CURRENT_SESSION.client.key];
+      const peerConnection = server.getConnections()[CURRENT_SESSION.host.key];
+
+      expect(connection).toBeInstanceOf(TlsRelayConnection);
+      expect(connection.getState()).toBe(TlsRelayConnectionState.RELAYED_CONNECTION);
+      expect(peerConnection.getState()).toBe(TlsRelayConnectionState.RELAYED_CONNECTION);
+
+      expect(connection.getSession()).toBe(peerConnection.getSession());
+
+      expect(connection.getSession().host.joined).toBe(true);
+      expect(connection.getSession().client.joined).toBe(true);
+
+      // Test data relaying between the connections
+      socket.write(
+        serialiser.serialise({
+          type: TlsRelayClientMessageType.RELAY,
+          length: 13,
+          data: Buffer.from('hello to peer'),
+        }),
+      );
+
+      peerSocket.write(
+        serialiser.serialise({
+          type: TlsRelayClientMessageType.RELAY,
+          length: 15,
+          data: Buffer.from('hello from peer'),
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      socket.off('data', socketHandler);
+      peerSocket.off('data', peerSocketHandler);
+
+      expect(socketLog).toStrictEqual([
+        ['Key accepted!'],
+        [
+          'Peer joined',
+          {
+            peerIpAddress: peerConnection.getSocket().remoteAddress,
+            peerKey: 'host-key--1234567890',
+          },
+        ],
+        ['Time please'],
+        ['Attempt direct connect'],
+        ['Relay mode started'],
+        ['Received relayed data', 'hello from peer'],
+      ]);
+      expect(peerLog).toStrictEqual([
+        ['Key accepted!'],
+        [
+          'Peer joined',
+          {
+            peerIpAddress: connection.getSocket().remoteAddress,
+            peerKey: 'client-key--1234567890',
+          },
+        ],
+        ['Time please'],
+        ['Attempt direct connect'],
+        ['Relay mode started'],
+        ['Received relayed data', 'hello to peer'],
+      ]);
+
+      socket.end();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(connection.getState()).toBe(TlsRelayConnectionState.CLOSED);
+      expect(peerConnection.getState()).toBe(TlsRelayConnectionState.CLOSED);
+    } finally {
+      await server.close();
+      await closeSocket(socket);
+      await closeSocket(peerSocket);
     }
   });
 });
