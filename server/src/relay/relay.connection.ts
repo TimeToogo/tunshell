@@ -17,10 +17,12 @@ import {
   ServerDirectConnectAttemptPayload,
   ServerPeerJoinedPayload,
   KeyAcceptedPayload,
+  TlsRelayMessageDuplexStream,
 } from '@timetoogo/debug-my-pipeline--shared';
 
 export class TlsRelayConnection extends EventEmitter {
   private state: TlsRelayConnectionState = TlsRelayConnectionState.NEW;
+  private readonly messageStream: TlsRelayMessageDuplexStream<TlsRelayServerMessageType, TlsRelayClientMessageType>;
   private timeouts: NodeJS.Timeout[] = [];
   private serialiser: TlsRelayMessageSerialiser = new TlsRelayMessageSerialiser();
   private key: string | null = null;
@@ -40,6 +42,7 @@ export class TlsRelayConnection extends EventEmitter {
     @Inject('Logger') private readonly logger: LoggerService,
   ) {
     super();
+    this.messageStream = new TlsRelayMessageDuplexStream(socket, TlsRelayServerMessageType, TlsRelayClientMessageType);
     this.init();
   }
 
@@ -60,9 +63,11 @@ export class TlsRelayConnection extends EventEmitter {
   isDead = () => this.state === TlsRelayConnectionState.CLOSED;
 
   private init = () => {
-    this.socket.on('data', this.handleData);
+    this.messageStream.on('data', this.handleData);
 
-    this.socket.on('close', this.handleSocketClose);
+    this.messageStream.on('error', this.handleError);
+
+    this.messageStream.on('end', this.handleSocketClose);
   };
 
   public waitForKey = () => {
@@ -72,11 +77,8 @@ export class TlsRelayConnection extends EventEmitter {
       .catch(() => {});
   };
 
-  private handleData = (data: Buffer) => {
-    const messages = this.serialiser.deserialiseStream<TlsRelayClientMessage>(data);
-    for (const message of messages) {
-      this.messageQueue.push(message);
-    }
+  private handleData = (message: TlsRelayClientMessage) => {
+    this.messageQueue.push(message);
     this.startMessageProcessingLoop();
   };
 
@@ -301,18 +303,24 @@ export class TlsRelayConnection extends EventEmitter {
     }
   };
 
-  private sendMessage = (message: TlsRelayServerMessage | Buffer): Promise<void> => {
-    if (!this.socket.writable) {
+  private sendMessage = (message: TlsRelayServerMessage): Promise<void> => {
+    if (!this.messageStream.writable) {
       throw new Error(`Cannot send message, socket is not writable`);
     }
 
-    const buffer = message instanceof Buffer ? message : this.serialiser.serialise(message);
-
-    return new Promise<void>((resolve, reject) => this.socket.write(buffer, err => (err ? reject(err) : resolve())));
+    return new Promise<void>((resolve, reject) =>
+      this.messageStream.write(message, err => (err ? reject(err) : resolve())),
+    );
   };
 
   private sendJsonMessage = async <T>(message: TlsRelayServerJsonMessage<T>) => {
-    await this.sendMessage(this.serialiser.serialiseJson(message));
+    if (!this.messageStream.writable) {
+      throw new Error(`Cannot send message, socket is not writable`);
+    }
+
+    return new Promise<void>((resolve, reject) =>
+      this.messageStream.writeJson(message, null, err => (err ? reject(err) : resolve())),
+    );
   };
 
   private handleUnexpectedMessage = (message: TlsRelayClientMessage) => {
@@ -337,7 +345,7 @@ export class TlsRelayConnection extends EventEmitter {
       return;
     }
 
-    if (this.socket.writable) {
+    if (this.messageStream.writable) {
       await this.sendMessage({
         type: TlsRelayServerMessageType.CLOSE,
         length: 0,
@@ -349,8 +357,8 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     this.state = TlsRelayConnectionState.CLOSED;
-    this.socket.end(() => {
-      this.socket.destroy();
+    this.messageStream.end(() => {
+      this.messageStream.destroy();
     });
 
     this.timeouts.forEach(clearTimeout);

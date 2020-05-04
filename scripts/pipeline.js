@@ -5,7 +5,7 @@ var inspect = require("util").inspect;
 var os = require("os");
 var pty = require("node-pty");
 
-var ssh2 = require("../client/node_modules/ssh2");
+var ssh2 = require("ssh2");
 var utils = ssh2.utils;
 
 var allowedUser = Buffer.from("foo");

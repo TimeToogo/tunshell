@@ -13,6 +13,7 @@ import {
   ServerDirectConnectAttemptPayload,
   ServerPeerJoinedPayload,
   TlsRelayServerMessage,
+  TlsRelayMessageDuplexStream,
 } from '@timetoogo/debug-my-pipeline--shared';
 import { DirectConnectionConfig } from './connection-strategies';
 import { RelaySocket } from './relay-socket';
@@ -33,7 +34,8 @@ export class DebugClient {
   private waitingForReject: Function | null = null;
   private timeouts: NodeJS.Timeout[] = [];
 
-  private relaySocket: tls.TLSSocket;
+  private relayRawSocket: tls.TLSSocket;
+  private messageStream: TlsRelayMessageDuplexStream<TlsRelayClientMessageType, TlsRelayServerMessageType>;
   private peerInfo: ServerPeerJoinedPayload;
   private peerSocket: stream.Duplex;
   private keyType: KeyAcceptedPayload['keyType'];
@@ -180,7 +182,7 @@ export class DebugClient {
   private setupRelaySocket = (): stream.Duplex => {
     console.log(COLOURS.info(`Falling back to relayed connection`));
     this.isRelayMode = true;
-    return new RelaySocket(this.relaySocket);
+    return new RelaySocket(this.messageStream);
   };
 
   private setupSshConnection = async (): Promise<void> => {
@@ -201,18 +203,13 @@ export class DebugClient {
     }
   };
 
-  private initSocket = (relaySocket: tls.TLSSocket) => {
-    this.relaySocket = relaySocket;
-    this.relaySocket.on('data', this.handleData);
-    this.relaySocket.on('end', this.close);
-  };
-
-  private handleData = (data: Buffer) => {
-    const messages = this.serialiser.deserialiseStream(data);
-
-    for (const message of messages) {
-      this.handleMessage(message);
-    }
+  private initSocket = (socket: tls.TLSSocket) => {
+    this.relayRawSocket = socket;
+    this.messageStream = new TlsRelayMessageDuplexStream(socket, TlsRelayClientMessageType, TlsRelayServerMessageType);
+    this.messageStream.on('data', this.handleMessage);
+    // TODO
+    // this.messageStream.on('error', this.handleError);
+    this.messageStream.on('end', this.close);
   };
 
   private handleMessage = async (message: TlsRelayServerMessage) => {
@@ -274,13 +271,13 @@ export class DebugClient {
 
   private sendRelayMessage = (message: TlsRelayClientMessage): Promise<void> => {
     return new Promise((resolve, reject) => {
-      this.relaySocket.write(this.serialiser.serialise(message), (err) => (err ? reject(err) : resolve()));
+      this.messageStream.write(message, (err) => (err ? reject(err) : resolve()));
     });
   };
 
   private sendRelayJsonMessage = <TData>(message: TlsRelayClientJsonMessage<TData>): Promise<void> => {
     return new Promise((resolve, reject) => {
-      this.relaySocket.write(this.serialiser.serialiseJson(message), (err) => (err ? reject(err) : resolve()));
+      this.messageStream.writeJson(message, null, (err) => (err ? reject(err) : resolve()));
     });
   };
 
@@ -291,9 +288,9 @@ export class DebugClient {
 
     this.closed = true;
 
-    if (this.relaySocket.writable) {
+    if (this.messageStream.writable) {
       this.sendRelayMessage({ type: TlsRelayClientMessageType.CLOSE, length: 0 });
-      this.relaySocket.end(() => this.relaySocket.destroy());
+      this.messageStream.end(() => this.messageStream.destroy());
     }
 
     if (this.peerSocket && this.peerSocket.writable) {

@@ -106,33 +106,4 @@ describe('TlsRelayMessageSerialiser', () => {
 
     expect(result).toStrictEqual(message);
   });
-
-  it('Deserialises multiple in stream of messages', () => {
-    const buffer = Buffer.alloc(21);
-    buffer[0] = TlsRelayClientMessageType.RELAY;
-    buffer[1] = 0;
-    buffer[2] = 5;
-    buffer.fill('1'.charCodeAt(0), 3, 8);
-
-    buffer[8] = TlsRelayClientMessageType.RELAY;
-    buffer[9] = 0;
-    buffer[10] = 10;
-    buffer.fill('2'.charCodeAt(0), 11, 21);
-
-    const serialiser = new TlsRelayMessageSerialiser();
-    const messages = serialiser.deserialiseStream(buffer);
-
-    expect(messages).toStrictEqual([
-      {
-        type: TlsRelayClientMessageType.RELAY,
-        length: 5,
-        data: Buffer.from('11111'),
-      },
-      {
-        type: TlsRelayClientMessageType.RELAY,
-        length: 10,
-        data: Buffer.from('2222222222'),
-      },
-    ]);
-  });
 });

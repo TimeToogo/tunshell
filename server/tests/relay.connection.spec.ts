@@ -72,6 +72,7 @@ describe('TlsRelayConnection', () => {
 
     try {
       await connection.close();
+      await new Promise(resolve => setImmediate(resolve));
 
       expect(serialiser.deserialise(socket.write.mock.calls[0][0] as Buffer)).toStrictEqual({
         type: TlsRelayServerMessageType.CLOSE,

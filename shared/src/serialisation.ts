@@ -62,19 +62,4 @@ export class TlsRelayMessageSerialiser {
       data: parsedData!,
     } as TlsRelayJsonMessage<Partial<TData>>;
   };
-
-  public deserialiseStream = <T extends TlsRelayMessage>(buffer: Buffer): T[] => {
-    let bytesLeft = buffer.length;
-    const messages = [];
-
-    while (bytesLeft > 0) {
-      const message = this.deserialise(buffer);
-      messages.push(message);
-      const bytesConsumed = 3 + message.length; // Header + payload
-      bytesLeft -= bytesConsumed;
-      buffer = buffer.slice(bytesConsumed);
-    }
-
-    return messages;
-  };
 }

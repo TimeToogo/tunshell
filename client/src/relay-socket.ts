@@ -4,6 +4,9 @@ import {
   TlsRelayMessageSerialiser,
   TlsRelayClientMessageType,
   TlsRelayServerMessageType,
+  TlsRelayMessageDuplexStream,
+  TlsRelayClientMessage,
+  TlsRelayServerMessage,
 } from '@timetoogo/debug-my-pipeline--shared';
 import { formatWithOptions } from 'util';
 
@@ -12,7 +15,9 @@ export class RelaySocket extends stream.Duplex {
   private bytesRead: number = 0;
   private bytesPushed: number = 0;
 
-  constructor(private readonly relaySocket: tls.TLSSocket) {
+  constructor(
+    private readonly relaySocket: TlsRelayMessageDuplexStream<TlsRelayClientMessageType, TlsRelayServerMessageType>,
+  ) {
     super();
     this.forwardEvents();
     this.captureRelayMessage();
@@ -29,15 +34,11 @@ export class RelaySocket extends stream.Duplex {
   }
 
   private captureRelayMessage = () => {
-    this.relaySocket.on('data', (data) => {
-      const messages = this.serialiser.deserialiseStream(data);
-
-      for (const message of messages) {
-        if (message.type === TlsRelayServerMessageType.RELAY) {
-          // console.log('read', message.data);
-          this.push(message.data);
-          this.bytesPushed += message.data.length;
-        }
+    this.relaySocket.on('data', (message: TlsRelayServerMessage) => {
+      if (message.type === TlsRelayServerMessageType.RELAY) {
+        // console.log('read', message.data);
+        this.push(message.data);
+        this.bytesPushed += message.data.length;
       }
     });
   };
@@ -56,11 +57,11 @@ export class RelaySocket extends stream.Duplex {
       data = Buffer.from(data, encoding as any);
     }
 
-    const message = this.serialiser.serialise({
+    const message: TlsRelayClientMessage = {
       type: TlsRelayClientMessageType.RELAY,
       length: data.length,
       data,
-    });
+    };
 
     if (!this.relaySocket.writable) {
       return;
