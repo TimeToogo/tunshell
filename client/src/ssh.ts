@@ -21,7 +21,7 @@ export class Ssh {
       const server = new ssh2.Server(
         {
           hostKeys: [privateKey],
-          debug: console.log,
+          // debug: console.log,
         },
         (client) => {
           client
@@ -63,12 +63,13 @@ export class Ssh {
                   });
 
                   shell.onData((data) => {
-                    console.log('data', data);
                     channel.stdout.write(data);
                   });
 
-                  channel.stdin.on('data', (data) => {
-                    shell.write(data);
+                  channel.stdin.pipe(shell);
+
+                  session.on('window-change', (accept, reject, info) => {
+                    shell.resize(info.cols, info.rows);
                   });
 
                   shell.on('exit', () => {
@@ -96,29 +97,34 @@ export class Ssh {
       client
         .on('ready', () => {
           console.log('Client :: ready');
-          client.shell((err, stream) => {
+          client.shell((err, channel) => {
             if (err) throw err;
-            stream
-              .on('close', () => {
-                console.log('Stream :: close');
-                client.end();
-                resolve();
-              })
-              .on('data', (data) => {
-                process.stdout.write(data);
-              });
+            channel.on('close', () => {
+              console.log('Stream :: close');
+              client.end();
+              resolve();
+            });
 
             console.clear();
-            process.stdin.on('data', (data) => {
-              stream.write(data);
-            });
+            process.stdin.setRawMode(true);
+            channel.stderr.pipe(process.stderr);
+            channel.stdout.pipe(process.stdout);
+
+            process.stdin.pipe(channel.stdin);
+
+            const sizeTerminal = () => {
+              const [width, height] = process.stdout.getWindowSize();
+              channel.setWindow(height, width, height, width);
+            };
+            process.stdout.on('resize', sizeTerminal);
+            sizeTerminal();
           });
         })
         .connect({
           sock: this.config.socket,
           username: this.config.username,
           password: this.config.password,
-          debug: console.log
+          // debug: console.log,
         });
     });
   };

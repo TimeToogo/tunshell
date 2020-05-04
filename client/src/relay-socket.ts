@@ -31,10 +31,10 @@ export class RelaySocket extends stream.Duplex {
   private captureRelayMessage = () => {
     this.relaySocket.on('data', (data) => {
       const messages = this.serialiser.deserialiseStream(data);
-      
+
       for (const message of messages) {
         if (message.type === TlsRelayServerMessageType.RELAY) {
-          console.log('read', message.data);
+          // console.log('read', message.data);
           this.push(message.data);
           this.bytesPushed += message.data.length;
         }
@@ -44,14 +44,14 @@ export class RelaySocket extends stream.Duplex {
 
   _read = async (size: number) => {
     this.bytesRead += size;
-    console.log('read', this.bytesPushed, this.bytesRead, this.relaySocket.readable);
-    while (this.bytesPushed < this.bytesRead && this.relaySocket.readable) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    // console.log('read', this.bytesPushed, this.bytesRead, this.relaySocket.readable);
+    // while (this.bytesPushed < this.bytesRead && this.relaySocket.readable) {
+    //   await new Promise((resolve) => setTimeout(resolve, 100));
+    // }
   };
 
   _write = (data: Buffer, encoding: string, callback: (error?: Error | null) => void): void => {
-    console.log('write', data);
+    // console.log('write', data);
     if (!(data instanceof Buffer)) {
       data = Buffer.from(data, encoding as any);
     }
@@ -61,6 +61,10 @@ export class RelaySocket extends stream.Duplex {
       length: data.length,
       data,
     });
+
+    if (!this.relaySocket.writable) {
+      return;
+    }
 
     this.relaySocket.write(message, callback);
   };

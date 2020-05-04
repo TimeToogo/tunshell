@@ -27,6 +27,9 @@ export class TlsRelayConnection extends EventEmitter {
   private session: (Session & Document) | null = null;
   private peer: TlsRelayConnection | null = null;
 
+  private isProcessingMessages = false;
+  private messageQueue: TlsRelayClientMessage[] = [];
+
   private waitingForTypes: TlsRelayClientMessageType[] | null = null;
   private waitingForResolve: Function | null = null;
   private waitingForReject: Function | null = null;
@@ -72,8 +75,28 @@ export class TlsRelayConnection extends EventEmitter {
   private handleData = (data: Buffer) => {
     const messages = this.serialiser.deserialiseStream<TlsRelayClientMessage>(data);
     for (const message of messages) {
-      this.handleMessage(message);
+      this.messageQueue.push(message);
     }
+    this.startMessageProcessingLoop();
+  };
+
+  private startMessageProcessingLoop = async () => {
+    if (this.isProcessingMessages) {
+      return;
+    }
+
+    this.isProcessingMessages = true;
+
+    let message: TlsRelayClientMessage | null;
+    while ((message = this.messageQueue.shift())) {
+      try {
+        await this.handleMessage(message);
+      } catch (e) {
+        this.logger.error(`Error occurred during handling of message data: ${e.message}`, e.stack);
+      }
+    }
+
+    this.isProcessingMessages = false;
   };
 
   private handleMessage = async (message: TlsRelayClientMessage) => {
@@ -187,7 +210,7 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     const roundTripLatency = receivedResponseTime - requestSentTime;
-    // TODO: Remove naive assumption of symmetrical outbound/inbound latency
+    // TODO: Improve upon naive assumption of symmetrical outbound/inbound latency
     const sendLatency = roundTripLatency / 2;
     const receiveLatency = roundTripLatency / 2;
     const timeDiff = requestSentTime + sendLatency - timeMessage.data.clientTime;
@@ -238,20 +261,12 @@ export class TlsRelayConnection extends EventEmitter {
     this.timeouts.push(setTimeout(this.timeoutRelay, this.config.connectionTimeLimit));
   };
 
-  private currentSendingRelayPromise: Promise<void> | undefined;
   private handleRelayMessage = async (message: TlsRelayClientMessage) => {
-    if (this.currentSendingRelayPromise) {
-      await this.currentSendingRelayPromise;
-    }
-
-    this.currentSendingRelayPromise = this.peer.sendMessage({
+    await this.peer.sendMessage({
       type: TlsRelayServerMessageType.RELAY,
       length: message.length,
       data: message.data,
     });
-
-    await this.currentSendingRelayPromise;
-    this.currentSendingRelayPromise = null;
   };
 
   private timeoutRelay = async () => {

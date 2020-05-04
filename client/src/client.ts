@@ -52,6 +52,8 @@ export class DebugClient {
       await this.negotiatePeerConnection();
 
       await this.setupSshConnection();
+
+      await this.close();
     } catch (e) {
       console.log(COLOURS.error(e?.message ? e.message : e));
       return;
@@ -287,6 +289,8 @@ export class DebugClient {
       return;
     }
 
+    this.closed = true;
+
     if (this.relaySocket.writable) {
       this.sendRelayMessage({ type: TlsRelayClientMessageType.CLOSE, length: 0 });
       this.relaySocket.end(() => this.relaySocket.destroy());
@@ -299,7 +303,5 @@ export class DebugClient {
     if (this.waitingForReject) {
       this.waitingForReject(new Error(`Connection closed`));
     }
-
-    this.closed = true;
   };
 }

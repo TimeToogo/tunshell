@@ -66,30 +66,34 @@ export class TlsRelayServer {
   };
 
   private handleConnectionKey = async (connection: TlsRelayConnection) => {
-    const key = connection.getKey();
+    try {
+      const key = connection.getKey();
 
-    let session: Session & Document = await this.sessionModel.findOne({
-      $or: [{ 'host.key': key }, { 'client.key': key }],
-    });
+      let session: Session & Document = await this.sessionModel.findOne({
+        $or: [{ 'host.key': key }, { 'client.key': key }],
+      });
 
-    if (!session || !this.isSessionValidToJoin(session, key)) {
-      await connection.rejectKey();
-      return;
-    }
+      if (!session || !this.isSessionValidToJoin(session, key)) {
+        await connection.rejectKey();
+        return;
+      }
 
-    const peer = [session.client, session.host].find(i => i.key !== key);
-    const peerConnection = this.connections[peer.key];
+      const peer = [session.client, session.host].find(i => i.key !== key);
+      const peerConnection = this.connections[peer.key];
 
-    // Ensure that peer share the same session instance
-    if (peerConnection) {
-      session = peerConnection.getSession();
-    }
+      // Ensure that peer share the same session instance
+      if (peerConnection) {
+        session = peerConnection.getSession();
+      }
 
-    this.connections[key] = connection;
-    await connection.acceptKey(session);
+      this.connections[key] = connection;
+      await connection.acceptKey(session);
 
-    if (peerConnection) {
-      await this.negotiateConnection(connection, peerConnection);
+      if (peerConnection) {
+        await this.negotiateConnection(connection, peerConnection);
+      }
+    } catch (e) {
+      this.logger.error(`Error occurred during TLS Relay connection: ${e.message}`, e.stack);
     }
   };
 
