@@ -295,7 +295,7 @@ export class DebugClient {
     console.log(COLOURS.info(`Closing connection...`));
     this.closed = true;
 
-    if (this.messageStream.writable) {
+    if (this.relayRawSocket.writable) {
       await this.sendRelayMessage({ type: TlsRelayClientMessageType.CLOSE, length: 0 });
     }
 
@@ -307,7 +307,7 @@ export class DebugClient {
       this.messageStream.end();
     }
 
-    if (!this.peerSocket.destroyed) {
+    if (this.peerSocket && !this.peerSocket.destroyed) {
       this.peerSocket.end();
     }
 

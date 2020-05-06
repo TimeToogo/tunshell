@@ -304,7 +304,7 @@ export class TlsRelayConnection extends EventEmitter {
   };
 
   private sendMessage = (message: TlsRelayServerMessage): Promise<void> => {
-    if (!this.messageStream.writable) {
+    if (!this.socket.writable) {
       throw new Error(`Cannot send message, socket is not writable`);
     }
 
@@ -314,7 +314,7 @@ export class TlsRelayConnection extends EventEmitter {
   };
 
   private sendJsonMessage = async <T>(message: TlsRelayServerJsonMessage<T>) => {
-    if (!this.messageStream.writable) {
+    if (!this.socket.writable) {
       throw new Error(`Cannot send message, socket is not writable`);
     }
 
@@ -335,8 +335,8 @@ export class TlsRelayConnection extends EventEmitter {
 
   private handleError = (error?: Error) => {
     if (error) {
-      this.logger.error(`TLS Relay error received: ${error.message}`);
-      this.close();
+      this.logger.error(`TLS Relay error received: ${error.message}`, error.stack);
+      this.close().catch(() => {});
     }
   };
 
@@ -345,21 +345,20 @@ export class TlsRelayConnection extends EventEmitter {
       return;
     }
 
-    if (this.messageStream.writable) {
+    if (this.socket.writable) {
       await this.sendMessage({
         type: TlsRelayServerMessageType.CLOSE,
         length: 0,
       });
     }
 
-    if (this.waitingForReject) {
-      this.waitingForReject(new Error(`Connection closed`));
+    if (!this.messageStream.destroyed) {
+      this.messageStream.end(() => {
+        this.messageStream.destroy();
+      });
     }
 
     this.state = TlsRelayConnectionState.CLOSED;
-    this.messageStream.end(() => {
-      this.messageStream.destroy();
-    });
 
     await this.cleanUp();
   };
@@ -367,22 +366,33 @@ export class TlsRelayConnection extends EventEmitter {
   private handleSocketClose = async () => {
     this.state = TlsRelayConnectionState.CLOSED;
 
-    if (this.peer) {
-      this.peer.notifyPeerClosed();
-    }
-
     await this.cleanUp();
   };
 
   private cleanUp = async () => {
+    const peer = this.peer;
+
+    if (peer) {
+      this.peer.peer = null;
+      this.peer = null;
+      await peer.notifyPeerClosed();
+    }
+
+    if (this.waitingForReject) {
+      this.waitingForReject(new Error(`Connection closed`));
+      this.waitingForReject = null;
+    }
+
     if (this.getParticipant() && this.getParticipant().joined) {
       this.getParticipant().joined = false;
-      await this.session.save();
+      if (peer) {
+        await this.session.save();
+      }
     }
 
     this.timeouts.forEach(clearTimeout);
     this.timeouts = [];
-  }
+  };
 
   private notifyPeerClosed = () => {
     this.close();

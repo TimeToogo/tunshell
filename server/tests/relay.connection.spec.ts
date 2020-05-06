@@ -224,6 +224,7 @@ describe('TlsRelayConnection', () => {
     const peer = ({
       getKey: () => 'peer-key',
       getSocket: () => ({ remoteAddress: 'peer-ip' }),
+      notifyPeerClosed: () => {}
     } as any) as TlsRelayConnection;
 
     try {

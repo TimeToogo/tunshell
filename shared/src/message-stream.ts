@@ -7,12 +7,6 @@ export class TlsRelayMessageDuplexStream<TInput extends {}, TOutput extends {}> 
   private readonly serialiser = new TlsRelayMessageSerialiser();
   private messageBuffer: Buffer | null = null;
 
-  private waitingForTypes: TOutput[] | null = null;
-  private waitingForResolve: Function | null = null;
-  private waitingForReject: Function | null = null;
-  private timeouts: NodeJS.Timeout[] = [];
-
-
   constructor(
     private readonly innerStream: Socket,
     private readonly inputTypes: TInput,
@@ -83,6 +77,10 @@ export class TlsRelayMessageDuplexStream<TInput extends {}, TOutput extends {}> 
   _write = (message: TlsRelayMessage, encoding, callback) => {
     if (!this.inputTypes[message.type]) {
       throw new Error(`Cannot write message with type ${message.type} to stream.`);
+    }
+
+    if (!this.innerStream.writable) {
+      throw new Error(`Inner stream is not writable`)
     }
 
     this.innerStream.write(this.serialiser.serialise(message), callback);
