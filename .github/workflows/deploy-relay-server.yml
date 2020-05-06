@@ -21,7 +21,7 @@ jobs:
       working-directory: shared
     - run: npm ci
       working-directory: server
-    - run: npm run test
+    - run: npm run test -- --forceExit
       working-directory: server
     - name: Publish to Docker Hub
       uses: elgohr/Publish-Docker-Github-Action@master
