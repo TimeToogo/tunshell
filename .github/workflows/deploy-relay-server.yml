@@ -6,7 +6,7 @@ on:
       - master
 
 jobs:
-  build:
+  build_test_deploy:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -16,6 +16,8 @@ jobs:
     - run: npm ci
       working-directory: shared
     - run: npm run test
+      working-directory: shared
+    - run: npm run build
       working-directory: shared
     - run: npm ci
       working-directory: server
