@@ -1,0 +1,30 @@
+name: Publish Server Docker
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v1
+      with:
+        node-version: 12
+    - run: npm ci
+      working-directory: shared
+    - run: npm run test
+      working-directory: shared
+    - run: npm ci
+      working-directory: server
+    - run: npm run test
+      working-directory: server
+    - name: Publish to Docker Hub
+      uses: elgohr/Publish-Docker-Github-Action@master
+      with:
+        name: timetoogo/debug-my-pipeline--relay
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        tag_names: true

@@ -3,17 +3,26 @@
 
 set -e
 
-echo "Setting up debug-my-pipeline server"
+echo "Setting up debug-my-pipeline server..."
 
-sudo apt-get update
+if [[ ! $(which docker) ]]
+then
+    sudo apt-get update
+    sudo apt-get install -y docker.io docker-compose
+fi
 
-sudo apt-get install -y docker.io docker-compose
+if [[ ! -f mongo_password ]];
+then
+    cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 > mongo_password
+fi
 
+export MONGO_PASSWORD=$(cat mongo_password)
 
-# Dream v2
+wget https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/docker-compose.yml
 
-# Run this one on your pipeline
-# curl https://lets.debugmypipeline.com/uuu-idfdsf-dsfdsfdsf-dsfds | sh
+mkdir mongo/
+wget https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/mongo/001_init.js mongo/
 
-# Run this on you local machine
-# curl https://lets.debugmypipeline.com/gfdgb-bbgb-bfgbgfbgfb-fgbfgb | sh
+sed -i "s/{{password}}/$MONGO_PASSWORD/g" mongo/001_init.js
+
+docker-compose up -d

@@ -1,12 +1,51 @@
 version: '3.0'
-services:
+services:  
+  mongo:
+    image: mongo:4.2
+    restart: unless-stopped
+    volumes:
+      - /mongo:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: relay
+
   relay:
     image: timetoogo/debug-my-pipeline--relay
     restart: unless-stopped
     ports:
-      - "5000:5000"
-  api:
-    image: timetoogo/debug-my-pipeline--api
-    restart: unless-stopped
+      - "5000:3001"
+    volumes:
+      - ./config/le-ssl/live/debugmypipeline.com/:/le-ssl
+    environment:
+      MONGO_HOST: mongo
+      MONGO_USER: relay
+      MONGO_PASS: ${MONGO_PASSWORD}
+      TLS_RELAY_PRIVATE_KEY: /le-ssl/privkey.pem
+      TLS_RELAY_CERT: /le-ssl/cert.pem
+
+  reverse_proxy:
+    image: linuxserver/letsencrypt
+    container_name: letsencrypt
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - TZ=UTC
+      - URL=debugmypipeline.com
+      - SUBDOMAINS=relay,lets
+      - VALIDATION=http
+      - ONLY_SUBDOMAINS=true
+    volumes:
+      - ./config:/config
     ports:
-      - "5000:5000"
+      - 443:443
+      - 80:80
+    restart: unless-stopped
+
+  watchtower:
+    image: v2tec/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: watchtower reverse_proxy relay mongo --interval 30
+    restart: unless-stopped
