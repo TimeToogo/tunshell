@@ -67,7 +67,7 @@ export class TlsRelayConnection extends EventEmitter {
 
     this.messageStream.on('error', this.handleError);
 
-    this.messageStream.on('end', this.handleSocketClose);
+    this.messageStream.on('close', this.handleSocketClose);
   };
 
   public waitForKey = () => {

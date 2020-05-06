@@ -2,7 +2,7 @@
   "name": "@timetoogo/debug-my-pipeline--client",
   "scripts": {
     "test": "jest",
-    "build": "webpack && pkg dist/bundle.js --out-path dist"
+    "build": "rm -rf dist && webpack && pkg dist/bundle.js --out-path dist"
   },
   "dependencies": {
     "@timetoogo/debug-my-pipeline--shared": "file:../shared",
@@ -15,6 +15,7 @@
     "@types/node": "^13.13.4",
     "@types/ssh2": "^0.5.43",
     "jest": "^25.5.4",
+    "node-loader": "^0.6.0",
     "pkg": "^4.4.8",
     "ts-jest": "^25.4.0",
     "ts-loader": "^7.0.2",

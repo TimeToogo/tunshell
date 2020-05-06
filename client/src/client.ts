@@ -27,8 +27,6 @@ const COLOURS = {
 };
 
 export class DebugClient {
-  private readonly serialiser = new TlsRelayMessageSerialiser();
-
   private waitingForTypes: TlsRelayServerMessageType[] | null = null;
   private waitingForResolve: Function | null = null;
   private waitingForReject: Function | null = null;
@@ -56,6 +54,7 @@ export class DebugClient {
       await this.setupSshConnection();
 
       await this.close();
+      
     } catch (e) {
       console.log(COLOURS.error(e?.message ? e.message : e));
       return;
@@ -71,6 +70,10 @@ export class DebugClient {
       requestCert: true,
       rejectUnauthorized: this.config.verifyHostName,
     });
+
+    if (!socket) {
+      throw new Error(`Failed to connect to ${this.config.relayHost}:${this.config.relayPort}`);
+    }
 
     this.initSocket(socket);
 
@@ -207,9 +210,8 @@ export class DebugClient {
     this.relayRawSocket = socket;
     this.messageStream = new TlsRelayMessageDuplexStream(socket, TlsRelayClientMessageType, TlsRelayServerMessageType);
     this.messageStream.on('data', this.handleMessage);
-    // TODO
-    // this.messageStream.on('error', this.handleError);
-    this.messageStream.on('end', this.close);
+    this.messageStream.on('error', this.handleError);
+    this.messageStream.on('close', this.close);
   };
 
   private handleMessage = async (message: TlsRelayServerMessage) => {
@@ -269,6 +271,10 @@ export class DebugClient {
     );
   };
 
+  private handleError = (error: Error) => {
+    throw error;
+  };
+
   private sendRelayMessage = (message: TlsRelayClientMessage): Promise<void> => {
     return new Promise((resolve, reject) => {
       this.messageStream.write(message, (err) => (err ? reject(err) : resolve()));
@@ -286,19 +292,29 @@ export class DebugClient {
       return;
     }
 
+    console.log(COLOURS.info(`Closing connection...`));
     this.closed = true;
 
     if (this.messageStream.writable) {
-      this.sendRelayMessage({ type: TlsRelayClientMessageType.CLOSE, length: 0 });
-      this.messageStream.end(() => this.messageStream.destroy());
+      await this.sendRelayMessage({ type: TlsRelayClientMessageType.CLOSE, length: 0 });
     }
 
-    if (this.peerSocket && this.peerSocket.writable) {
-      this.peerSocket.end(() => this.peerSocket.destroy());
+    if (!this.relayRawSocket.destroyed) {
+      this.relayRawSocket.end();
+    }
+
+    if (!this.messageStream.destroyed) {
+      this.messageStream.end();
+    }
+
+    if (!this.peerSocket.destroyed) {
+      this.peerSocket.end();
     }
 
     if (this.waitingForReject) {
       this.waitingForReject(new Error(`Connection closed`));
     }
+    
+    console.log(COLOURS.info(`Connection closed`))
   };
 }

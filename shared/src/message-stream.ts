@@ -7,6 +7,12 @@ export class TlsRelayMessageDuplexStream<TInput extends {}, TOutput extends {}> 
   private readonly serialiser = new TlsRelayMessageSerialiser();
   private messageBuffer: Buffer | null = null;
 
+  private waitingForTypes: TOutput[] | null = null;
+  private waitingForResolve: Function | null = null;
+  private waitingForReject: Function | null = null;
+  private timeouts: NodeJS.Timeout[] = [];
+
+
   constructor(
     private readonly innerStream: Socket,
     private readonly inputTypes: TInput,

@@ -1,14 +1,24 @@
 const path = require('path');
 
 module.exports = {
-  entry: './src/index.ts',
+  // entry: './src/index.ts',
+  entry: './tests/connect.ts',
+  target: 'node',
   mode: 'production',
+  node: {
+    __dirname: false,
+    __filename: false,
+  },
   module: {
     rules: [
       {
         test: /\.tsx?$/,
         use: 'ts-loader',
         exclude: /node_modules/,
+      },
+      {
+        test: /\.node$/,
+        use: 'node-loader',
       },
     ],
   },
