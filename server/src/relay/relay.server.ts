@@ -79,7 +79,7 @@ export class TlsRelayServer {
       }
 
       const peer = [session.client, session.host].find(i => i.key !== key);
-      const peerConnection = this.connections[peer.key];
+      const peerConnection = this.connections[peer.key] && !this.connections[peer.key].isDead() ? this.connections[peer.key] : null;
 
       // Ensure that peer share the same session instance
       if (peerConnection) {

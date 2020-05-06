@@ -48,10 +48,13 @@ export class Ssh {
   };
 
   private generateOnceOffPrivateKey = (): Buffer => {
-    const keyPair = crypto.generateKeyPairSync('rsa', { modulusLength: 4096 });
-    const privateKey = keyPair.privateKey.export({ format: 'pem', type: 'pkcs1' }) as Buffer;
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 4096,
+      publicKeyEncoding: { format: 'pem', type: 'pkcs1' },
+      privateKeyEncoding: { format: 'pem', type: 'pkcs1' },
+    });
 
-    return privateKey;
+    return (privateKey as unknown) as Buffer;
   };
 
   private handleAuthentication = (context: ssh2.AuthContext) => {
@@ -67,22 +70,23 @@ export class Ssh {
   };
 
   private createTerminalSession = (session: ssh2.Session) => {
-    let userPty: ssh2.PseudoTtyInfo | undefined;
+    let userPty: ssh2.PseudoTtyOptions | undefined;
 
     session.once('pty', function (accept, reject, info) {
       userPty = info;
       accept();
     });
 
-    session.once('shell', (accept, reject) => {
+    session.once('shell', (accept, reject, info) => {
       if (!userPty) {
         reject();
       }
 
       var channel = accept();
+      console.log(`Client connected`);
 
       var shell = pty.spawn(this.getShell(), [], {
-        name: 'debug-my-pipeline',
+        name: userPty.term,
         cols: userPty.cols,
         rows: userPty.rows,
         env: process.env,
@@ -108,7 +112,7 @@ export class Ssh {
     const shells =
       os.platform() === 'win32'
         ? ['C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'C:\\Windows\\System32\\cmd.exe']
-        : [ '/bin/sh'];
+        : ['/bin/bash', '/bin/sh'];
 
     const shell = shells.find((i) => fs.statSync(i).isFile());
 
@@ -129,12 +133,22 @@ export class Ssh {
         password: this.config.password,
       });
 
-      client.on('ready', () => this.handleClientConnected(client, resolve, reject));
+      client.on('ready', () => this.handleConnectedToHost(client, resolve, reject));
     });
   };
 
-  private handleClientConnected = (client: ssh2.Client, resolve, reject) => {
-    client.shell((error, channel) => {
+  private handleConnectedToHost = (client: ssh2.Client, resolve, reject) => {
+    const [width, height] = process.stdout.getWindowSize();
+
+    const shellOptions: ssh2.ShellOptions & ssh2.PseudoTtyOptions = {
+      width,
+      height,
+      cols: width,
+      rows: height,
+      term: process.env.TERM,
+    };
+
+    client.shell(shellOptions, (error, channel) => {
       if (error) throw error;
 
       channel.on('close', () => {
@@ -151,13 +165,10 @@ export class Ssh {
       channel.stdout.pipe(process.stdout);
       process.stdin.pipe(channel.stdin);
 
-      const sizeTerminal = () => {
+      process.stdout.on('resize', () => {
         const [width, height] = process.stdout.getWindowSize();
         channel.setWindow(height, width, height, width);
-      };
-
-      process.stdout.on('resize', sizeTerminal);
-      sizeTerminal();
+      });
     });
   };
 }

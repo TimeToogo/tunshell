@@ -361,16 +361,28 @@ export class TlsRelayConnection extends EventEmitter {
       this.messageStream.destroy();
     });
 
-    this.timeouts.forEach(clearTimeout);
+    await this.cleanUp();
   };
 
-  private handleSocketClose = () => {
+  private handleSocketClose = async () => {
     this.state = TlsRelayConnectionState.CLOSED;
 
     if (this.peer) {
       this.peer.notifyPeerClosed();
     }
+
+    await this.cleanUp();
   };
+
+  private cleanUp = async () => {
+    if (this.getParticipant() && this.getParticipant().joined) {
+      this.getParticipant().joined = false;
+      await this.session.save();
+    }
+
+    this.timeouts.forEach(clearTimeout);
+    this.timeouts = [];
+  }
 
   private notifyPeerClosed = () => {
     this.close();
