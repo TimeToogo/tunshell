@@ -9,7 +9,9 @@ if [[ ! $(which docker) ]]
 then
     sudo apt-get update
     sudo apt-get install -y docker.io docker-compose
+    sudo usermod -aG docker $USER
 fi
+
 
 if [[ ! -f mongo_password ]];
 then
@@ -18,11 +20,14 @@ fi
 
 export MONGO_PASSWORD=$(cat mongo_password)
 
-wget https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/docker-compose.yml
+curl https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/docker-compose.yml > docker-compose.yml
+curl https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/mongo_init.js > mongo_init.js
+curl https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/nginx.conf > nginx.conf
 
-mkdir mongo/
-wget https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/mongo/001_init.js mongo/
+mkdir -p config/nginx/site-confs/
+mv nginx.conf config/nginx/site-confs/default
 
-sed -i "s/{{password}}/$MONGO_PASSWORD/g" mongo/001_init.js
+sed -i "s/{{password}}/$MONGO_PASSWORD/g" mongo_init.js
 
-docker-compose up -d
+sudo service docker start
+sg docker -c "docker-compose up -d"

@@ -2,27 +2,33 @@ version: '3.0'
 services:  
   mongo:
     image: mongo:4.2
+    container_name: mongo
     restart: unless-stopped
     volumes:
-      - /mongo:/data/db
+      - ./mongo_init.js:/docker-entrypoint-initdb.d/mongo_init.js:ro
+      - ./mongo-db/:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: relay
 
   relay:
     image: timetoogo/debug-my-pipeline-relay
+    container_name: relay
     restart: unless-stopped
+    depends_on:
+      - mongo
+      - reverse_proxy
     ports:
       - "5000:3001"
     volumes:
-      - ./config/le-ssl/live/debugmypipeline.com/:/le-ssl
+      - ./config/etc/letsencrypt/:/le-ssl
     environment:
       MONGO_HOST: mongo
       MONGO_USER: relay
       MONGO_PASS: ${MONGO_PASSWORD}
-      TLS_RELAY_PRIVATE_KEY: /le-ssl/privkey.pem
-      TLS_RELAY_CERT: /le-ssl/cert.pem
+      TLS_RELAY_PRIVATE_KEY: /le-ssl/live/relay1.debugmypipeline.com/privkey.pem
+      TLS_RELAY_CERT: /le-ssl/live/relay1.debugmypipeline.com/fullchain.pem
 
   reverse_proxy:
     image: linuxserver/letsencrypt
@@ -32,7 +38,7 @@ services:
     environment:
       - TZ=UTC
       - URL=debugmypipeline.com
-      - SUBDOMAINS=relay,lets
+      - SUBDOMAINS=relay1,lets1
       - VALIDATION=http
       - ONLY_SUBDOMAINS=true
     volumes:

@@ -58,8 +58,8 @@ Resources:
             sudo chown -R $USER:$USER /app
             cd /app 
             wget https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/setup-ec2.sh
-            chmod +x /setup-ec2.sh
-            sh aws/setup-ec2.sh
+            chmod +x setup-ec2.sh
+            sh setup-ec2.sh
       InstanceType:
         Ref: InstanceType
       SecurityGroups:
@@ -80,7 +80,19 @@ Resources:
           ToPort: '22'
           CidrIp:
             Ref: SSHLocation
-        - Description: TLS Relay Server Open Access
+        - Description: HTTPS access
+          IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp:
+            Ref: 0.0.0.0/0
+        - Description: HTTP access
+          IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:
+            Ref: 0.0.0.0/0
+        - Description: TLS Relay Server open access
           IpProtocol: tcp
           FromPort: '5000'
           ToPort: '5000'
