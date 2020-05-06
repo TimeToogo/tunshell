@@ -11,7 +11,7 @@ services:
       MONGO_INITDB_DATABASE: relay
 
   relay:
-    image: timetoogo/debug-my-pipeline--relay
+    image: timetoogo/debug-my-pipeline-relay
     restart: unless-stopped
     ports:
       - "5000:3001"
