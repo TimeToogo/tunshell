@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SessionModule } from './session/session.module';
 import { TlsModule } from './relay/relay.module';
+import { ScriptModule } from './script/script.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { TlsModule } from './relay/relay.module';
     }),
     SessionModule,
     TlsModule,
+    ScriptModule,
   ],
 })
 export class AppModule {}
