@@ -1,8 +1,7 @@
 const path = require('path');
 
 module.exports = {
-  // entry: './src/index.ts',
-  entry: './tests/connect.ts',
+  entry: './src/index.ts',
   target: 'node',
   mode: 'production',
   node: {
@@ -15,6 +14,18 @@ module.exports = {
         test: /\.tsx?$/,
         use: 'ts-loader',
         exclude: /node_modules/,
+      },
+      {
+        test: /\.node$/,
+        use: {
+          loader: 'awesome-node-loader',
+          options: {
+            name: 'libs/[hash].node',
+            rewritePath: '.',
+            useDirname: false
+          },
+        },
+        include: /node_modules/,
       },
     ],
   },

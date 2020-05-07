@@ -1,0 +1,43 @@
+name: Publish Client Libraries
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build_and_deploy:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v1
+      with:
+        node-version: 12
+    - run: npm ci
+      working-directory: shared
+    - run: npm run test
+      working-directory: shared
+    - run: npm run build
+      working-directory: shared
+    - run: npm ci
+      working-directory: client
+    - run: npm run build
+      working-directory: client
+    - run: npx bestzip artifact.zip dist/*
+      working-directory: client
+    # Deploy artifact to https://artifacts.debugmypipeline.com
+    - uses: chrislennon/action-aws-cli@v1.1
+    - name: Deploy to S3
+      run: aws s3 cp artifact.zip s3://artifacts.debugmypipeline.com/${{ matrix.platform }}/artifact.zip --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
+      working-directory: client
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
+    - name: Invalidate CloudFront
+      run: aws cloudfront create-invalidation --distribution-id=E3UKYOV4DA9TM1 --paths '/${{ matrix.platform }}/artifact.zip'
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
