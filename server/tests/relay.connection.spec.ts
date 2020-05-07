@@ -472,6 +472,7 @@ describe('TlsRelayConnection', () => {
     const connection = new TlsRelayConnection(config, socket, logger);
     const peerConnection = {
       sendMessage: jest.fn(),
+      notifyPeerClosed: () => {},
     };
 
     try {

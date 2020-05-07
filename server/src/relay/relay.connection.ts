@@ -103,7 +103,7 @@ export class TlsRelayConnection extends EventEmitter {
 
   private handleMessage = async (message: TlsRelayClientMessage) => {
     if (message.type === TlsRelayClientMessageType.CLOSE) {
-      await this.close();
+      await this.close(true);
       return;
     }
 
@@ -167,7 +167,7 @@ export class TlsRelayConnection extends EventEmitter {
     const participant = this.getParticipant();
     participant.ipAddress = this.socket.remoteAddress;
     participant.joined = true;
-    await this.session.save();
+    this.emit('session-updated')
     await this.sendJsonMessage<KeyAcceptedPayload>({
       type: TlsRelayServerMessageType.KEY_ACCEPTED,
       data: {
@@ -335,12 +335,12 @@ export class TlsRelayConnection extends EventEmitter {
     }
   };
 
-  public close = async () => {
+  public close = async (closedByClient = false) => {
     if (this.state === TlsRelayConnectionState.CLOSED) {
       return;
     }
 
-    if (this.socket.writable) {
+    if (this.socket.writable && !closedByClient) {
       await this.sendMessage({
         type: TlsRelayServerMessageType.CLOSE,
         length: 0,
@@ -380,9 +380,7 @@ export class TlsRelayConnection extends EventEmitter {
 
     if (this.getParticipant() && this.getParticipant().joined) {
       this.getParticipant().joined = false;
-      if (peer) {
-        await this.session.save();
-      }
+      this.emit('session-updated')
     }
 
     this.timeouts.forEach(clearTimeout);

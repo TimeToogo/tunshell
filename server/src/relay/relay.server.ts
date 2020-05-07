@@ -14,6 +14,8 @@ export class TlsRelayServer {
   private cleanUpIntervalId: NodeJS.Timeout;
   private readonly connections = {} as { [key: string]: TlsRelayConnection };
   private listenResolve: Function;
+  private isUpdatingSessions: boolean = false;
+  private sessionsToUpdate: (Session & Document)[] = [];
 
   constructor(
     @Inject('TlsConfig') private readonly config: TlsRelayConfig,
@@ -62,6 +64,10 @@ export class TlsRelayServer {
       this.handleConnectionKey(connection).catch(this.logger.error);
     });
 
+    connection.on('session-updated', () => {
+      this.handleSessionUpdated(connection);
+    });
+
     connection.waitForKey();
   };
 
@@ -79,7 +85,8 @@ export class TlsRelayServer {
       }
 
       const peer = [session.client, session.host].find(i => i.key !== key);
-      const peerConnection = this.connections[peer.key] && !this.connections[peer.key].isDead() ? this.connections[peer.key] : null;
+      const peerConnection =
+        this.connections[peer.key] && !this.connections[peer.key].isDead() ? this.connections[peer.key] : null;
 
       // Ensure that peer share the same session instance
       if (peerConnection) {
@@ -96,6 +103,38 @@ export class TlsRelayServer {
       this.logger.error(`Error occurred during TLS Relay connection: ${e.message}`, e.stack);
     }
   };
+
+  private handleSessionUpdated = (connection: TlsRelayConnection) => {
+    const session = connection.getSession();
+
+    if (!session) {
+      return;
+    }
+
+    if (this.sessionsToUpdate.includes(session)) {
+      return;
+    }
+
+    this.sessionsToUpdate.push(session);
+    this.updateSessions();
+  };
+
+  private updateSessions =  async () => {
+    if (this.isUpdatingSessions) {
+      return;
+    }
+    this.isUpdatingSessions = true;
+
+    try {
+      let session: Session&Document;
+
+      while(session = this.sessionsToUpdate.shift()) {
+        await session.save();
+      }
+    } finally {
+      this.isUpdatingSessions = false;
+    }
+  }
 
   private negotiateConnection = async (peer1: TlsRelayConnection, peer2: TlsRelayConnection) => {
     await Promise.all([peer1.peerJoined(peer2), peer2.peerJoined(peer1)]);
