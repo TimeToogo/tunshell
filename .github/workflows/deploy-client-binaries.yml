@@ -10,8 +10,7 @@ jobs:
     strategy:
       matrix:
         platform: [ubuntu-latest, macos-latest, windows-latest]
-        architecture: [X86, X64, ARM32, ARM64]
-    runs-on: [${{ matrix.platform }}, ${{ matrix.architecture }}]
+    runs-on: ${{ matrix.platform }}
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-node@v1
@@ -32,13 +31,13 @@ jobs:
     # Deploy artifact to https://artifacts.debugmypipeline.com
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3
-      run: aws s3 cp artifact.zip s3://artifacts.debugmypipeline.com/${{ matrix.platform }}-${{ matrix.architecture }}/artifact.zip --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
+      run: aws s3 cp artifact.zip s3://artifacts.debugmypipeline.com/${{ matrix.platform }}/artifact.zip --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
       working-directory: client
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
     - name: Invalidate CloudFront
-      run: aws cloudfront create-invalidation --distribution-id=E3UKYOV4DA9TM1 --paths '/${{ matrix.platform }}-${{ matrix.architecture }}/artifact.zip'
+      run: aws cloudfront create-invalidation --distribution-id=E3UKYOV4DA9TM1 --paths '/${{ matrix.platform }}/artifact.zip'
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
