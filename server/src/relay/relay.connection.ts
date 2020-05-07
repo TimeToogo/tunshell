@@ -158,11 +158,6 @@ export class TlsRelayConnection extends EventEmitter {
       throw new Error(`Connection is not in WAITING_FOR_KEY state`);
     }
 
-    if (message.length < 16 || message.length > 64) {
-      this.handleError(new Error(`Key does not meet data length requirements, received length: ${message.length}`));
-      return;
-    }
-
     this.key = message.data.toString('utf8');
     this.emit('key-received', this.key);
   };
