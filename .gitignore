@@ -30,6 +30,7 @@ Temporary Items
 # node
 node_modules/
 dist/
+artifacts/
 
 # VS Code
 .vscode

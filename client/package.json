@@ -2,7 +2,7 @@
   "name": "@timetoogo/debug-my-pipeline--client",
   "scripts": {
     "test": "jest",
-    "build": "rimraf dist && webpack && node build/copy-node.js"
+    "build": "rimraf dist artifacts && webpack && node build/index.js"
   },
   "bin": "dist/bundle.js",
   "dependencies": {
@@ -15,9 +15,11 @@
     "@types/jest": "^25.2.1",
     "@types/node": "^13.13.4",
     "@types/ssh2": "^0.5.43",
+    "adm-zip": "^0.4.14",
     "awesome-node-loader": "^1.1.1",
     "jest": "^25.5.4",
     "rimraf": "^3.0.2",
+    "tar": "^6.0.2",
     "ts-jest": "^25.4.0",
     "ts-loader": "^7.0.2",
     "ts-node": "^8.10.1",
