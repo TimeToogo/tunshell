@@ -119,22 +119,24 @@ export class TlsRelayServer {
     this.updateSessions();
   };
 
-  private updateSessions =  async () => {
+  private updateSessions = async () => {
     if (this.isUpdatingSessions) {
       return;
     }
     this.isUpdatingSessions = true;
 
     try {
-      let session: Session&Document;
+      let session: Session & Document;
 
-      while(session = this.sessionsToUpdate.shift()) {
+      while ((session = this.sessionsToUpdate.shift())) {
+        session.markModified('host')
+        session.markModified('client')
         await session.save();
       }
     } finally {
       this.isUpdatingSessions = false;
     }
-  }
+  };
 
   private negotiateConnection = async (peer1: TlsRelayConnection, peer2: TlsRelayConnection) => {
     await Promise.all([peer1.peerJoined(peer2), peer2.peerJoined(peer1)]);
