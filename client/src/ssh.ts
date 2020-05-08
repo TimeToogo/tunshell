@@ -5,6 +5,7 @@ import * as net from 'net';
 import * as ssh2 from 'ssh2';
 import * as pty from 'node-pty';
 import * as fs from 'fs';
+import chalk = require('chalk');
 
 export interface SshConfig {
   socket: stream.Duplex;
@@ -124,6 +125,11 @@ export class Ssh {
   };
 
   public connectToHostSshSession = async () => {
+    if (!process.stdin.isTTY) {
+      console.error(chalk.red(`Process must be run with a TTY`));
+      process.exit(1);
+    }
+    
     const client = new ssh2.Client();
 
     return new Promise((resolve, reject) => {
