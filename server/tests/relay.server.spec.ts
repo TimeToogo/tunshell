@@ -162,6 +162,7 @@ describe('TlsRelayServer', () => {
         joined: false,
       },
       createdAt: new Date(),
+      markModified: () => {},
       save: (async () => {}) as any,
     };
 
@@ -216,6 +217,7 @@ describe('TlsRelayServer', () => {
         joined: false,
       },
       createdAt: new Date(),
+      markModified: () => {},
       save: (async () => {}) as any,
     };
 
@@ -361,6 +363,7 @@ describe('TlsRelayServer', () => {
         joined: false,
       },
       createdAt: new Date(),
+      markModified: () => {},
       save: (async () => {}) as any,
     };
 
@@ -535,8 +538,9 @@ describe('TlsRelayServer', () => {
         joined: false,
       },
       createdAt: new Date(),
+      markModified: () => {},
       save: (async () => {
-        savedSessionState = JSON.parse(JSON.stringify(CURRENT_SESSION))
+        savedSessionState = JSON.parse(JSON.stringify(CURRENT_SESSION));
       }) as any,
     };
 
@@ -628,7 +632,7 @@ describe('TlsRelayServer', () => {
 
       expect(savedSessionState.host.joined).toBe(true);
       expect(savedSessionState.client.joined).toBe(true);
-      console.log(savedSessionState)
+      console.log(savedSessionState);
 
       socket.end();
 
