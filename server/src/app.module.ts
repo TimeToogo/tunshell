@@ -10,6 +10,7 @@ import { ScriptModule } from './script/script.module';
       user: process.env.MONGO_USER,
       pass: process.env.MONGO_PASS,
       useNewUrlParser: true,
+      useUnifiedTopology: true
     }),
     SessionModule,
     TlsModule,

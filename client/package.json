@@ -2,7 +2,7 @@
   "name": "@timetoogo/debug-my-pipeline--client",
   "scripts": {
     "test": "jest",
-    "build": "rimraf dist && webpack && cp \"$(which node)\" dist/"
+    "build": "rimraf dist && webpack && node build/copy-node.js"
   },
   "bin": "dist/bundle.js",
   "dependencies": {
