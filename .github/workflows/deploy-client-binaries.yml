@@ -29,7 +29,7 @@ jobs:
     # Deploy artifact to https://artifacts.debugmypipeline.com
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3
-      run: aws s3 cp artifacts/ s3://artifacts.debugmypipeline.com/${{ matrix.platform }}/ --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
+      run: aws s3 cp --recursive artifacts/ s3://artifacts.debugmypipeline.com/${{ matrix.platform }}/ --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
       working-directory: client
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}

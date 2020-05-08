@@ -19,14 +19,14 @@ esac
 TEMP_PATH="$TMPDIR/debugmypipeline"
 mkdir -p $TEMP_PATH
 
-ARTIFACT_PATH="$TEMP_PATH/artifact.zip"
-UNZIP_PATH="$TEMP_PATH/unzipped"
-NODE_PATH="$UNZIP_PATH/dist/node"
-BUNDLE_PATH="$UNZIP_PATH/dist/bundle.js"
+ARTIFACT_PATH="$TEMP_PATH/artifact.tar.gz"
+EXTRACT_PATH="$TEMP_PATH/extracted"
+NODE_PATH="$EXTRACT_PATH/dist/node"
+BUNDLE_PATH="$EXTRACT_PATH/dist/bundle.js"
 
 echo "Installing client..."
-curl -s https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.zip -o $ARTIFACT_PATH
-unzip -o $ARTIFACT_PATH -d $UNZIP_PATH 1>/dev/null
+curl -s https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.tar.gz -o $ARTIFACT_PATH
+tar xzf $ARTIFACT_PATH -C $EXTRACT_PATH 1>/dev/null
 chmod +x $NODE_PATH
 
 DEBUGMYPIPELINE_KEY='__KEY__' $NODE_PATH $BUNDLE_PATH
