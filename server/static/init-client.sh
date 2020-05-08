@@ -16,6 +16,11 @@ case "$(uname -s)" in
     ;;
 esac
 
+if [ -z "$TMPDIR" ]
+then
+    TMPDIR="/tmp/"
+fi
+
 TEMP_PATH="$TMPDIR/debugmypipeline"
 
 ARTIFACT_PATH="$TEMP_PATH/artifact.tar.gz"
