@@ -15,7 +15,7 @@ export default function Home() {
     setSessionKeys(undefined);
 
     try {
-      const response = await fetch('http://127.0.0.1:3000/sessions', { method: 'POST' });
+      const response = await fetch('https://relay1.debugmypipeline.com/sessions', { method: 'POST' });
 
       setSessionKeys(await response.json());
     } finally {
