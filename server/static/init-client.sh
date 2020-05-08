@@ -21,11 +21,12 @@ mkdir -p $TEMP_PATH
 
 ARTIFACT_PATH="$TEMP_PATH/artifact.zip"
 UNZIP_PATH="$TEMP_PATH/unzipped"
-CLIENT_PATH="$UNZIP_PATH/dist/debug-my-pipeline--client"
+NODE_PATH="$UNZIP_PATH/dist/node"
+BUNDLE_PATH="$UNZIP_PATH/dist/bundle.js"
 
 echo "Installing client..."
 curl -s https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.zip -o $ARTIFACT_PATH
 unzip -o $ARTIFACT_PATH -d $UNZIP_PATH 1>/dev/null
-chmod +x $CLIENT_PATH
+chmod +x $NODE_PATH
 
-DEBUGMYPIPELINE_KEY='__KEY__' $CLIENT_PATH
+DEBUGMYPIPELINE_KEY='__KEY__' $NODE_PATH $BUNDLE_PATH

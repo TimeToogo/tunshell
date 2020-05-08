@@ -22,7 +22,6 @@ module.exports = {
           options: {
             name: 'libs/[hash].node',
             rewritePath: '.',
-            useDirname: false
           },
         },
         include: /node_modules/,
