@@ -17,12 +17,14 @@ case "$(uname -s)" in
 esac
 
 TEMP_PATH="$TMPDIR/debugmypipeline"
-mkdir -p $TEMP_PATH
 
 ARTIFACT_PATH="$TEMP_PATH/artifact.tar.gz"
 EXTRACT_PATH="$TEMP_PATH/extracted"
-NODE_PATH="$EXTRACT_PATH/dist/node"
-BUNDLE_PATH="$EXTRACT_PATH/dist/bundle.js"
+NODE_PATH="$EXTRACT_PATH/node"
+BUNDLE_PATH="$EXTRACT_PATH/bundle.js"
+
+mkdir -p $TEMP_PATH
+mkdir -p $EXTRACT_PATH
 
 echo "Installing client..."
 curl -s https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.tar.gz -o $ARTIFACT_PATH
