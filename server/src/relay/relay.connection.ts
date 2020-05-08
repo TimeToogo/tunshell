@@ -167,7 +167,7 @@ export class TlsRelayConnection extends EventEmitter {
     const participant = this.getParticipant();
     participant.ipAddress = this.socket.remoteAddress;
     participant.joined = true;
-    this.emit('session-updated')
+    this.emit('session-updated');
     await this.sendJsonMessage<KeyAcceptedPayload>({
       type: TlsRelayServerMessageType.KEY_ACCEPTED,
       data: {
@@ -340,22 +340,24 @@ export class TlsRelayConnection extends EventEmitter {
       return;
     }
 
-    if (this.socket.writable && !closedByClient) {
-      await this.sendMessage({
-        type: TlsRelayServerMessageType.CLOSE,
-        length: 0,
-      });
+    try {
+      if (this.socket.writable && !closedByClient) {
+        await this.sendMessage({
+          type: TlsRelayServerMessageType.CLOSE,
+          length: 0,
+        });
+      }
+
+      if (!this.messageStream.destroyed) {
+        this.messageStream.end(() => {
+          this.messageStream.destroy();
+        });
+      }
+    } finally {
+      this.state = TlsRelayConnectionState.CLOSED;
+
+      await this.cleanUp();
     }
-
-    if (!this.messageStream.destroyed) {
-      this.messageStream.end(() => {
-        this.messageStream.destroy();
-      });
-    }
-
-    this.state = TlsRelayConnectionState.CLOSED;
-
-    await this.cleanUp();
   };
 
   private handleSocketClose = async () => {
@@ -365,22 +367,22 @@ export class TlsRelayConnection extends EventEmitter {
   };
 
   private cleanUp = async () => {
+    if (this.getParticipant() && this.getParticipant().joined) {
+      this.getParticipant().joined = false;
+      this.emit('session-updated');
+    }
+
     const peer = this.peer;
 
     if (peer) {
       this.peer.peer = null;
       this.peer = null;
-      await peer.notifyPeerClosed();
+      peer.notifyPeerClosed();
     }
 
     if (this.waitingForReject) {
       this.waitingForReject(new Error(`Connection closed`));
       this.waitingForReject = null;
-    }
-
-    if (this.getParticipant() && this.getParticipant().joined) {
-      this.getParticipant().joined = false;
-      this.emit('session-updated')
     }
 
     this.timeouts.forEach(clearTimeout);
