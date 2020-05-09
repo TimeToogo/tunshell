@@ -1,4 +1,5 @@
 ## === DEBUGMYPIPELINE SHELL SCRIPT ===
+#!/bin/sh
 
 case "$(uname -s)" in
     Linux*)     
@@ -32,7 +33,12 @@ mkdir -p $TEMP_PATH
 mkdir -p $EXTRACT_PATH
 
 echo "Installing client..."
-curl -s https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.tar.gz -o $ARTIFACT_PATH
+if [ ! -z "$(which curl)" ]
+then
+    curl -s https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.tar.gz -o $ARTIFACT_PATH 
+else
+    wget https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.tar.gz -O $ARTIFACT_PATH 2> /dev/null
+fi
 tar xzf $ARTIFACT_PATH -C $EXTRACT_PATH 1>/dev/null
 chmod +x $NODE_PATH
 
