@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "dmp-client",
+    "dmp-shared",
+    "dmp-server",
+]

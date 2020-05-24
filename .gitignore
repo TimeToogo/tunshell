@@ -34,6 +34,9 @@ artifacts/
 out/
 .next/
 
+# Rust
+target/
+
 # VS Code
 .vscode
 

@@ -25,9 +25,9 @@ export enum TlsRelayClientMessageType {
   CLOSE = 0,
   KEY = 1,
   TIME = 2,
-  DIRECT_CONNECT_SUCCEEDED = 4,
-  DIRECT_CONNECT_FAILED = 5,
-  RELAY = 6,
+  DIRECT_CONNECT_SUCCEEDED = 3,
+  DIRECT_CONNECT_FAILED = 4,
+  RELAY = 5,
 }
 
 export interface TlsRelayServerMessage
