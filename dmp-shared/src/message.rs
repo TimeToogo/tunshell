@@ -8,7 +8,7 @@ pub struct RawMessage {
     data: Vec<u8>,
 }
 
-pub trait Message<T> {
+pub trait Message<T>: Unpin + Sync + Send {
     fn type_id(&self) -> u8;
     fn serialise(&self) -> Result<RawMessage>;
     fn deserialise(raw_message: &RawMessage) -> Result<T>;
