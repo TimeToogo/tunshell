@@ -137,7 +137,7 @@ export class TlsRelayConnection extends EventEmitter {
             reject(
               new Error(
                 `Connection timed out while waiting for ${types
-                  .map(i => TlsRelayClientMessageType[i])
+                  .map((i) => TlsRelayClientMessageType[i])
                   .join(', ')} messages`,
               ),
             );
@@ -158,7 +158,12 @@ export class TlsRelayConnection extends EventEmitter {
       throw new Error(`Connection is not in WAITING_FOR_KEY state`);
     }
 
-    this.key = message.data.toString('utf8');
+    try {
+      this.key = JSON.parse(message.data.toString('utf8')).key;
+    } catch (e) {
+      throw new Error(`Failed to parse key from message`);
+    }
+
     this.emit('key-received', this.key);
   };
 
@@ -304,7 +309,7 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     return new Promise<void>((resolve, reject) =>
-      this.messageStream.write(message, err => (err ? reject(err) : resolve())),
+      this.messageStream.write(message, (err) => (err ? reject(err) : resolve())),
     );
   };
 
@@ -314,16 +319,16 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     return new Promise<void>((resolve, reject) =>
-      this.messageStream.writeJson(message, null, err => (err ? reject(err) : resolve())),
+      this.messageStream.writeJson(message, null, (err) => (err ? reject(err) : resolve())),
     );
   };
 
   private handleUnexpectedMessage = (message: TlsRelayClientMessage) => {
     this.handleError(
       new Error(
-        `Unexpected message received while in connection state ${
-          TlsRelayConnectionState[this.state]
-        }: ${TlsRelayClientMessageType[message.type] || 'unknown'}`,
+        `Unexpected message received while in connection state ${TlsRelayConnectionState[this.state]}: ${
+          TlsRelayClientMessageType[message.type] || 'unknown'
+        }`,
       ),
     );
   };

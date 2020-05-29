@@ -54,7 +54,6 @@ export class DebugClient {
       await this.setupSshConnection();
 
       await this.close();
-      
     } catch (e) {
       console.log(COLOURS.error(e?.message ? e.message : e));
       return;
@@ -77,10 +76,9 @@ export class DebugClient {
 
     this.initSocket(socket);
 
-    this.sendRelayMessage({
+    this.sendRelayJsonMessage({
       type: TlsRelayClientMessageType.KEY,
-      length: this.config.clientKey.length,
-      data: Buffer.from(this.config.clientKey, 'utf8'),
+      data: { key: this.config.clientKey },
     });
 
     const message = await this.waitFor([
@@ -314,7 +312,7 @@ export class DebugClient {
     if (this.waitingForReject) {
       this.waitingForReject(new Error(`Connection closed`));
     }
-    
-    console.log(COLOURS.info(`Connection closed`))
+
+    console.log(COLOURS.info(`Connection closed`));
   };
 }
