@@ -1,6 +1,5 @@
-pub mod message;
-pub mod message_stream;
+mod message;
+mod message_stream;
 
-pub fn test_hello_shared() {
-    println!("Hello from shared lib!");
-}
+pub use message::*;
+pub use message_stream::*;

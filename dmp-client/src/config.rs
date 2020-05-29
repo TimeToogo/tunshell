@@ -7,7 +7,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new_default() -> Self {
+    pub fn new_from_env() -> Self {
         let client_key = env::var("DMP_KEY").expect("DMP_KEY environment variable must be set");
 
         Self {
@@ -43,10 +43,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_default() {
+    fn test_new_from_env() {
         env::set_var("DMP_KEY", "Example key");
 
-        let config = Config::new_default();
+        let config = Config::new_from_env();
 
         assert_eq!(config.client_key(), "Example key");
         assert!(config.relay_host().len() > 0);
@@ -58,6 +58,6 @@ mod tests {
     fn test_should_panic_without_key_env_var() {
         env::remove_var("DMP_KEY");
 
-        Config::new_default();
+        Config::new_from_env();
     }
 }

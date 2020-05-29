@@ -6,9 +6,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub trait InnerStream: AsyncRead + AsyncWrite + Unpin + Sync + Send {}
-
-pub struct MessageStream<I: Message<I>, O: Message<O>, S: InnerStream> {
+pub struct MessageStream<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> {
     inner: S,
     buff: Vec<u8>,
     returned_error: bool,
@@ -18,7 +16,7 @@ pub struct MessageStream<I: Message<I>, O: Message<O>, S: InnerStream> {
     phantom_o: PhantomData<O>,
 }
 
-impl<I: Message<I>, O: Message<O>, S: InnerStream> MessageStream<I, O, S> {
+impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I, O, S> {
     pub fn new(inner: S) -> Self {
         Self {
             inner,
@@ -61,7 +59,7 @@ impl<I: Message<I>, O: Message<O>, S: InnerStream> MessageStream<I, O, S> {
     }
 }
 
-impl<I: Message<I>, O: Message<O>, S: InnerStream> Stream for MessageStream<I, O, S> {
+impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> Stream for MessageStream<I, O, S> {
     type Item = Result<O>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -118,7 +116,7 @@ impl<I: Message<I>, O: Message<O>, S: InnerStream> Stream for MessageStream<I, O
     }
 }
 
-impl<I: Message<I>, O: Message<O>, S: InnerStream> MessageStream<I, O, S> {
+impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I, O, S> {
     pub async fn write(&mut self, message: &I) -> Result<()> {
         let serialised = message.serialise()?.to_vec();
         let mut written = 0;
@@ -149,8 +147,6 @@ mod tests {
     use super::*;
     use futures::executor;
     use futures::io::Cursor;
-
-    impl InnerStream for Cursor<Vec<u8>> {}
 
     #[test]
     fn test_read_empty_stream() {

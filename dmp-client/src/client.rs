@@ -1,11 +1,18 @@
 use crate::config::Config;
+use anyhow::Error;
 use anyhow::Result;
+use dmp_shared::*;
+use futures::stream::StreamExt;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
+use tokio_util::compat::*;
 use webpki::DNSNameRef;
+
+type ClientMessageStream =
+    MessageStream<ClientMessage, ServerMessage, Compat<TlsStream<TcpStream>>>;
 
 pub struct Client<'a> {
     config: &'a Config,
@@ -17,7 +24,12 @@ impl<'a> Client<'a> {
     }
 
     pub async fn start_session(&mut self) -> Result<()> {
+        println!("Connecting to relay server...");
         let relay_socket: TlsStream<TcpStream> = self.connect_to_relay().await?;
+
+        let mut message_stream = ClientMessageStream::new(relay_socket.compat());
+
+        let key_type = self.send_key(&mut message_stream).await?;
 
         Ok(())
     }
@@ -27,7 +39,6 @@ impl<'a> Client<'a> {
         config
             .root_store
             .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-        
         let connector = TlsConnector::from(Arc::new(config));
 
         let relay_dns_name = DNSNameRef::try_from_ascii_str(self.config.relay_host())?;
@@ -41,6 +52,26 @@ impl<'a> Client<'a> {
 
         Ok(transport_stream)
     }
+
+    async fn send_key(&self, message_stream: &mut ClientMessageStream) -> Result<KeyType> {
+        message_stream
+            .write(&ClientMessage::Key(KeyPayload {
+                key: self.config.client_key().to_owned(),
+            }))
+            .await?;
+
+        match message_stream.next().await {
+            Some(Ok(ServerMessage::KeyAccepted(payload))) => Ok(payload.key_type),
+            Some(Ok(ServerMessage::KeyRejected)) => {
+                eprintln!("The session key has expired or is invalid");
+                Err(Error::msg("test"))
+            }
+            _ => {
+                eprintln!("Unexpected response returned by server");
+                Err(Error::msg("test"))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -53,7 +84,7 @@ mod tests {
         let config = Config::new("test", "relay1.debugmypipeline.com", 5000);
         let mut client = Client::new(&config);
 
-        let result = tokio::runtime::Runtime::new()
+        let result = Runtime::new()
             .unwrap()
             .block_on(client.connect_to_relay());
 
