@@ -125,10 +125,9 @@ describe('TlsRelayConnection', () => {
 
       socket.emit(
         'data',
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: 20,
-          data: Buffer.from('12345678900987654321'),
+          data: {"key": "12345678900987654321"},
         }),
       );
 

@@ -134,10 +134,9 @@ describe('TlsRelayServer', () => {
       socket.on('end', () => (ended = true));
 
       socket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: 16,
-          data: Buffer.from('1234567890987654'),
+          data: { key: '1234567890987654' },
         }),
       );
 
@@ -182,10 +181,9 @@ describe('TlsRelayServer', () => {
       socket.on('end', () => (ended = true));
 
       socket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: CURRENT_SESSION.client.key.length,
-          data: Buffer.from(CURRENT_SESSION.client.key),
+          data: { key: CURRENT_SESSION.client.key },
         }),
       );
 
@@ -278,18 +276,16 @@ describe('TlsRelayServer', () => {
       peerSocket.on('data', peerSocketHandler);
 
       socket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: CURRENT_SESSION.client.key.length,
-          data: Buffer.from(CURRENT_SESSION.client.key),
+          data: { key: CURRENT_SESSION.client.key },
         }),
       );
 
       peerSocket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: CURRENT_SESSION.host.key.length,
-          data: Buffer.from(CURRENT_SESSION.host.key),
+          data: { key: CURRENT_SESSION.host.key },
         }),
       );
 
@@ -430,18 +426,16 @@ describe('TlsRelayServer', () => {
       peerSocket.on('data', peerSocketHandler);
 
       socket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: CURRENT_SESSION.client.key.length,
-          data: Buffer.from(CURRENT_SESSION.client.key),
+          data: { key: CURRENT_SESSION.client.key },
         }),
       );
 
       peerSocket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: CURRENT_SESSION.host.key.length,
-          data: Buffer.from(CURRENT_SESSION.host.key),
+          data: { key: CURRENT_SESSION.host.key },
         }),
       );
 
@@ -607,18 +601,16 @@ describe('TlsRelayServer', () => {
       peerSocket.on('data', peerSocketHandler);
 
       socket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: CURRENT_SESSION.client.key.length,
-          data: Buffer.from(CURRENT_SESSION.client.key),
+          data: { key: CURRENT_SESSION.client.key },
         }),
       );
 
       peerSocket.write(
-        serialiser.serialise({
+        serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          length: CURRENT_SESSION.host.key.length,
-          data: Buffer.from(CURRENT_SESSION.host.key),
+          data: { key: CURRENT_SESSION.host.key },
         }),
       );
 
