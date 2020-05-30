@@ -1,17 +1,18 @@
-use crate::config::Config;
-use anyhow::Error;
-use anyhow::Result;
+use crate::{Config, RelayStream, SshCredentials, SshServer, TunnelStream};
+use anyhow::{Error, Result};
 use dmp_shared::*;
 use futures::stream::StreamExt;
+use std::cell::RefCell;
 use std::net::ToSocketAddrs;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
 use tokio_util::compat::*;
 use webpki::DNSNameRef;
 
-type ClientMessageStream =
+pub type ClientMessageStream =
     MessageStream<ClientMessage, ServerMessage, Compat<TlsStream<TcpStream>>>;
 
 pub struct Client<'a> {
@@ -30,6 +31,30 @@ impl<'a> Client<'a> {
         let mut message_stream = ClientMessageStream::new(relay_socket.compat());
 
         let key_type = self.send_key(&mut message_stream).await?;
+
+        println!("Waiting for peer to join...");
+        let peer_info: PeerJoinedPayload = self.wait_for_peer_to_join(&mut message_stream).await?;
+        println!("{} joined the session", peer_info.peer_ip_address);
+
+        println!("Negotiating connection...");
+        let message_stream = Arc::new(Mutex::new(message_stream));
+        let peer_socket = self
+            .negotiate_peer_connect(&message_stream, &peer_info)
+            .await?;
+
+        match key_type {
+            KeyType::Host => {
+                SshServer::new()
+                    .run(
+                        peer_socket,
+                        SshCredentials::new("dmp", self.config.client_key()),
+                    )
+                    .await?
+            }
+            KeyType::Client => {
+                std::thread::sleep_ms(100000);
+            }
+        };
 
         Ok(())
     }
@@ -63,14 +88,80 @@ impl<'a> Client<'a> {
         match message_stream.next().await {
             Some(Ok(ServerMessage::KeyAccepted(payload))) => Ok(payload.key_type),
             Some(Ok(ServerMessage::KeyRejected)) => {
-                eprintln!("The session key has expired or is invalid");
-                Err(Error::msg("test"))
+                Err(Error::msg("The session key has expired or is invalid"))
             }
-            _ => {
-                eprintln!("Unexpected response returned by server");
-                Err(Error::msg("test"))
+            Some(Ok(message)) => Err(Error::msg(format!(
+                "Unexpected response returned by server: {:?}",
+                message
+            ))),
+            Some(Err(err)) => return Err(err),
+            None => return Err(Error::msg("Connection closed unexpectedly")),
+        }
+    }
+
+    async fn wait_for_peer_to_join(
+        &mut self,
+        message_stream: &mut ClientMessageStream,
+    ) -> Result<PeerJoinedPayload> {
+        match message_stream.next().await {
+            Some(Ok(ServerMessage::PeerJoined(payload))) => Ok(payload),
+            _ => Err(Error::msg("Unexpected response returned by server")),
+        }
+    }
+
+    async fn negotiate_peer_connect(
+        &mut self,
+        message_stream: &Arc<Mutex<ClientMessageStream>>,
+        peer_info: &PeerJoinedPayload,
+    ) -> Result<Box<dyn TunnelStream>> {
+        loop {
+            let mut message_stream = message_stream.lock().unwrap();
+            match message_stream.next().await {
+                Some(Ok(ServerMessage::TimePlease)) => {
+                    message_stream
+                        .write(&ClientMessage::Time(TimePayload {
+                            time: SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_millis() as u64,
+                        }))
+                        .await?
+                }
+                Some(Ok(ServerMessage::AttemptDirectConnect(payload))) => {
+                    match self
+                        .attempt_direct_connection(&mut message_stream, &peer_info, &payload)
+                        .await?
+                    {
+                        Some(direct_stream) => {
+                            println!("Direct connection to peer established");
+                            return Ok(direct_stream);
+                        }
+                        None => break,
+                    }
+                }
+                Some(Ok(ServerMessage::StartRelayMode)) => break,
+                Some(Ok(message)) => {
+                    return Err(Error::msg(format!(
+                        "Unexpected response returned by server: {:?}",
+                        message
+                    )))
+                }
+                Some(Err(err)) => return Err(err),
+                None => return Err(Error::msg("Connection closed unexpectedly")),
             }
         }
+
+        println!("Falling back to relayed connection");
+        Ok(Box::new(RelayStream::new(Arc::clone(message_stream))))
+    }
+
+    async fn attempt_direct_connection(
+        &mut self,
+        message_stream: &mut ClientMessageStream,
+        peer_info: &PeerJoinedPayload,
+        connection_info: &AttemptDirectConnectPayload,
+    ) -> Result<Option<Box<dyn TunnelStream>>> {
+        Ok(None)
     }
 }
 
@@ -80,13 +171,11 @@ mod tests {
     use tokio::runtime::Runtime;
 
     #[test]
-    fn test_connect_to_local() {
+    fn test_connect_to_relay_server() {
         let config = Config::new("test", "relay1.debugmypipeline.com", 5000);
         let mut client = Client::new(&config);
 
-        let result = Runtime::new()
-            .unwrap()
-            .block_on(client.connect_to_relay());
+        let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
 
         result.unwrap();
     }

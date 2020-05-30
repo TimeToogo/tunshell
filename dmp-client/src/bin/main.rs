@@ -1,7 +1,7 @@
 use dmp_client::Client;
 use dmp_client::Config;
-use std::env;
 use std::process::exit;
+use log::debug;
 
 #[tokio::main]
 async fn main() -> () {
@@ -12,10 +12,8 @@ async fn main() -> () {
     match result {
         Ok(()) => exit(0),
         Err(err) => {
-            if env::var("DMP_VERSION").is_ok() {
-                println!("Error occurred: {:?}", err);
-            }
-            
+            debug!("Error occurred: {:?}", err);
+            eprintln!("{}", err);
             exit(1)
         }
     }

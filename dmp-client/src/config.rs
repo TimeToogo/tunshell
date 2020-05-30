@@ -44,6 +44,18 @@ mod tests {
 
     #[test]
     fn test_new_from_env() {
+        // Force tests to run sequentially
+        // since they mock env vars
+
+        test_new_from_env_with_var();
+
+        let result = std::panic::catch_unwind(|| {
+            test_should_panic_without_key_env_var();
+        });
+        assert_eq!(result.is_err(), true);
+    }
+
+    fn test_new_from_env_with_var() {
         env::set_var("DMP_KEY", "Example key");
 
         let config = Config::new_from_env();
@@ -53,8 +65,6 @@ mod tests {
         assert!(config.relay_port() > 0);
     }
 
-    #[test]
-    #[should_panic]
     fn test_should_panic_without_key_env_var() {
         env::remove_var("DMP_KEY");
 
