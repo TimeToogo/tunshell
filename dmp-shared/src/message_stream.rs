@@ -2,6 +2,7 @@ use crate::message::*;
 use anyhow::{Error, Result};
 use futures::prelude::*;
 use futures::stream::Stream;
+use log::debug;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -129,7 +130,16 @@ impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> Stream
                 .skip(3 + message_length)
                 .collect();
 
-            return Poll::Ready(Some(O::deserialise(&raw_message)));
+            match O::deserialise(&raw_message) {
+                Ok(message) => {
+                    debug!("Received message {:?}", message);
+                    return Poll::Ready(Some(Ok(message)));
+                }
+                Err(err) => {
+                    debug!("Error while deserialised received message {:?}", err);
+                    return Poll::Ready(Some(Err(err)));
+                }
+            }
         }
     }
 }
@@ -146,6 +156,7 @@ impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStr
             )));
         }
 
+        debug!("Sending message: {:?}", message);
         let serialised = message.serialise()?.to_vec();
         self.write_buff.extend(serialised);
 
@@ -190,6 +201,8 @@ impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStr
                 Err(err) => return Err(Error::new(err)),
             }
         }
+
+        debug!("Sent message: {:?}", message);
 
         Ok(())
     }
@@ -267,7 +280,9 @@ mod tests {
             ClientMessage::Key(KeyPayload {
                 key: "key".to_owned(),
             }),
-            ClientMessage::Time(TimePayload { time: 123456 }),
+            ClientMessage::Time(TimePayload {
+                client_time: 123456,
+            }),
             ClientMessage::DirectConnectSucceeded,
         ];
         let mock_stream = Cursor::new(

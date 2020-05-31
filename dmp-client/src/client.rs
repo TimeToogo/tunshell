@@ -1,12 +1,10 @@
-use crate::{Config, RelayStream, SshCredentials, SshServer, TunnelStream};
+use crate::{Config, RelayStream, SshClient, SshCredentials, SshServer, TunnelStream};
 use anyhow::{Error, Result};
 use dmp_shared::*;
 use futures::stream::StreamExt;
-use std::cell::RefCell;
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
 use tokio_util::compat::*;
@@ -44,7 +42,7 @@ impl<'a> Client<'a> {
 
         match key_type {
             KeyType::Host => {
-                SshServer::new()
+                SshServer::new()?
                     .run(
                         peer_socket,
                         SshCredentials::new("dmp", self.config.client_key()),
@@ -52,7 +50,9 @@ impl<'a> Client<'a> {
                     .await?
             }
             KeyType::Client => {
-                std::thread::sleep_ms(100000);
+                SshClient::new()?
+                    .connect(peer_socket, SshCredentials::new("dmp", &peer_info.peer_key))
+                    .await?
             }
         };
 
@@ -120,7 +120,7 @@ impl<'a> Client<'a> {
                 Some(Ok(ServerMessage::TimePlease)) => {
                     message_stream
                         .write(&ClientMessage::Time(TimePayload {
-                            clientTime: SystemTime::now()
+                            client_time: SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .unwrap()
                                 .as_millis() as u64,
@@ -136,7 +136,11 @@ impl<'a> Client<'a> {
                             println!("Direct connection to peer established");
                             return Ok(direct_stream);
                         }
-                        None => break,
+                        None => {
+                            message_stream
+                                .write(&ClientMessage::DirectConnectFailed)
+                                .await?
+                        }
                     }
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => break,
@@ -157,9 +161,9 @@ impl<'a> Client<'a> {
 
     async fn attempt_direct_connection(
         &mut self,
-        message_stream: &mut ClientMessageStream,
-        peer_info: &PeerJoinedPayload,
-        connection_info: &AttemptDirectConnectPayload,
+        _message_stream: &mut ClientMessageStream,
+        _peer_info: &PeerJoinedPayload,
+        _connection_info: &AttemptDirectConnectPayload,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
         Ok(None)
     }

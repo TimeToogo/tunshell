@@ -8,7 +8,7 @@ pub struct RawMessage {
     data: Vec<u8>,
 }
 
-pub trait Message<T>: Unpin + Sync + Send {
+pub trait Message<T>: Unpin + Sync + Send + std::fmt::Debug {
     fn type_id(&self) -> u8;
     fn serialise(&self) -> Result<RawMessage>;
     fn deserialise(raw_message: &RawMessage) -> Result<T>;
@@ -70,8 +70,9 @@ pub struct KeyPayload {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimePayload {
-    pub clientTime: u64,
+    pub client_time: u64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -508,13 +509,13 @@ mod tests {
 
     #[test]
     fn test_client_serialise_time() {
-        let message = ClientMessage::Time(TimePayload { time: 12345 });
+        let message = ClientMessage::Time(TimePayload { client_time: 12345 });
 
         let raw_message = message.serialise().unwrap();
 
         assert_eq!(raw_message.type_id, 2);
-        assert_eq!(raw_message.data, Vec::from(r#"{"time":12345}"#.as_bytes()));
-        assert_eq!(raw_message.length, 14);
+        assert_eq!(raw_message.data, Vec::from(r#"{"clientTime":12345}"#.as_bytes()));
+        assert_eq!(raw_message.length, 20);
     }
 
     #[test]
@@ -577,11 +578,11 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_time() {
-        let raw_message = RawMessage::new(2, Vec::from(r#"{"time":12345}"#.as_bytes()));
+        let raw_message = RawMessage::new(2, Vec::from(r#"{"clientTime":12345}"#.as_bytes()));
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
-        assert_eq!(message, ClientMessage::Time(TimePayload { time: 12345 }));
+        assert_eq!(message, ClientMessage::Time(TimePayload { client_time: 12345 }));
     }
 
     #[test]

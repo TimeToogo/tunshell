@@ -18,7 +18,7 @@ pub struct RelayStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin> {
     closed: bool,
 }
 
-impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> RelayStream<S> {
+impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> RelayStream<S> {
     pub fn new(message_stream: Arc<Mutex<MessageStream<ClientMessage, ServerMessage, S>>>) -> Self {
         RelayStream {
             message_stream,
@@ -29,7 +29,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> RelayStream<S> {
     }
 }
 
-impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> AsyncRead for RelayStream<S> {
+impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncRead for RelayStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         mut cx: &mut Context<'_>,
@@ -95,7 +95,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> AsyncRead for RelayStr
     }
 }
 
-impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> AsyncWrite for RelayStream<S> {
+impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for RelayStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         mut cx: &mut Context<'_>,
@@ -158,9 +158,9 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> AsyncWrite for RelaySt
     }
 }
 
-impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> Tcp for RelayStream<S> {}
+impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> Tcp for RelayStream<S> {}
 
-impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> TunnelStream for RelayStream<S> {}
+impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> TunnelStream for RelayStream<S> {}
 
 #[cfg(test)]
 mod tests {

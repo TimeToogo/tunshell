@@ -1,10 +1,10 @@
 use crate::SshCredentials;
 use crate::TunnelStream;
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use futures::future;
+use log::debug;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use thrussh::server::{Auth, Session};
 use thrussh::ChannelId;
@@ -14,9 +14,9 @@ pub struct SshServer {
 }
 
 impl SshServer {
-    pub fn new() -> SshServer {
-        let server_key =
-            thrussh_keys::key::KeyPair::generate_ed25519().expect("Failed to generate SSH key");
+    pub fn new() -> Result<SshServer> {
+        let server_key = thrussh_keys::key::KeyPair::generate_ed25519()
+            .with_context(|| "Failed to generate SSH key")?;
 
         let mut config = thrussh::server::Config::default();
         config.methods = thrussh::MethodSet::PASSWORD;
@@ -24,10 +24,10 @@ impl SshServer {
         config.keys.push(server_key);
         let config = Arc::new(config);
 
-        SshServer { config }
+        Ok(SshServer { config })
     }
 
-    pub async fn run<'a>(
+    pub async fn run(
         self,
         stream: Box<dyn TunnelStream>,
         credentials: SshCredentials,
@@ -55,6 +55,92 @@ struct ShellPty {
     master_pty: Box<dyn portable_pty::MasterPty + Send>,
     pty_writer: Box<dyn std::io::Write + Send>,
     reader_thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl ShellPty {
+    fn new(
+        term: &str,
+        pty_size: PtySize,
+        channel_id: ChannelId,
+        session_handle: thrussh::server::Handle,
+    ) -> Result<Self> {
+        let pty_system = native_pty_system();
+
+        let pty: portable_pty::PtyPair = pty_system
+            .openpty(pty_size)
+            .with_context(|| "could not open pty")?;
+
+        let mut cmd = CommandBuilder::new_default_prog();
+        cmd.env("TERM", term);
+
+        let shell = pty
+            .slave
+            .spawn_command(cmd)
+            .with_context(|| "Failed to open system shell")?;
+
+        let pty_reader = pty
+            .master
+            .try_clone_reader()
+            .with_context(|| "Failed to clone pty reader")?;
+        let pty_writer = pty
+            .master
+            .try_clone_writer()
+            .with_context(|| "Failed to clone pty writer")?;
+
+        let reader_thread = Self::_start_pty_reader(session_handle, channel_id, pty_reader);
+
+        Ok(ShellPty {
+            shell,
+            master_pty: pty.master,
+            pty_writer,
+            reader_thread: Some(reader_thread),
+        })
+    }
+
+    fn resize(&self, pty_size: PtySize) -> Result<()> {
+        self.master_pty
+            .resize(pty_size)
+            .with_context(|| "Failed to resize pty")
+    }
+
+    fn write(&mut self, buff: &[u8]) -> Result<()> {
+        match self.pty_writer.write_all(buff) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(Error::new(err)),
+        }
+    }
+
+    fn _start_pty_reader(
+        mut session_handle: thrussh::server::Handle,
+        channel_id: ChannelId,
+        mut pty_reader: Box<dyn std::io::Read + Send>,
+    ) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            futures::executor::block_on(async {
+                let mut buff = [0u8; 1024];
+
+                loop {
+                    let read = pty_reader.read(&mut buff).expect("Failed to read from pty");
+
+                    if read == 0 {
+                        break;
+                    }
+
+                    let wrote = session_handle
+                        .data(channel_id, cryptovec::CryptoVec::from_slice(&buff[..read]))
+                        .await;
+
+                    match wrote {
+                        Ok(_) => (),
+                        Err(err) => {
+                            debug!("Error while writing to ssh session: {:?}", err);
+                            break;
+                        }
+                    }
+                }
+            })
+        })
+    }
 }
 
 impl Drop for ShellPty {
@@ -98,8 +184,17 @@ impl thrussh::server::Handler for SshServerHandler {
         }
     }
 
-    fn data(self, channel: ChannelId, data: &[u8], session: Session) -> Self::FutureUnit {
-        self.finished(session)
+    fn data(mut self, _channel: ChannelId, data: &[u8], session: Session) -> Self::FutureUnit {
+        if let Some(shell_pty) = &mut self.shell_pty {
+            match shell_pty.write(data) {
+                Ok(_) => self.finished(session),
+                Err(err) => future::ready(Err(err)),
+            }
+        } else {
+            return future::ready(Err(Error::msg(
+                "Cannot change window size before requesting a pty",
+            )));
+        }
     }
 
     fn pty_request(
@@ -110,52 +205,33 @@ impl thrussh::server::Handler for SshServerHandler {
         row_height: u32,
         pix_width: u32,
         pix_height: u32,
-        modes: &[(thrussh::Pty, u32)],
+        _modes: &[(thrussh::Pty, u32)],
         session: Session,
     ) -> Self::FutureUnit {
-        let pty_system = native_pty_system();
-
-        let pty: portable_pty::PtyPair = pty_system
-            .openpty(PtySize {
+        let pty_result = ShellPty::new(
+            term,
+            PtySize {
                 rows: row_height as u16,
                 cols: col_width as u16,
                 pixel_width: pix_width as u16,
                 pixel_height: pix_height as u16,
-            })
-            .expect("Could not create pty");
+            },
+            channel,
+            session.handle().clone(),
+        );
 
-        let mut cmd = CommandBuilder::new_default_prog();
-        cmd.env("TERM", term);
-
-        let shell = pty
-            .slave
-            .spawn_command(cmd)
-            .expect("Failed to open system shell");
-
-        let mut pty_reader = pty
-            .master
-            .try_clone_reader()
-            .expect("Failed to clone pty reader");
-        let mut pty_writer = pty
-            .master
-            .try_clone_writer()
-            .expect("Failed to clone pty writer");
-
-        let reader_thread = self.start_pty_reader(session.handle(), channel, pty_reader);
-
-        self.shell_pty.replace(ShellPty {
-            shell,
-            master_pty: pty.master,
-            pty_writer,
-            reader_thread: Some(reader_thread),
-        });
-
-        self.finished(session)
+        match pty_result {
+            Ok(shell_pty) => {
+                self.shell_pty.replace(shell_pty);
+                self.finished(session)
+            }
+            Err(err) => future::ready(Err(err)),
+        }
     }
 
     fn window_change_request(
         mut self,
-        channel: ChannelId,
+        _channel: ChannelId,
         col_width: u32,
         row_height: u32,
         pix_width: u32,
@@ -163,7 +239,7 @@ impl thrussh::server::Handler for SshServerHandler {
         session: Session,
     ) -> Self::FutureUnit {
         if let Some(shell_pty) = &mut self.shell_pty {
-            let result = shell_pty.master_pty.resize(PtySize {
+            let result = shell_pty.resize(PtySize {
                 rows: row_height as u16,
                 cols: col_width as u16,
                 pixel_width: pix_width as u16,
@@ -180,58 +256,11 @@ impl thrussh::server::Handler for SshServerHandler {
             )));
         }
     }
-
-    fn env_request(
-        self,
-        channel: ChannelId,
-        variable_name: &str,
-        variable_value: &str,
-        session: Session,
-    ) -> Self::FutureUnit {
-        std::env::set_var(variable_name, variable_value);
-        self.finished(session)
-    }
-}
-
-impl SshServerHandler {
-    fn start_pty_reader(
-        &self,
-        mut session_handle: thrussh::server::Handle,
-        channel_id: ChannelId,
-        mut pty_reader: Box<dyn std::io::Read + Send>,
-    ) -> std::thread::JoinHandle<()> {
-        std::thread::spawn(move || {
-            futures::executor::block_on(async {
-                let mut buff = [0u8; 1024];
-
-                loop {
-                    let read = pty_reader.read(&mut buff).expect("Failed to read from pty");
-
-                    if read == 0 {
-                        break;
-                    }
-
-                    let wrote = session_handle
-                        .data(channel_id, cryptovec::CryptoVec::from_slice(&buff[..read]))
-                        .await;
-
-                    match wrote {
-                        Ok(_) => (),
-                        Err(_) => {
-                            eprintln!("Error while writing to ssh session");
-                            break;
-                        }
-                    }
-                }
-            })
-        })
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::runtime::Runtime;
 
     #[test]
     fn test_new_ssh_server() {

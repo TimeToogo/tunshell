@@ -5,4 +5,4 @@ mod relay_stream;
 
 pub use relay_stream::*;
 
-pub trait TunnelStream: AsyncRead + AsyncWrite + Tcp + Unpin {}
+pub trait TunnelStream: AsyncRead + AsyncWrite + Tcp + Send + Unpin {}
