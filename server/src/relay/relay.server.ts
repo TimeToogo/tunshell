@@ -166,7 +166,7 @@ export class TlsRelayServer {
 
     const maxLatencyMs = Math.max(estimate1.sendLatency, estimate2.sendLatency);
     const bufferMs = 500;
-    const directConnectAttemptTime = Date.now() + maxLatencyMs + bufferMs;
+    const directConnectAttemptTime = Math.round(Date.now() + maxLatencyMs + bufferMs);
 
     const directConnectTime1 = directConnectAttemptTime + estimate1.timeDiff;
     const directConnectTime2 = directConnectAttemptTime + estimate2.timeDiff;
