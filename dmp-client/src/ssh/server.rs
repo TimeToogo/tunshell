@@ -2,7 +2,7 @@ use crate::SshCredentials;
 use crate::TunnelStream;
 use anyhow::{Context, Error, Result};
 use futures::future;
-use log::debug;
+use log::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,7 +20,6 @@ impl SshServer {
 
         let mut config = thrussh::server::Config::default();
         config.methods = thrussh::MethodSet::PASSWORD;
-        config.connection_timeout = Some(Duration::from_secs(10));
         config.keys.push(server_key);
         let config = Arc::new(config);
 
@@ -64,6 +63,7 @@ impl ShellPty {
         channel_id: ChannelId,
         session_handle: thrussh::server::Handle,
     ) -> Result<Self> {
+        info!("creating shell pty");
         let pty_system = native_pty_system();
 
         let pty: portable_pty::PtyPair = pty_system
@@ -89,6 +89,7 @@ impl ShellPty {
 
         let reader_thread = Self::_start_pty_reader(session_handle, channel_id, pty_reader);
 
+        info!("created shell pty");
         Ok(ShellPty {
             shell,
             master_pty: pty.master,
@@ -120,9 +121,16 @@ impl ShellPty {
                 let mut buff = [0u8; 1024];
 
                 loop {
+                    info!("reading from pty");
                     let read = pty_reader.read(&mut buff).expect("Failed to read from pty");
+                    info!("read {} bytes from pty", read);
 
                     if read == 0 {
+                        session_handle
+                            .exit_status_request(channel_id, 0)
+                            .await
+                            .unwrap_or_else(|err| error!("failed to send exit status: {:?}", err));
+
                         break;
                     }
 
@@ -131,9 +139,9 @@ impl ShellPty {
                         .await;
 
                     match wrote {
-                        Ok(_) => (),
+                        Ok(_) => info!("wrote {} bytes to ssh channel", read),
                         Err(err) => {
-                            debug!("Error while writing to ssh session: {:?}", err);
+                            error!("error while writing to ssh session: {:?}", err);
                             break;
                         }
                     }
@@ -145,7 +153,7 @@ impl ShellPty {
 
 impl Drop for ShellPty {
     fn drop(&mut self) {
-        println!("Shutting down shell");
+        info!("shutting down shell");
 
         match self.shell.try_wait() {
             Ok(None) => self.shell.kill().expect("Failed to shutdown shell"),
@@ -177,18 +185,28 @@ impl thrussh::server::Handler for SshServerHandler {
 
     fn auth_password(self, user: &str, password: &str) -> Self::FutureAuth {
         // TODO: Implement timing safe string comparisons
+        info!("ssh auth attempt");
         if self.credentials.username == user && self.credentials.password == password {
+            warn!("ssh auth succeeded");
             self.finished_auth(Auth::Accept)
         } else {
+            info!("ssh auth rejected");
             self.finished_auth(Auth::Reject)
         }
     }
 
     fn data(mut self, _channel: ChannelId, data: &[u8], session: Session) -> Self::FutureUnit {
+        info!("ssh received {} bytes of data", data.len());
         if let Some(shell_pty) = &mut self.shell_pty {
             match shell_pty.write(data) {
-                Ok(_) => self.finished(session),
-                Err(err) => future::ready(Err(err)),
+                Ok(_) => {
+                    info!("wrote {} bytes to pty", data.len());
+                    self.finished(session)
+                }
+                Err(err) => {
+                    error!("received error while writing to pty: {:?}", err);
+                    future::ready(Err(err))
+                }
             }
         } else {
             return future::ready(Err(Error::msg(
@@ -208,6 +226,7 @@ impl thrussh::server::Handler for SshServerHandler {
         _modes: &[(thrussh::Pty, u32)],
         session: Session,
     ) -> Self::FutureUnit {
+        info!("ssh pty request");
         let pty_result = ShellPty::new(
             term,
             PtySize {
@@ -238,6 +257,7 @@ impl thrussh::server::Handler for SshServerHandler {
         pix_height: u32,
         session: Session,
     ) -> Self::FutureUnit {
+        info!("ssh window change request");
         if let Some(shell_pty) = &mut self.shell_pty {
             let result = shell_pty.resize(PtySize {
                 rows: row_height as u16,

@@ -83,12 +83,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncRead for R
 
         let read = std::cmp::min(buff.len(), self.read_buff.len());
         buff[..read].copy_from_slice(&self.read_buff[..read]);
-        self.read_buff = self
-            .read_buff
-            .iter()
-            .cloned()
-            .skip(read)
-            .collect::<Vec<u8>>();
+        self.read_buff.drain(..read);
 
         debug!("poll_read: returned {} bytes", read);
         Poll::Ready(Ok(read))

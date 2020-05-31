@@ -123,12 +123,7 @@ impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> Stream
                     .collect(),
             );
 
-            self.read_buff = self
-                .read_buff
-                .iter()
-                .cloned()
-                .skip(3 + message_length)
-                .collect();
+            self.read_buff.drain(..3 + message_length);
 
             match O::deserialise(&raw_message) {
                 Ok(message) => {
@@ -174,12 +169,7 @@ impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStr
                     return Poll::Ready(Err(Error::new(err)));
                 }
                 Poll::Pending => {
-                    self.write_buff = self
-                        .write_buff
-                        .iter()
-                        .skip(written)
-                        .cloned()
-                        .collect::<Vec<u8>>();
+                    self.write_buff.drain(..written);
 
                     return Poll::Pending;
                 }
