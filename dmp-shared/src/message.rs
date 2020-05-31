@@ -71,7 +71,7 @@ pub struct KeyPayload {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimePayload {
-    pub time: u64,
+    pub clientTime: u64,
 }
 
 #[derive(Debug, PartialEq)]

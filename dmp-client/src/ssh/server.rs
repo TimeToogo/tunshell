@@ -3,11 +3,11 @@ use crate::TunnelStream;
 use anyhow::{Error, Result};
 use futures::future;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use thrussh::server::{Auth, Session};
 use thrussh::ChannelId;
-use std::cell::RefCell;
 
 pub struct SshServer {
     config: Arc<thrussh::server::Config>,
@@ -68,7 +68,7 @@ impl Drop for ShellPty {
         }
 
         let thread = self.reader_thread.take().unwrap();
-        thread.join();
+        thread.join().expect("Failed to shutdown pty reader thread");
     }
 }
 

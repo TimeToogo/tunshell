@@ -1,6 +1,7 @@
 use crate::stream::TunnelStream;
 use dmp_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
 use futures::stream::Stream;
+use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::pin::Pin;
 use std::result::Result as StdResult;
@@ -35,39 +36,49 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> AsyncRead for RelayStr
         buff: &mut [u8],
     ) -> Poll<StdResult<usize, IoError>> {
         if self.closed {
+            debug!("poll_read: stream closed, 0 bytes returned");
             return Poll::Ready(Ok(0));
         }
 
         if self.read_buff.len() == 0 {
+            debug!("poll_read: poll_next underlying message stream");
             let read_result =
                 Pin::new(&mut *self.message_stream.lock().unwrap()).poll_next(&mut cx);
+            debug!("poll_read: read result: {:?}", read_result);
 
             match read_result {
                 Poll::Ready(Some(Ok(ServerMessage::Relay(payload)))) => {
+                    debug!("poll_read: relay message returned {:?}", payload);
                     self.read_buff.extend(payload.data)
                 }
-                Poll::Ready(Some(Ok(ServerMessage::PeerLeft))) => self.closed = true,
-                Poll::Ready(Some(Ok(ServerMessage::Close))) => self.closed = true,
+                Poll::Ready(Some(Ok(ServerMessage::PeerLeft))) => {
+                    debug!("poll_read: peer left");
+                    self.closed = true
+                }
+                Poll::Ready(Some(Ok(ServerMessage::Close))) => {
+                    debug!("poll_read: closed");
+                    self.closed = true
+                }
                 Poll::Ready(Some(Ok(message))) => {
-                    eprintln!(
+                    debug!(
                         "Unexpected message received from server during relay: {:?}",
                         message
                     );
                     return Poll::Ready(Err(IoError::from(IoErrorKind::InvalidData)));
                 }
                 Poll::Ready(Some(Err(err))) => {
-                    eprintln!(
-                        "Error returned from underlying message stream while reading relay message: {}",
+                    debug!(
+                        "Error returned from underlying message stream while reading relay message: {:?}",
                         err
                     );
                     return Poll::Ready(Err(IoError::from(IoErrorKind::Other)));
                 }
                 Poll::Ready(None) => {
-                    eprintln!("Underlying message stream ended unexpectedly during relay");
+                    debug!("Underlying message stream ended unexpectedly during relay");
                     return Poll::Ready(Err(IoError::from(IoErrorKind::UnexpectedEof)));
                 }
                 Poll::Pending => return Poll::Pending,
-            }
+            };
         }
 
         let read = std::cmp::min(buff.len(), self.read_buff.len());
@@ -79,6 +90,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> AsyncRead for RelayStr
             .skip(read)
             .collect::<Vec<u8>>();
 
+        debug!("poll_read: returned {} bytes", read);
         Poll::Ready(Ok(read))
     }
 }
@@ -104,7 +116,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin> AsyncWrite for RelaySt
             Poll::Ready(Ok(_)) => Poll::Ready(Ok(buff.len())),
             Poll::Ready(Err(err)) => {
                 self.closed = true;
-                eprintln!(
+                debug!(
                     "Error returned from underlying message stream while sending relay message: {}",
                     err
                 );

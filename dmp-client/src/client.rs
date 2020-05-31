@@ -120,7 +120,7 @@ impl<'a> Client<'a> {
                 Some(Ok(ServerMessage::TimePlease)) => {
                     message_stream
                         .write(&ClientMessage::Time(TimePayload {
-                            time: SystemTime::now()
+                            clientTime: SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .unwrap()
                                 .as_millis() as u64,
