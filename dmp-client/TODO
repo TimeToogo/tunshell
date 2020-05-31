@@ -1,0 +1,6 @@
+dmp todo:
+
+1. try get cross compiling to work: https://stackoverflow.com/questions/37375712/cross-compile-rust-openssl-for-raspberry-pi-2
+2. migrate away from thrussh to use raw stream for transport (rustls for direct connection)
+3. clean up code 
+4. documentations
