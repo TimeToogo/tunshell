@@ -16,7 +16,8 @@ RUN apt install -y \
     crossbuild-essential-armhf
 
 # Install rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
 
 # Install openssl to /tmp/openssl
 RUN cd /tmp && wget https://www.openssl.org/source/openssl-1.1.1.tar.gz \
