@@ -1,0 +1,18 @@
+[
+  {
+    "cc": "x86_64-linux-gnu-gcc",
+    "openssl_target": "linux-generic64",
+    "libsodium_target": "x86_64-linux-gnu",
+    "ldflags": "",
+    "cflags": "",
+    "rust_target": "x86_64-unknown-linux-gnu"
+  },
+  {
+    "cc": "arm-linux-gnueabi-gcc",
+    "openssl_target": "linux-armv4",
+    "libsodium_target": "arm-linux-gnueabi",
+    "ldflags": "",
+    "cflags": "",
+    "rust_target": "armv7-unknown-linux-gnueabi"
+  }
+]

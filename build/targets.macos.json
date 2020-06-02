@@ -1,0 +1,18 @@
+[
+  {
+    "cc": "gcc",
+    "openssl_target": "darwin64-x86_64-cc",
+    "libsodium_target": "x86_64-apple-darwin",
+    "ldflags": "",
+    "cflags": "",
+    "rust_target": "x86_64-apple-darwin"
+  },
+  {
+    "cc": "gcc",
+    "openssl_target": "darwin-i386-cc",
+    "libsodium_target": "i386-apple-darwin",
+    "ldflags": "",
+    "cflags": "",
+    "rust_target": "x86_64-apple-darwin"
+  }
+]

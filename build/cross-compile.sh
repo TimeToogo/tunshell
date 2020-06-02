@@ -1,20 +1,30 @@
 #!/bin/bash
 
 set -e
+
+TARGETS=$1
+
+if [[ ! -f "$TARGETS" ]]; then
+   echo "usage: ./cross-compile.sh targets.[host].json"
+   exit 1
+fi
+
+TEMPDIR=${TEMPDIR:="$(dirname $0)/tmp"}
+TEMPDIR=`cd $TEMPDIR;pwd`
+echo $TEMPDIR;
 source $HOME/.cargo/env
 
 echo "Parsing targets..."
 SCRIPT_DIR=$(dirname "$0")
-TARGETS=$(cat $SCRIPT_DIR/targets.json | jq -r '.[] | [.machine, .arch, .cc, .cc_toolchain, .ldflags, .cflags, .rust_target] | @tsv')
+SCRIPT_DIR=`cd $SCRIPT_DIR;pwd`
+TARGETS=$(cat $TARGETS | jq -r '.[] | [.openssl_target, .libsodium_target, .cc, .ldflags, .cflags, .rust_target] | @tsv')
 TARGETS=${TARGETS//$'\t'/,}
 
-echo "$TARGETS" | while IFS=',' read -r MACHINE ARCH CC CC_TOOLCHAIN LDFLAGS CFLAGS RUST_TARGET
+echo "$TARGETS" | while IFS=',' read -r OPENSSL_TARGET LIBSODIUM_TARGET CC LDFLAGS CFLAGS RUST_TARGET
 do
    echo "Building $RUST_TARGET..."
 
-   export MACHINE
-   export ARCH
-   export CC
+   export CC=$"$CC"
    export LD="$CC"
    export LDFLAGS
    export CFLAGS
@@ -22,26 +32,30 @@ do
    echo "Installing rust target..."
    rustup target add $RUST_TARGET
 
-   cat > /workspace/dmp-client/.cargo/config << EOF
+   cat > $SCRIPT_DIR/../dmp-client/.cargo/config << EOF
 [target.$RUST_TARGET]
 linker = "$CC"
 EOF
 
-   echo "Cross-compiling OpenSSL..."
-   OPENSSL_BUILD_DIR=/tmp/openssl-build-$CC_TOOLCHAIN/
-   mkdir -p $OPENSSL_BUILD_DIR
-   cd /tmp/openssl/
-   ./config shared --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR
-   make install_sw
+   OPENSSL_BUILD_DIR=$TEMPDIR/build/openssl-$RUST_TARGET
+   if [[ ! -d "$OPENSSL_BUILD_DIR/lib" ]]; then
+      echo "Cross-compiling OpenSSL..."
+      mkdir -p $OPENSSL_BUILD_DIR
+      cd $TEMPDIR/openssl/
+      ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR 
+      make clean install_sw
+   fi
 
-   echo "Cross-compiling Libsodium..."
-   LIBSODIUM_BUILD_DIR=/tmp/libsodium-build-$CC_TOOLCHAIN/
-   mkdir -p $LIBSODIUM_BUILD_DIR
-   cd /tmp/libsodium/
-   unset LD
-   ./configure --host=$CC_TOOLCHAIN --prefix=$LIBSODIUM_BUILD_DIR
-   make install
-   export LD="$CC"
+   LIBSODIUM_BUILD_DIR=$TEMPDIR/build/libsodium-$RUST_TARGET
+   if [[ ! -d "$LIBSODIUM_BUILD_DIR/lib" ]]; then
+      echo "Cross-compiling Libsodium..."
+      mkdir -p $LIBSODIUM_BUILD_DIR
+      cd $TEMPDIR/libsodium/
+      unset LD
+      ./configure --host=$LIBSODIUM_TARGET --prefix=$LIBSODIUM_BUILD_DIR
+      make clean install
+      export LD="$CC"
+   fi
 
    export OPENSSL_LIB_DIR="$OPENSSL_BUILD_DIR/lib"
    export OPENSSL_INCLUDE_DIR="$OPENSSL_BUILD_DIR/include"
@@ -50,6 +64,6 @@ EOF
    export SODIUM_STATIC=1
 
    echo "Compiling dmp-client for $RUST_TARGET..."
-   cd /workspace/dmp-client
+   cd $SCRIPT_DIR/../dmp-client
    cargo build --target $RUST_TARGET
 done

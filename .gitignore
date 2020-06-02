@@ -42,3 +42,6 @@ target/
 
 # env
 .env
+
+# build artefacts
+build/tmp

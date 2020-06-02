@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 dmp-shared = { path = "../dmp-shared" }
 anyhow = "1.0.31"
-thrussh = "0.26.1"
+thrussh = { git = 'https://github.com/TimeToogo/thrussh-fork' }
 tokio = "0.2.21"
 tokio-rustls = "0.13.1"
 webpki = "0.21.2"

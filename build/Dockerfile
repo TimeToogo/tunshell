@@ -12,21 +12,15 @@ RUN apt install -y \
     binutils \
     make \
     build-essential \
-    gcc-arm-linux-gnueabihf \
+    gcc-arm-linux-gnueabi \
     crossbuild-essential-armhf
 
 # Install rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
 
-# Install openssl to /tmp/openssl
-RUN cd /tmp && wget https://www.openssl.org/source/openssl-1.1.1.tar.gz \
-    && mkdir openssl \
-    && tar xzf openssl-1.1.1.tar.gz -C openssl --strip-components 1
-
-# Install libsodium to /tmp/libsodium
-RUN cd /tmp && wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable.tar.gz \
-    && mkdir libsodium \
-    && tar xzf libsodium-1.0.18-stable.tar.gz -C libsodium --strip-components 1
+ENV TEMP_DIR /tmp
+COPY ./install-deps.sh /tmp/install-deps.sh
+RUN /tmp/install-deps.sh
 
 CMD ["bash", "/workspace/build/cross-compile.sh"]
