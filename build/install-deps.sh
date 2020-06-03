@@ -9,9 +9,9 @@ cd $TEMPDIR
 echo "Installing compile toolchain..."
 case "$OSTYPE" in
   msys*)    
-    choco install rust activeperl nasm
+    choco install rust msys2 nasm
     echo '##[add-path]%USERPROFILE%\.cargo\bin'
-    echo '##[add-path]C:\Perl64'
+    echo '##[add-path]C:\Perl64\bin'
     ;;
 
   darwin*)    
