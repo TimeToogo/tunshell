@@ -49,7 +49,7 @@ EOF
       cd $TEMPDIR/openssl/
      
       if [[ "$OSTYPE"  == "msys" ]]; then
-         c:\\MinGW\\msys\\1.0\\bin\\perl.exe ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR"
+         c:\\MinGW\\msys\\1.0\\bin\\perl.exe ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR
          nmake clean install_sw
       else
          ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR 
@@ -77,5 +77,5 @@ EOF
    echo "Compiling dmp-client for $RUST_TARGET..."
    cd $SCRIPT_DIR/../dmp-client
    cargo build --release --target $RUST_TARGET
-   cp $SCRIPT_DIR/../target/$RUST_TARGET/debug/client $SCRIPT_DIR/artifacts/client-$RUST_TARGET
+   cp $SCRIPT_DIR/../target/$RUST_TARGET/release/client $SCRIPT_DIR/artifacts/client-$RUST_TARGET
 done
