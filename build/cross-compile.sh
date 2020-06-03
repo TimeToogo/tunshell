@@ -17,17 +17,20 @@ source $HOME/.cargo/env
 echo "Parsing targets..."
 SCRIPT_DIR=$(dirname "$0")
 SCRIPT_DIR=`cd $SCRIPT_DIR;pwd`
-TARGETS=$(cat $TARGETS | jq -r '.[] | [.openssl_target, .libsodium_target, .cc, .ldflags, .cflags, .rust_target] | @tsv')
+TARGETS=$(cat $TARGETS | jq -r '.[] | [.openssl_target, .libsodium_target, .cc, .ldflags, .cflags, .windres, .rust_target] | @tsv')
 TARGETS=${TARGETS//$'\t'/,}
 
-echo "$TARGETS" | while IFS=',' read -r OPENSSL_TARGET LIBSODIUM_TARGET CC LDFLAGS CFLAGS RUST_TARGET
+mkdir -p $SCRIPT_DIR/artifacts
+
+echo "$TARGETS" | while IFS=',' read -r OPENSSL_TARGET LIBSODIUM_TARGET CC LDFLAGS CFLAGS WINDRES RUST_TARGET
 do
    echo "Building $RUST_TARGET..."
 
-   export CC=$"$CC"
+   export CC
    export LD="$CC"
    export LDFLAGS
    export CFLAGS
+   export WINDRES
 
    echo "Installing rust target..."
    rustup target add $RUST_TARGET
@@ -65,5 +68,7 @@ EOF
 
    echo "Compiling dmp-client for $RUST_TARGET..."
    cd $SCRIPT_DIR/../dmp-client
+   # TODO release mode
    cargo build --target $RUST_TARGET
+   cp $SCRIPT_DIR/../target/$RUST_TARGET/debug/client $SCRIPT_DIR/artifacts/client-$RUST_TARGET
 done

@@ -45,3 +45,4 @@ target/
 
 # build artefacts
 build/tmp
+build/artefacts

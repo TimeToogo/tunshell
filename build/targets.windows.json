@@ -1,21 +1,5 @@
 [
   {
-    "cc": "x86_64-linux-gnu-gcc",
-    "openssl_target": "linux-generic64",
-    "libsodium_target": "x86_64-linux-gnu",
-    "ldflags": "",
-    "cflags": "",
-    "rust_target": "x86_64-unknown-linux-gnu"
-  },
-  {
-    "cc": "arm-linux-gnueabihf-gcc",
-    "openssl_target": "linux-armv4",
-    "libsodium_target": "arm-linux-gnueabihf",
-    "ldflags": "",
-    "cflags": "",
-    "rust_target": "armv7-unknown-linux-gnueabihf"
-  },
-  {
     "cc": "x86_64-w64-mingw32-gcc",
     "openssl_target": "mingw64",
     "windres": "x86_64-w64-mingw32-windres",
