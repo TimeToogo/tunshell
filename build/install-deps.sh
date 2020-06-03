@@ -9,8 +9,13 @@ cd $TEMPDIR
 
 echo "Installing rust..."
 case "$OSTYPE" in
-  msys*)    curl https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe -O rust-init.exe && ./rust-init.exe ;;
-  *)        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y ;;
+  msys*)    
+    curl https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe -O rust-init.exe
+    ./rust-init.exe 
+    ;;
+  *)
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+    ;;
 esac
 source $HOME/.cargo/env
 
