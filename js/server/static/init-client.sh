@@ -18,7 +18,7 @@ WindowsNT:i686*)
     TARGET="i686-pc-windows-gnu"
     ;;
 *)          
-    echo "Unsupported system :( ($(uname))"
+    echo "Unsupported system ($(uname))"
     exit 1
     ;;
 esac
