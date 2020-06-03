@@ -49,7 +49,7 @@ EOF
       cd $TEMPDIR/openssl/
      
       if [[ "$OSTYPE"  == "msys" ]]; then
-         c:\\MinGW\\msys\\1.0\\bin\\perl.exe ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR
+         C:\\tools\\msys64\\bin\\bash.exe -c "perl ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR"
          nmake clean install_sw
       else
          ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR 
