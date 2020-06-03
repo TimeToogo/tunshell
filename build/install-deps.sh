@@ -5,6 +5,11 @@ set -e
 TEMPDIR=${TEMPDIR:="$(dirname $0)/tmp"}
 cd $TEMPDIR
 
+SUDO="sudo"
+
+if [[ ! -x "$(command -v sudo)" ]]; then
+ SUDO=""
+fi
 
 echo "Installing compile toolchain..."
 case "$OSTYPE" in
@@ -19,19 +24,27 @@ case "$OSTYPE" in
     ;;
     
   *)
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
-
-    sudo apt update -y
-    sudo apt install -y \
+    $SUDO apt update -y
+    $SUDO apt install -y \
         curl \
         wget \
         vim \
         jq \
+        git \
         binutils \
+        pkgconf \
         make \
         build-essential \
-        gcc-arm-linux-gnueabihf \
-        crossbuild-essential-armhf
+        musl-dev \
+        musl-tools
+    
+    ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/x86_64-linux-musl/asm && \
+    ln -s /usr/include/asm-generic /usr/include/x86_64-linux-musl/asm-generic && \
+    ln -s /usr/include/linux /usr/include/x86_64-linux-musl/linux
+
+    git clone https://github.com/richfelker/musl-cross-make.git
+
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
     ;;
 esac
 

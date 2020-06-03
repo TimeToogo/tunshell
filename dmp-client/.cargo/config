@@ -1,2 +1,2 @@
-[target.x86_64-unknown-linux-gnu]
-linker = "x86_64-linux-gnu-gcc"
+[target.armv7-unknown-linux-musleabihf]
+linker = "/tmp/musl-test/musl/bin/armv7-unknown-linux-musleabihf-gcc"

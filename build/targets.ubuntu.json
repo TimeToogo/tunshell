@@ -1,18 +1,20 @@
 [
   {
-    "cc": "x86_64-linux-gnu-gcc",
-    "openssl_target": "linux-generic64",
+    "musl_target": "x86_64-unknown-linux-musl",
+    "musl_target_docker": "messense/rust-musl-cross:x86_64-musl",
+    "openssl_target": "linux-x86_64",
     "libsodium_target": "x86_64-linux-gnu",
     "ldflags": "",
     "cflags": "",
-    "rust_target": "x86_64-unknown-linux-gnu"
+    "rust_target": "x86_64-unknown-linux-musl"
   },
   {
-    "cc": "arm-linux-gnueabihf-gcc",
+    "musl_target": "armv7-unknown-linux-musleabihf",
+    "musl_target_docker": "messense/rust-musl-cross:armv7-musleabihf",
     "openssl_target": "linux-armv4",
-    "libsodium_target": "arm-linux-gnueabihf",
+    "libsodium_target": "arm-linux-musleabihf",
     "ldflags": "",
-    "cflags": "",
-    "rust_target": "armv7-unknown-linux-gnueabihf"
+    "cflags": "-march=armv7-a",
+    "rust_target": "armv7-unknown-linux-musleabihf"
   }
 ]

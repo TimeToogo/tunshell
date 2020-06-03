@@ -19,13 +19,13 @@ fi
 echo "Parsing targets..."
 SCRIPT_DIR=$(dirname "$0")
 SCRIPT_DIR=`cd $SCRIPT_DIR;pwd`
-TARGETS=$(cat $TARGETS | jq -r '.[] | [.openssl_target, .libsodium_target, .cc, .ldflags, .cflags, .rust_target] | @tsv')
+TARGETS=$(cat $TARGETS | jq -r '.[] | [.musl_target, .musl_target_docker, .openssl_target, .libsodium_target, .cc, .ldflags, .cflags, .rust_target] | @tsv')
 TARGETS=${TARGETS//$'\t'/,}
 TARGETS=${TARGETS//$'\r'/,}
 
 mkdir -p $SCRIPT_DIR/artifacts
 
-echo "$TARGETS" | while IFS=',' read -r OPENSSL_TARGET LIBSODIUM_TARGET CC LDFLAGS CFLAGS RUST_TARGET
+echo "$TARGETS" | while IFS=',' read -r MUSL_TARGET MUSL_TARGET_DOCKER OPENSSL_TARGET LIBSODIUM_TARGET CC LDFLAGS CFLAGS RUST_TARGET
 do
    echo "Building $RUST_TARGET..."
 
@@ -33,9 +33,31 @@ do
    export LD="$CC"
    export LDFLAGS
    export CFLAGS
+   export MUSL_PREFIX=""
 
    echo "Installing rust target..."
    rustup target add $RUST_TARGET
+
+
+   if [[ ! -z "$MUSL_TARGET" ]]; then
+      cd $TEMPDIR/musl-cross-make
+      export MUSL_PREFIX="$TEMPDIR/musl-$MUSL_TARGET"
+
+      if [[ -x $(command -v docker) ]]; then
+         echo "Fetching pre-built musl-cross..."
+         docker run --rm -v$MUSL_PREFIX:/target \
+            $MUSL_TARGET_DOCKER \
+            cp -arv /usr/local/musl/. /target/
+      else 
+         echo "Compiling musl-cross..."
+         TARGET="$MUSL_TARGET" OUTPUT="$MUSL_PREFIX" make clean install
+      fi
+
+      export CC="$MUSL_PREFIX/bin/$MUSL_TARGET-gcc"
+      export LD="$MUSL_PREFIX/bin/$MUSL_TARGET-gcc"
+      export LDFLAGS="-L$MUSL_PREFIX/lib $LDFLAGS"
+      export CFLAGS="-I$MUSL_PREFIX/include $CFLAGS"
+   fi
 
    cat > $SCRIPT_DIR/../dmp-client/.cargo/config << EOF
 [target.$RUST_TARGET]
@@ -49,10 +71,10 @@ EOF
       cd $TEMPDIR/openssl/
      
       if [[ "$OSTYPE"  == "msys" ]]; then
-         C:\\tools\\msys64\\bin\\bash.exe -c "perl ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR"
-         nmake clean install_sw
+         C:\\tools\\msys64\\bin\\bash.exe -c "perl ./Configure shared no-async $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR"
+         nmake clean install_sw 
       else
-         ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR 
+         ./Configure shared no-async $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR
          make clean install_sw
       fi
    fi
@@ -73,6 +95,7 @@ EOF
    export SODIUM_LIB_DIR="$LIBSODIUM_BUILD_DIR/lib"
    export OPENSSL_STATIC=1
    export SODIUM_STATIC=1
+   export PKG_CONFIG_ALL_STATIC=1
 
    echo "Compiling dmp-client for $RUST_TARGET..."
    cd $SCRIPT_DIR/../dmp-client
