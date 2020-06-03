@@ -10,7 +10,7 @@ jobs:
   build_and_deploy:
     strategy:
       matrix:
-        platform: [ubuntu-latest, macos-latest]
+        platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
     - uses: actions/checkout@v2
@@ -22,7 +22,7 @@ jobs:
       shell: bash
       env:
         TEMPDIR: /tmp
-    - run: ./cross-compile.sh "target.$(echo "${{ matrix.platform }}" | cut -d'-' -f1).json"
+    - run: ./cross-compile.sh "targets.$(echo "${{ matrix.platform }}" | cut -d'-' -f1).json"
       working-directory: build
       shell: bash
       env:
