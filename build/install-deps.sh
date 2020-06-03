@@ -2,29 +2,45 @@
 
 set -e
 
-
-
 TEMPDIR=${TEMPDIR:="$(dirname $0)/tmp"}
 cd $TEMPDIR
 
-echo "Installing rust..."
+
+echo "Installing compile toolchain..."
 case "$OSTYPE" in
   msys*)    
-    curl https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe -o rust-init.exe
-    ./rust-init.exe 
+    choco install rust activeperl nasm
+    echo '##[add-path]%USERPROFILE%\.cargo\bin'
+    echo '##[add-path]C:\Perl64'
     ;;
-  *)
+
+  darwin*)    
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
     ;;
+    
+  *)
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+
+    sudo apt update -y
+    sudo apt install -y \
+        curl \
+        wget \
+        vim \
+        jq \
+        binutils \
+        make \
+        build-essential \
+        gcc-arm-linux-gnueabihf \
+        crossbuild-essential-armhf
+    ;;
 esac
-source $HOME/.cargo/env
 
-echo "Installing OpenSSL..."
-wget https://www.openssl.org/source/openssl-1.1.1.tar.gz
+echo "Downloading OpenSSL..."
+curl -sSf -o openssl.tar.gz https://www.openssl.org/source/openssl-1.1.1.tar.gz
 mkdir openssl
-tar xzf openssl-1.1.1.tar.gz -C openssl --strip-components 1
+tar xzf openssl.tar.gz -C openssl --strip-components 1
 
-echo "Installing Libsodium..."
-wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable.tar.gz
+echo "Downloading Libsodium..."
+curl -sSf -o libsodium.tar.gz https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable.tar.gz
 mkdir libsodium
-tar xzf libsodium-1.0.18-stable.tar.gz -C libsodium --strip-components 1
+tar xzf libsodium.tar.gz -C libsodium --strip-components 1

@@ -19,7 +19,7 @@ jobs:
       shell: bash
       env:
         TEMPDIR: /tmp
-    - run: ./cross-compile.sh "targets.$(echo "${{ matrix.platform }}" | cut -d'-' -f1).json"
+    - run: ./compile.sh "targets.$(echo "${{ matrix.platform }}" | cut -d'-' -f1).json"
       working-directory: build
       shell: bash
       env:

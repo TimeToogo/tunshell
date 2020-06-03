@@ -1,20 +1,18 @@
 [
   {
-    "cc": "x86_64-w64-mingw32-gcc",
+    "cc": "",
     "openssl_target": "mingw64",
-    "windres": "x86_64-w64-mingw32-windres",
     "libsodium_target": "x86_64-w64-mingw32",
     "ldflags": "",
     "cflags": "",
-    "rust_target": "x86_64-pc-windows-msvc"
+    "rust_target": "x86_64-pc-windows-gnu"
   },
   {
-    "cc": "i686-w64-mingw32-gcc",
-    "openssl_target": "mingw",
-    "windres": "i686-w64-mingw32-windres",
+    "cc": "",
+    "openssl_target": "mingw32",
     "libsodium_target": "i686-w64-mingw32",
     "ldflags": "",
     "cflags": "-m32 -march=pentium3",
-    "rust_target": "i686-pc-windows-msvc"
+    "rust_target": "i686-pc-windows-gnu"
   }
 ]

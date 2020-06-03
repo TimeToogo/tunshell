@@ -1,18 +1,24 @@
-## === DEBUGMYPIPELINE SHELL SCRIPT ===
 #!/bin/sh
+## === DEBUGMYPIPELINE SHELL SCRIPT ===
 
-case "$(uname -s)" in
-    Linux*)     
-    PLATFORM_CODE="ubuntu-latest"
+case "$(uname -s):$(uname -m)" in
+Linux:x86_64*)     
+    TARGET="x86_64-unknown-linux-gnu"
     ;;
-    Darwin*)    
-    PLATFORM_CODE="macos-latest"
+Linux:arm*)     
+    TARGET="armv7-unknown-linux-gnueabihf"
     ;;
-    CYGWIN*|MINGW32*|MSYS*|MINGW*)
-    PLATFORM_CODE="windows-latest"
+Darwin:x86_64*)    
+    TARGET="x86_64-apple-darwin"
     ;;
-    *)          
-    echo "Unknown operating system, please run on Linux or MacOs..."
+WindowsNT:x86_64*)    
+    TARGET="x86_64-pc-windows-gnu"
+    ;;
+WindowsNT:i686*)    
+    TARGET="i686-pc-windows-gnu"
+    ;;
+*)          
+    echo "Unsupported system :( ($(uname))"
     exit 1
     ;;
 esac
@@ -23,23 +29,17 @@ then
 fi
 
 TEMP_PATH="$TMPDIR/debugmypipeline"
-
-ARTIFACT_PATH="$TEMP_PATH/artifact.tar.gz"
-EXTRACT_PATH="$TEMP_PATH/extracted"
-NODE_PATH="$EXTRACT_PATH/node"
-BUNDLE_PATH="$EXTRACT_PATH/bundle.js"
+CLIENT_PATH="$TEMP_PATH/client"
 
 mkdir -p $TEMP_PATH
-mkdir -p $EXTRACT_PATH
 
 echo "Installing client..."
 if [ ! -z "$(which curl)" ]
 then
-    curl -s https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.tar.gz -o $ARTIFACT_PATH 
+    curl -s https://artifacts.debugmypipeline.com/${TARGET}-client -o $CLIENT_PATH 
 else
-    wget https://artifacts.debugmypipeline.com/${PLATFORM_CODE}/artifact.tar.gz -O $ARTIFACT_PATH 2> /dev/null
+    wget https://artifacts.debugmypipeline.com/${TARGET}-client -O $CLIENT_PATH 2> /dev/null
 fi
-tar xzf $ARTIFACT_PATH -C $EXTRACT_PATH 1>/dev/null
-chmod +x $NODE_PATH
+chmod +x $CLIENT_PATH
 
-DEBUGMYPIPELINE_KEY='__KEY__' $NODE_PATH $BUNDLE_PATH
+DEBUGMYPIPELINE_KEY='__KEY__' $CLIENT_PATH

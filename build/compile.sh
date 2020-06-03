@@ -5,24 +5,27 @@ set -e
 TARGETS=$1
 
 if [[ ! -f "$TARGETS" ]]; then
-   echo "usage: ./cross-compile.sh targets.[host].json"
+   echo "usage: ./compile.sh targets.[host].json"
    exit 1
 fi
 
 TEMPDIR=${TEMPDIR:="$(dirname $0)/tmp"}
 TEMPDIR=`cd $TEMPDIR;pwd`
-echo $TEMPDIR;
-source $HOME/.cargo/env
+
+if [[ -f $HOME/.cargo/env ]]; then
+   source $HOME/.cargo/env
+fi
 
 echo "Parsing targets..."
 SCRIPT_DIR=$(dirname "$0")
 SCRIPT_DIR=`cd $SCRIPT_DIR;pwd`
-TARGETS=$(cat $TARGETS | jq -r '.[] | [.openssl_target, .libsodium_target, .cc, .ldflags, .cflags, .windres, .rust_target] | @tsv')
+TARGETS=$(cat $TARGETS | jq -r '.[] | [.openssl_target, .libsodium_target, .cc, .ldflags, .cflags, .rust_target] | @tsv')
 TARGETS=${TARGETS//$'\t'/,}
+TARGETS=${TARGETS//$'\r'/,}
 
 mkdir -p $SCRIPT_DIR/artifacts
 
-echo "$TARGETS" | while IFS=',' read -r OPENSSL_TARGET LIBSODIUM_TARGET CC LDFLAGS CFLAGS WINDRES RUST_TARGET
+echo "$TARGETS" | while IFS=',' read -r OPENSSL_TARGET LIBSODIUM_TARGET CC LDFLAGS CFLAGS RUST_TARGET
 do
    echo "Building $RUST_TARGET..."
 
@@ -30,7 +33,6 @@ do
    export LD="$CC"
    export LDFLAGS
    export CFLAGS
-   export WINDRES
 
    echo "Installing rust target..."
    rustup target add $RUST_TARGET
@@ -42,16 +44,22 @@ EOF
 
    OPENSSL_BUILD_DIR=$TEMPDIR/build/openssl-$RUST_TARGET
    if [[ ! -d "$OPENSSL_BUILD_DIR/lib" ]]; then
-      echo "Cross-compiling OpenSSL..."
+      echo "Compiling OpenSSL..."
       mkdir -p $OPENSSL_BUILD_DIR
       cd $TEMPDIR/openssl/
-      ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR 
-      make clean install_sw
+     
+      if [[ "$OSTYPE"  == "msys" ]]; then
+         C:\\Perl64\\bin  ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR 
+         nmake clean install_sw
+      else
+         ./Configure shared $OPENSSL_TARGET --openssldir=$OPENSSL_BUILD_DIR --prefix=$OPENSSL_BUILD_DIR 
+         make clean install_sw
+      fi
    fi
 
    LIBSODIUM_BUILD_DIR=$TEMPDIR/build/libsodium-$RUST_TARGET
    if [[ ! -d "$LIBSODIUM_BUILD_DIR/lib" ]]; then
-      echo "Cross-compiling Libsodium..."
+      echo "Compiling Libsodium..."
       mkdir -p $LIBSODIUM_BUILD_DIR
       cd $TEMPDIR/libsodium/
       unset LD
