@@ -14,9 +14,6 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
     - uses: actions/checkout@v2
-    - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
-      shell: bash
-      working-directory: build
     - run: ./install-deps.sh
       working-directory: build
       shell: bash

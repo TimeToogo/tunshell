@@ -17,10 +17,6 @@ RUN apt install -y \
     gcc-mingw-w64-x86-64 \
     gcc-mingw-w64-i686
 
-# Install rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
-RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
-
 ENV TEMPDIR /tmp
 COPY ./install-deps.sh /tmp/install-deps.sh
 RUN /tmp/install-deps.sh
