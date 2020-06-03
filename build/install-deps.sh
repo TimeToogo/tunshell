@@ -10,7 +10,7 @@ cd $TEMPDIR
 echo "Installing rust..."
 case "$OSTYPE" in
   msys*)    
-    curl https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe -O rust-init.exe
+    curl https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe -o rust-init.exe
     ./rust-init.exe 
     ;;
   *)
