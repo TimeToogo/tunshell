@@ -70,7 +70,7 @@ impl ShellPty {
             .openpty(pty_size)
             .with_context(|| "could not open pty")?;
 
-        let mut cmd = CommandBuilder::new_default_prog();
+        let mut cmd = Self::get_default_shell()?;
         cmd.env("TERM", term);
 
         let shell = pty
@@ -96,6 +96,23 @@ impl ShellPty {
             pty_writer,
             reader_thread: Some(reader_thread),
         })
+    }
+
+    fn get_default_shell() -> Result<CommandBuilder> {
+        // TODO: windows support
+        let shell = std::env::var("SHELL").unwrap_or("/bin/sh".to_owned());
+
+        let mut cmd = CommandBuilder::new(shell.clone());
+
+        if shell == "bash" || shell == "/bin/bash" {
+            cmd.arg("--norc");
+        }
+
+        if shell == "zsh" || shell == "/bin/zsh" {
+            cmd.arg("--no-rcs");
+        }
+
+        Ok(cmd)
     }
 
     fn resize(&self, pty_size: PtySize) -> Result<()> {
