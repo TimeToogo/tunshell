@@ -100,7 +100,22 @@ impl ShellPty {
 
     fn get_default_shell() -> Result<CommandBuilder> {
         // TODO: windows support
-        let shell = std::env::var("SHELL").unwrap_or("/bin/sh".to_owned());
+        // Copied from portable_pty
+        let shell =  std::env::var("SHELL").or_else(|_| {
+            let ent = unsafe { libc::getpwuid(libc::getuid()) };
+
+            if ent.is_null() {
+                Ok("/bin/sh".into())
+            } else {
+                use std::ffi::CStr;
+                use std::str;
+                let shell = unsafe { CStr::from_ptr((*ent).pw_shell) };
+                shell
+                    .to_str()
+                    .map(str::to_owned)
+                    .context("failed to resolve shell")
+            }
+        })?;
 
         let mut cmd = CommandBuilder::new(shell.clone());
 
