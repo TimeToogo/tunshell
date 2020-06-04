@@ -5,10 +5,10 @@ set -e
 
 case "$(uname -s):$(uname -m)" in
 Linux:x86_64*)     
-    TARGET="x86_64-unknown-linux-gnu"
+    TARGET="x86_64-unknown-linux-musl"
     ;;
 Linux:arm*)     
-    TARGET="armv7-unknown-linux-gnueabihf"
+    TARGET="armv7-unknown-linux-musleabihf"
     ;;
 Darwin:x86_64*)    
     TARGET="x86_64-apple-darwin"
@@ -37,7 +37,7 @@ mkdir -p $TEMP_PATH
 
 
 echo "Installing client..."
-if [ ! -z "$(which curl)" ]
+if [ -x "$(command -v curl)" ]
 then
     curl -sSf https://artifacts.debugmypipeline.com/client-${TARGET} -o $CLIENT_PATH 
 else
