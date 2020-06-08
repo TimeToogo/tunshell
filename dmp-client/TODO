@@ -1,7 +1,5 @@
 dmp todo:
 
-1. try get cross compiling to work: https://stackoverflow.com/questions/37375712/cross-compile-rust-openssl-for-raspberry-pi-2
-2. submit patch to thrussh for public thrussh::client::conntect_stream
-3. otherwise migrate away from thrussh to use raw stream for transport (rustls for direct connection)
-4. clean up code 
-5. documentations
+1. clean up code 
+2. direct connections
+3. documentations
