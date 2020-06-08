@@ -2,7 +2,7 @@ use dmp_client::Client;
 use dmp_client::Config;
 use std::process::exit;
 use env_logger;
-use log::debug;
+use log::error;
 
 #[tokio::main]
 async fn main() -> () {
@@ -14,7 +14,7 @@ async fn main() -> () {
     match result {
         Ok(()) => exit(0),
         Err(err) => {
-            debug!("Error occurred: {:?}", err);
+            error!("Error occurred: {:?}", err);
             eprintln!("{}", err);
             exit(1)
         }
