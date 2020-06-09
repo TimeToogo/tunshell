@@ -1,6 +1,7 @@
 use crate::SshCredentials;
 use crate::TunnelStream;
 use anyhow::{Context, Error, Result};
+use async_trait::async_trait;
 use futures::future;
 use log::*;
 use portable_pty::PtySize;
@@ -93,9 +94,7 @@ impl thrussh::server::Handler for SshServerHandler {
                 }
             }
         } else {
-            return future::ready(Err(Error::msg(
-                "Data received before requesting a pty",
-            )));
+            return future::ready(Err(Error::msg("Data received before requesting a pty")));
         }
     }
 
@@ -111,7 +110,6 @@ impl thrussh::server::Handler for SshServerHandler {
         session: Session,
     ) -> Self::FutureUnit {
         info!("ssh pty request");
-       
         let pty_result = pty::ShellPty::new(
             term,
             PtySize {
@@ -120,8 +118,7 @@ impl thrussh::server::Handler for SshServerHandler {
                 pixel_width: pix_width as u16,
                 pixel_height: pix_height as u16,
             },
-            channel,
-            session.handle().clone(),
+            SshPtyHandler::new(channel, session.handle()),
         );
 
         match pty_result {
@@ -163,12 +160,53 @@ impl thrussh::server::Handler for SshServerHandler {
     }
 }
 
+struct SshPtyHandler {
+    channel: ChannelId,
+    session_handle: thrussh::server::Handle,
+}
+
+impl SshPtyHandler {
+    fn new(channel: ChannelId, session_handle: thrussh::server::Handle) -> Self {
+        Self {
+            channel,
+            session_handle,
+        }
+    }
+}
+
+#[async_trait]
+impl pty::ShellPtyHandler for SshPtyHandler {
+    async fn exit(&mut self, code: u8) {
+        self.session_handle
+            .exit_status_request(self.channel, code as u32)
+            .await
+            .unwrap_or_else(|err| error!("failed to send exit status: {:?}", err));
+    }
+
+    async fn stdout(&mut self, data: &[u8]) {
+        let mut crypto_vec = cryptovec::CryptoVec::from_slice(data);
+
+        loop {
+            match self.session_handle.data(self.channel, crypto_vec).await {
+                Ok(_) => {
+                    info!("wrote {} bytes to ssh channel", data.len());
+                    break;
+                }
+                Err(vec) => {
+                    error!("error while writing to ssh session, will retry");
+                    crypto_vec = vec;
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_new_ssh_server() {
-        SshServer::new();
+        SshServer::new().unwrap();
     }
 }

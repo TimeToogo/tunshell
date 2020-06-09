@@ -80,16 +80,18 @@ impl SshClient {
 
     async fn stream_shell_io(
         &self,
-        mut host_shell: HostShell,
+        host_shell: HostShell,
         channel: &mut thrussh::client::Channel,
     ) -> Result<()> {
         let mut buff = [0u8; 1024];
-        let (mut reader, mut writer) = host_shell.create_reader_writer()?;
+        let mut stdin = host_shell.stdin()?;
+        let mut stdout = host_shell.stdout()?;
+        let mut resize_watcher = host_shell.resize_watcher()?;
 
         loop {
             info!("waiting for ssh message");
             tokio::select! {
-                stdin_result = reader.read(&mut buff) => match stdin_result {
+                stdin_result = stdin.read(&mut buff) => match stdin_result {
                    Ok(read) => {
                     info!("read {} bytes from stdin", read);
                     if read == 0 {
@@ -106,11 +108,11 @@ impl SshClient {
                 message = channel.wait() => match message {
                     Some(thrussh::ChannelMsg::Data { data }) => {
                         info!("received {} bytes from ssh channel", data.len());
-                        writer.write(&data[..]).await?;
+                        stdout.write(&data[..]).await?;
                     }
                     Some(thrussh::ChannelMsg::ExitStatus { exit_status: _ }) => {
-                        info!("ssh channel closed");
-                        return Err(Error::msg("shell exited"));
+                        info!("ssh channel closed: shell exited");
+                        return Ok(());
                     }
                     Some(_) => {}
                     None => {
@@ -118,12 +120,10 @@ impl SshClient {
                         break;
                     }
                 },
-                // TODO: Fix event stream interfering with stdin reader
-                // (assuming it's capturing stdin input)
-                // size = host_shell.on_resized() => match size {
-                //     Ok(size) => channel.window_change(size.0 as u32, size.1 as u32, 0, 0).await?,
-                //     Err(err) => error!("Error received from terminal resize event: {}", err)
-                // }
+                size = resize_watcher.next() => match size {
+                    Ok(size) => channel.window_change(size.0 as u32, size.1 as u32, 0, 0).await?,
+                    Err(err) => error!("Error received from terminal resize event: {}", err)
+                }
             }
         }
 

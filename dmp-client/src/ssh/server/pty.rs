@@ -1,22 +1,26 @@
 use anyhow::{Context, Error, Result};
+use async_trait::async_trait;
 use log::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
-use thrussh::ChannelId;
 
 pub struct ShellPty {
     shell: Box<dyn portable_pty::Child + Send>,
     master_pty: Box<dyn portable_pty::MasterPty + Send>,
     pty_writer: Box<dyn std::io::Write + Send>,
-    reader_thread: Option<std::thread::JoinHandle<()>>,
+}
+
+#[async_trait]
+pub trait ShellPtyHandler: Send {
+    async fn exit(&mut self, code: u8);
+    async fn stdout(&mut self, data: &[u8]);
 }
 
 impl ShellPty {
     pub fn new(
         term: &str,
         pty_size: PtySize,
-        channel_id: ChannelId,
-        session_handle: thrussh::server::Handle,
+        handler: impl ShellPtyHandler + 'static,
     ) -> Result<Self> {
         info!("creating shell pty");
         let pty_system = native_pty_system();
@@ -42,14 +46,13 @@ impl ShellPty {
             .try_clone_writer()
             .with_context(|| "Failed to clone pty writer")?;
 
-        let reader_thread = Self::start_pty_reader(session_handle, channel_id, pty_reader);
+        let reader_handle = Self::start_pty_reader_task(pty_reader, handler);
 
         info!("created shell pty");
         Ok(ShellPty {
             shell,
             master_pty: pty.master,
             pty_writer,
-            reader_thread: Some(reader_thread),
         })
     }
 
@@ -98,12 +101,11 @@ impl ShellPty {
         }
     }
 
-    fn start_pty_reader(
-        mut session_handle: thrussh::server::Handle,
-        channel_id: ChannelId,
+    fn start_pty_reader_task(
         mut pty_reader: Box<dyn std::io::Read + Send>,
-    ) -> std::thread::JoinHandle<()> {
-        std::thread::spawn(move || {
+        mut handler: impl ShellPtyHandler + 'static,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::task::spawn_blocking(move || {
             tokio::runtime::Runtime::new().unwrap().block_on(async {
                 let mut buff = [0u8; 1024];
 
@@ -113,28 +115,12 @@ impl ShellPty {
                     info!("read {} bytes from pty", read);
 
                     if read == 0 {
-                        session_handle
-                            .exit_status_request(channel_id, 0)
-                            .await
-                            .unwrap_or_else(|err| error!("failed to send exit status: {:?}", err));
-
+                        info!("finished reading from pty");
+                        handler.exit(0).await;
                         break;
                     }
 
-                    let mut crypto_vec = cryptovec::CryptoVec::from_slice(&buff[..read]);
-
-                    loop {
-                        match session_handle.data(channel_id, crypto_vec).await {
-                            Ok(_) => {
-                                info!("wrote {} bytes to ssh channel", read);
-                                break;
-                            }
-                            Err(vec) => {
-                                error!("error while writing to ssh session, will retry");
-                                crypto_vec = vec;
-                            }
-                        }
-                    }
+                    handler.stdout(&buff[..read]).await;
                 }
             })
         })
@@ -150,13 +136,83 @@ impl Drop for ShellPty {
             Ok(Some(_)) => (),
             Err(_) => (),
         }
-
-        let thread = self.reader_thread.take().unwrap();
-        thread.join().expect("Failed to shutdown pty reader thread");
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct MockShellEnv {
+        original: Option<String>,
+    }
+    impl MockShellEnv {
+        fn new(shell: Option<&str>) -> Self {
+            let original = match std::env::var("SHELL") {
+                Ok(shell) => Some(shell),
+                Err(_) => None,
+            };
+
+            match shell {
+                Some(shell) => std::env::set_var("SHELL", shell),
+                None => std::env::remove_var("SHELL"),
+            }
+
+            Self { original }
+        }
+    }
+
+    impl Drop for MockShellEnv {
+        fn drop(&mut self) {
+            match self.original.take() {
+                Some(shell) => std::env::set_var("SHELL", shell),
+                None => std::env::remove_var("SHELL"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_new_shell_bash() {
+        let _mock = MockShellEnv::new(Some("/bin/bash"));
+
+        let cmd = ShellPty::get_default_shell().unwrap();
+
+        assert_eq!(
+            format!("{:?}", cmd),
+            "CommandBuilder { args: [\"/bin/bash\", \"--norc\"], envs: [], cwd: None }"
+        );
+    }
+
+    #[test]
+    fn test_new_shell_zsh() {
+        let _mock = MockShellEnv::new(Some("/bin/zsh"));
+
+        let cmd = ShellPty::get_default_shell().unwrap();
+
+        assert_eq!(
+            format!("{:?}", cmd),
+            "CommandBuilder { args: [\"/bin/zsh\", \"--no-rcs\"], envs: [], cwd: None }"
+        );
+    }
+
+    #[test]
+    fn test_new_shell_sh() {
+        let _mock = MockShellEnv::new(Some("/bin/sh"));
+
+        let cmd = ShellPty::get_default_shell().unwrap();
+
+        assert_eq!(
+            format!("{:?}", cmd),
+            "CommandBuilder { args: [\"/bin/sh\"], envs: [], cwd: None }"
+        );
+    }
+
+    #[test]
+    fn test_new_shell_no_env() {
+        let _mock = MockShellEnv::new(None);
+
+        ShellPty::get_default_shell().unwrap();
+    }
+
+    // TODO: tests
 }

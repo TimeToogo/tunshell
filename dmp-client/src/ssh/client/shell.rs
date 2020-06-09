@@ -17,13 +17,15 @@ pub struct HostShellStdout {
     sender: UnboundedSender<Vec<u8>>,
 }
 
-pub struct HostShell {
-    event_stream: crossterm::event::EventStream,
+pub struct HostShellResizeWatcher {
+    receiver: UnboundedReceiver<(u16, u16)>,
 }
+
+pub struct HostShell {}
 
 impl HostShellStdin {
     pub fn new() -> Result<Self> {
-        let (receiver, _thread) = Self::create_stdin_thread();
+        let (receiver, _thread) = Self::create_thread();
 
         Ok(Self {
             receiver,
@@ -31,7 +33,7 @@ impl HostShellStdin {
         })
     }
 
-    fn create_stdin_thread() -> (UnboundedReceiver<Vec<u8>>, JoinHandle<()>) {
+    fn create_thread() -> (UnboundedReceiver<Vec<u8>>, JoinHandle<()>) {
         let (tx, rx) = mpsc::unbounded::<Vec<u8>>();
 
         let thread = thread::spawn(move || {
@@ -84,12 +86,12 @@ impl HostShellStdin {
 
 impl HostShellStdout {
     pub fn new() -> Result<Self> {
-        let (sender, _thread) = Self::create_stdout_thread();
+        let (sender, _thread) = Self::create_thread();
 
         Ok(Self { sender })
     }
 
-    fn create_stdout_thread() -> (UnboundedSender<Vec<u8>>, JoinHandle<()>) {
+    fn create_thread() -> (UnboundedSender<Vec<u8>>, JoinHandle<()>) {
         let (tx, mut rx) = mpsc::unbounded::<Vec<u8>>();
 
         let thread = thread::spawn(move || {
@@ -100,14 +102,13 @@ impl HostShellStdout {
                     let mut stdout = stdout.lock();
 
                     match stdout.write_all(data.as_slice()) {
-                        Ok(_) => {}
+                        Ok(_) => debug!("wrote {} bytes to stdout", data.len()),
                         Err(err) => {
                             error!("Failed to write to stdout: {:?}", err);
                             break;
                         }
                     }
 
-                    info!("wrote {} bytes to stdout", data.len());
                     match stdout.flush() {
                         Ok(_) => info!("stdout flushed"),
                         Err(err) => {
@@ -129,16 +130,70 @@ impl HostShellStdout {
     }
 }
 
+impl HostShellResizeWatcher {
+    pub fn new() -> Result<Self> {
+        let (receiver, _thread) = Self::create_thread();
+
+        Ok(Self { receiver })
+    }
+
+    fn create_thread() -> (UnboundedReceiver<(u16, u16)>, JoinHandle<()>) {
+        let (tx, rx) = mpsc::unbounded::<(u16, u16)>();
+        let mut prev_size = None;
+
+        let thread = thread::spawn(move || loop {
+            let size = match crossterm::terminal::size() {
+                Ok(size) => size,
+                Err(err) => {
+                    error!("Error while receiving terminal size: {:?}", err);
+                    break;
+                }
+            };
+
+            if prev_size.is_some() && prev_size.unwrap() == size {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                continue;
+            }
+
+            prev_size = Some(size);
+            info!("terminal size changed to {:?}", size);
+
+            match tx.unbounded_send(size) {
+                Ok(_) => info!("sent terminal size to channel"),
+                Err(err) => {
+                    error!("Failed to send resize event to channel: {:?}", err);
+                    break;
+                }
+            }
+        });
+
+        (rx, thread)
+    }
+
+    pub async fn next(&mut self) -> Result<(u16, u16)> {
+        match self.receiver.next().await {
+            Some(size) => Ok(size),
+            None => Err(Error::msg("Resize watcher has been disposed")),
+        }
+    }
+}
+
 impl HostShell {
     pub fn new() -> Result<Self> {
         crossterm::terminal::enable_raw_mode()?;
-        Ok(Self {
-            event_stream: crossterm::event::EventStream::new(),
-        })
+        Ok(Self {})
     }
 
-    pub fn create_reader_writer(&self) -> Result<(HostShellStdin, HostShellStdout)> {
-        Ok((HostShellStdin::new()?, HostShellStdout::new()?))
+    pub fn stdin(&self) -> Result<HostShellStdin> {
+        HostShellStdin::new()
+    }
+
+    pub fn stdout(&self) -> Result<HostShellStdout> {
+        HostShellStdout::new()
+    }
+
+    pub fn resize_watcher(&self) -> Result<HostShellResizeWatcher> {
+        HostShellResizeWatcher::new()
     }
 
     pub fn term(&self) -> Result<String> {
@@ -152,17 +207,6 @@ impl HostShell {
         match crossterm::terminal::size() {
             Ok(size) => Ok(size),
             Err(err) => Err(Error::new(err)),
-        }
-    }
-
-    pub async fn on_resized(&mut self) -> Result<(u16, u16)> {
-        loop {
-            match self.event_stream.next().await {
-                Some(Ok(crossterm::event::Event::Resize(w, h))) => return Ok((w, h)),
-                Some(Ok(_)) => {}
-                Some(Err(err)) => return Err(Error::new(err)),
-                None => return Err(Error::msg("No events in stream")),
-            };
         }
     }
 }

@@ -100,15 +100,17 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for 
             return Poll::Ready(Err(IoError::from(IoErrorKind::BrokenPipe)));
         }
 
+        // Ensure the write serialises to message under 16KB limit
+        let len = std::cmp::min(buff.len(), 10240);
         let write_result = Pin::new(&mut *self.message_stream.lock().unwrap()).poll_write(
             &mut cx,
             &ClientMessage::Relay(RelayPayload {
-                data: Vec::from(buff),
+                data: Vec::from(&buff[..len]),
             }),
         );
 
         match write_result {
-            Poll::Ready(Ok(_)) => Poll::Ready(Ok(buff.len())),
+            Poll::Ready(Ok(_)) => Poll::Ready(Ok(len)),
             Poll::Ready(Err(err)) => {
                 self.closed = true;
                 debug!(

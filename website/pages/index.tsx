@@ -44,12 +44,12 @@ export default function Home() {
             <>
               <li>
                 Run this command on your <strong>pipeline</strong>:
-                <pre>sh &lt;(curl -s https://lets1.debugmypipeline.com/{sessionKeys.hostKey}.sh)</pre>
+                <pre>sh &lt;(curl -sSf https://lets1.debugmypipeline.com/{sessionKeys.hostKey}.sh)</pre>
               </li>
 
               <li>
                 Run this command on your <strong>local machine</strong>:
-                <pre>sh &lt;(curl -s https://lets1.debugmypipeline.com/{sessionKeys.clientKey}.sh)</pre>
+                <pre>sh &lt;(curl -sSf https://lets1.debugmypipeline.com/{sessionKeys.clientKey}.sh)</pre>
               </li>
             </>
           )}
