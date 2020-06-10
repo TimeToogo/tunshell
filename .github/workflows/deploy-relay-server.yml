@@ -30,4 +30,4 @@ jobs:
         name: timetoogo/tunshell-relay
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        tag_names: true
+        tags: "latest"
