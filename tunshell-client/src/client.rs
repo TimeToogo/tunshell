@@ -1,6 +1,5 @@
 use crate::{Config, RelayStream, SshClient, SshCredentials, SshServer, TunnelStream};
 use anyhow::{Error, Result};
-use tunshell_shared::*;
 use futures::stream::StreamExt;
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
@@ -8,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
 use tokio_util::compat::*;
+use tunshell_shared::*;
 use webpki::DNSNameRef;
 
 pub type ClientMessageStream =
@@ -22,7 +22,7 @@ impl<'a> Client<'a> {
         Self { config }
     }
 
-    pub async fn start_session(&mut self) -> Result<()> {
+    pub async fn start_session(&mut self) -> Result<u8> {
         println!("Connecting to relay server...");
         let relay_socket: TlsStream<TcpStream> = self.connect_to_relay().await?;
 
@@ -40,23 +40,25 @@ impl<'a> Client<'a> {
             .negotiate_peer_connect(&message_stream, &peer_info)
             .await?;
 
-        match key_type {
-            KeyType::Host => {
-                SshServer::new()?
-                    .run(
-                        peer_socket,
-                        SshCredentials::new("tunshell", self.config.client_key()),
-                    )
-                    .await?
-            }
+        let exit_code = match key_type {
+            KeyType::Host => SshServer::new()?
+                .run(
+                    peer_socket,
+                    SshCredentials::new("tunshell", self.config.client_key()),
+                )
+                .await
+                .and_then(|_| Ok(0))?,
             KeyType::Client => {
                 SshClient::new()?
-                    .connect(peer_socket, SshCredentials::new("tunshell", &peer_info.peer_key))
+                    .connect(
+                        peer_socket,
+                        SshCredentials::new("tunshell", &peer_info.peer_key),
+                    )
                     .await?
             }
         };
 
-        Ok(())
+        Ok(exit_code)
     }
 
     async fn connect_to_relay(&mut self) -> Result<TlsStream<TcpStream>> {

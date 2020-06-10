@@ -13,7 +13,7 @@ async fn main() -> () {
     let result = Client::new(&config).start_session().await;
 
     match result {
-        Ok(()) => exit(0),
+        Ok(code) => exit(code as i32),
         Err(err) => {
             error!("Error occurred: {:?}", err);
             eprintln!("{}", err);

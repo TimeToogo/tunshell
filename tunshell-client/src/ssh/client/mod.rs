@@ -24,7 +24,7 @@ impl SshClient {
         self,
         stream: Box<dyn TunnelStream>,
         ssh_credentials: SshCredentials,
-    ) -> Result<()> {
+    ) -> Result<u8> {
         info!("connecting to ssh server");
         let handler = SshClientHandler::new();
         let mut session: thrussh::client::Handle =
@@ -71,18 +71,18 @@ impl SshClient {
         info!("ssh pty requested");
         info!("starting shell stream");
 
-        self.stream_shell_io(host_shell, &mut channel).await?;
+        let exit_code = self.stream_shell_io(host_shell, &mut channel).await?;
 
         info!("session finished");
 
-        Ok(())
+        Ok(exit_code)
     }
 
     async fn stream_shell_io(
         &self,
         host_shell: HostShell,
         channel: &mut thrussh::client::Channel,
-    ) -> Result<()> {
+    ) -> Result<u8> {
         let mut buff = [0u8; 1024];
         let mut stdin = host_shell.stdin()?;
         let mut stdout = host_shell.stdout()?;
@@ -110,9 +110,9 @@ impl SshClient {
                         info!("received {} bytes from ssh channel", data.len());
                         stdout.write(&data[..]).await?;
                     }
-                    Some(thrussh::ChannelMsg::ExitStatus { exit_status: _ }) => {
+                    Some(thrussh::ChannelMsg::ExitStatus { exit_status }) => {
                         info!("ssh channel closed: shell exited");
-                        return Ok(());
+                        return Ok(std::cmp::min(exit_status, 255) as u8);
                     }
                     Some(_) => {}
                     None => {
@@ -127,7 +127,7 @@ impl SshClient {
             }
         }
 
-        Ok(())
+        Ok(1)
     }
 }
 

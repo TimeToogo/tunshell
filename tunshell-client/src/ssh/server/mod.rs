@@ -112,6 +112,7 @@ impl thrussh::server::Handler for SshServerHandler {
         info!("ssh pty request");
         let pty_result = pty::ShellPty::new(
             term,
+            None,
             PtySize {
                 rows: row_height as u16,
                 cols: col_width as u16,

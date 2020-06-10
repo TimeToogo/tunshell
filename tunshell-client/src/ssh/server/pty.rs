@@ -3,11 +3,19 @@ use async_trait::async_trait;
 use log::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 
 pub struct ShellPty {
-    shell: Box<dyn portable_pty::Child + Send>,
+    state: ShellState,
     master_pty: Box<dyn portable_pty::MasterPty + Send>,
     pty_writer: Box<dyn std::io::Write + Send>,
+    reader_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+#[derive(Clone)]
+struct ShellState {
+    shell: Arc<Mutex<Box<dyn portable_pty::Child + Send>>>,
+    exit_status: Arc<Mutex<Option<portable_pty::ExitStatus>>>,
 }
 
 #[async_trait]
@@ -19,6 +27,7 @@ pub trait ShellPtyHandler: Send {
 impl ShellPty {
     pub fn new(
         term: &str,
+        shell: Option<&str>,
         pty_size: PtySize,
         handler: impl ShellPtyHandler + 'static,
     ) -> Result<Self> {
@@ -29,7 +38,7 @@ impl ShellPty {
             .openpty(pty_size)
             .with_context(|| "could not open pty")?;
 
-        let mut cmd = Self::get_default_shell()?;
+        let mut cmd = Self::get_default_shell(shell)?;
         cmd.env("TERM", term);
 
         let shell = pty
@@ -46,34 +55,43 @@ impl ShellPty {
             .try_clone_writer()
             .with_context(|| "Failed to clone pty writer")?;
 
-        let reader_handle = Self::start_pty_reader_task(pty_reader, handler);
+        let state = ShellState {
+            shell: Arc::new(Mutex::new(shell)),
+            exit_status: Arc::new(Mutex::new(None)),
+        };
+
+        let reader_task = Self::start_pty_reader_task(pty_reader, state.clone(), handler);
 
         info!("created shell pty");
         Ok(ShellPty {
-            shell,
+            state,
             master_pty: pty.master,
             pty_writer,
+            reader_task: Some(reader_task),
         })
     }
 
-    fn get_default_shell() -> Result<CommandBuilder> {
+    fn get_default_shell(shell: Option<&str>) -> Result<CommandBuilder> {
         // TODO: windows support
         // Copied from portable_pty
-        let shell = std::env::var("SHELL").or_else(|_| {
-            let ent = unsafe { libc::getpwuid(libc::getuid()) };
+        let shell =
+            shell
+                .and_then(|i| Some(i.to_owned()))
+                .unwrap_or(std::env::var("SHELL").or_else(|_| {
+                    let ent = unsafe { libc::getpwuid(libc::getuid()) };
 
-            if ent.is_null() {
-                Ok("/bin/sh".into())
-            } else {
-                use std::ffi::CStr;
-                use std::str;
-                let shell = unsafe { CStr::from_ptr((*ent).pw_shell) };
-                shell
-                    .to_str()
-                    .map(str::to_owned)
-                    .context("failed to resolve shell")
-            }
-        })?;
+                    if ent.is_null() {
+                        Ok("/bin/sh".into())
+                    } else {
+                        use std::ffi::CStr;
+                        use std::str;
+                        let shell = unsafe { CStr::from_ptr((*ent).pw_shell) };
+                        shell
+                            .to_str()
+                            .map(str::to_owned)
+                            .context("failed to resolve shell")
+                    }
+                })?);
 
         let mut cmd = CommandBuilder::new(shell.clone());
 
@@ -103,6 +121,7 @@ impl ShellPty {
 
     fn start_pty_reader_task(
         mut pty_reader: Box<dyn std::io::Read + Send>,
+        state: ShellState,
         mut handler: impl ShellPtyHandler + 'static,
     ) -> tokio::task::JoinHandle<()> {
         tokio::task::spawn_blocking(move || {
@@ -116,7 +135,14 @@ impl ShellPty {
 
                     if read == 0 {
                         info!("finished reading from pty");
-                        handler.exit(0).await;
+
+                        state
+                            .handle_exit()
+                            .unwrap_or_else(|err| error!("Failed to exit shell: {}", err));
+
+                        handler
+                            .exit(if state.success().unwrap() { 0 } else { 1 })
+                            .await;
                         break;
                     }
 
@@ -125,57 +151,65 @@ impl ShellPty {
             })
         })
     }
+
+    #[allow(dead_code)]
+    pub async fn wait_for_end_of_stream(&mut self) -> Result<()> {
+        match self.reader_task.take().unwrap().await {
+            Ok(_) => Ok(()),
+            Err(err) => Err(Error::new(err)),
+        }
+    }
+
+    fn exit_sync(&mut self) -> Result<()> {
+        self.state.handle_exit()
+    }
+}
+
+impl ShellState {
+    fn handle_exit(&self) -> Result<()> {
+        if self.exit_status.lock().unwrap().is_some() {
+            return Ok(());
+        }
+
+        let mut shell = self.shell.lock().unwrap();
+        let status = match shell.try_wait() {
+            Ok(None) => {
+                shell.kill().expect("Failed to shutdown shell");
+                portable_pty::ExitStatus::with_exit_code(1)
+            }
+            Ok(Some(status)) => status,
+            Err(err) => return Err(Error::new(err)),
+        };
+
+        self.exit_status.lock().unwrap().replace(status);
+
+        Ok(())
+    }
+
+    fn success(&self) -> Result<bool> {
+        match self.exit_status.lock().unwrap().as_ref() {
+            Some(status) => Ok(status.success()),
+            None => Err(Error::msg("Shell has not exited")),
+        }
+    }
 }
 
 impl Drop for ShellPty {
     fn drop(&mut self) {
-        info!("shutting down shell");
-
-        match self.shell.try_wait() {
-            Ok(None) => self.shell.kill().expect("Failed to shutdown shell"),
-            Ok(Some(_)) => (),
-            Err(_) => (),
-        }
+        self.exit_sync().expect("Failed to exit shell");
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct MockShellEnv {
-        original: Option<String>,
-    }
-    impl MockShellEnv {
-        fn new(shell: Option<&str>) -> Self {
-            let original = match std::env::var("SHELL") {
-                Ok(shell) => Some(shell),
-                Err(_) => None,
-            };
-
-            match shell {
-                Some(shell) => std::env::set_var("SHELL", shell),
-                None => std::env::remove_var("SHELL"),
-            }
-
-            Self { original }
-        }
-    }
-
-    impl Drop for MockShellEnv {
-        fn drop(&mut self) {
-            match self.original.take() {
-                Some(shell) => std::env::set_var("SHELL", shell),
-                None => std::env::remove_var("SHELL"),
-            }
-        }
-    }
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::sync::MutexGuard;
 
     #[test]
     fn test_new_shell_bash() {
-        let _mock = MockShellEnv::new(Some("/bin/bash"));
-
-        let cmd = ShellPty::get_default_shell().unwrap();
+        let cmd = ShellPty::get_default_shell(Some("/bin/bash")).unwrap();
 
         assert_eq!(
             format!("{:?}", cmd),
@@ -185,9 +219,7 @@ mod tests {
 
     #[test]
     fn test_new_shell_zsh() {
-        let _mock = MockShellEnv::new(Some("/bin/zsh"));
-
-        let cmd = ShellPty::get_default_shell().unwrap();
+        let cmd = ShellPty::get_default_shell(Some("/bin/zsh")).unwrap();
 
         assert_eq!(
             format!("{:?}", cmd),
@@ -197,9 +229,7 @@ mod tests {
 
     #[test]
     fn test_new_shell_sh() {
-        let _mock = MockShellEnv::new(Some("/bin/sh"));
-
-        let cmd = ShellPty::get_default_shell().unwrap();
+        let cmd = ShellPty::get_default_shell(Some("/bin/sh")).unwrap();
 
         assert_eq!(
             format!("{:?}", cmd),
@@ -209,10 +239,108 @@ mod tests {
 
     #[test]
     fn test_new_shell_no_env() {
-        let _mock = MockShellEnv::new(None);
-
-        ShellPty::get_default_shell().unwrap();
+        ShellPty::get_default_shell(None).unwrap();
     }
 
-    // TODO: tests
+    struct MockPtyHandler {
+        exit_code: Arc<Mutex<Option<u8>>>,
+        output: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl MockPtyHandler {
+        fn new() -> Self {
+            Self {
+                exit_code: Arc::new(Mutex::new(None)),
+                output: Arc::new(Mutex::new(vec![])),
+            }
+        }
+
+        fn exit_code(&mut self) -> MutexGuard<'_, Option<u8>> {
+            self.exit_code.lock().unwrap()
+        }
+
+        fn output(&mut self) -> MutexGuard<'_, Vec<u8>> {
+            self.output.lock().unwrap()
+        }
+    }
+
+    #[async_trait]
+    impl ShellPtyHandler for MockPtyHandler {
+        async fn exit(&mut self, code: u8) {
+            self.exit_code().replace(code);
+        }
+
+        async fn stdout(&mut self, data: &[u8]) {
+            self.output().extend_from_slice(data);
+        }
+    }
+
+    impl Clone for MockPtyHandler {
+        fn clone(&self) -> Self {
+            Self {
+                exit_code: Arc::clone(&self.exit_code),
+                output: Arc::clone(&self.output),
+            }
+        }
+    }
+
+    #[test]
+    fn test_shell_pty_calls_handler_with_output() {
+        let mut mock_handler = MockPtyHandler::new();
+
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let mut pty: ShellPty = ShellPty::new(
+                "",
+                Some("/bin/bash"),
+                PtySize::default(),
+                mock_handler.clone(),
+            )
+            .expect("Failed to initialise ShellPty");
+
+            std::thread::sleep(std::time::Duration::from_millis(10));
+
+            pty.write("echo 'foobar'\n".as_bytes())
+                .expect("Failed to write to shell");
+
+            pty.write("exit\n".as_bytes())
+                .expect("Failed to write to shell");
+
+            pty.wait_for_end_of_stream()
+                .await
+                .expect("Failed to exit shell");
+        });
+
+        assert!(String::from_utf8(mock_handler.output().to_vec())
+            .expect("Failed to parse stdout as utf8")
+            .replace("\r\n", "\n")
+            .contains("echo 'foobar'\nfoobar\n"));
+
+        assert_eq!(mock_handler.exit_code().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_shell_pty_exit_on_error() {
+        let mut mock_handler = MockPtyHandler::new();
+
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let mut pty: ShellPty = ShellPty::new(
+                "",
+                Some("/bin/bash"),
+                PtySize::default(),
+                mock_handler.clone(),
+            )
+            .expect("Failed to initialise ShellPty");
+
+            std::thread::sleep(std::time::Duration::from_millis(10));
+
+            pty.write("exit 1\n".as_bytes())
+                .expect("Failed to write to shell");
+
+            pty.wait_for_end_of_stream()
+                .await
+                .expect("Failed to exit shell");
+        });
+
+        assert_eq!(mock_handler.exit_code().unwrap(), 1);
+    }
 }
