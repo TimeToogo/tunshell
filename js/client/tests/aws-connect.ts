@@ -15,7 +15,7 @@ const run = async () => {
 
     if (currentSession) {
       await new DebugClient({
-        relayHost: 'relay1.debugmypipeline.com',
+        relayHost: 'relay.tunshell.com',
         relayPort: 5000,
         verifyHostName: true,
         clientKey: currentSession.clientKey,
@@ -25,7 +25,7 @@ const run = async () => {
       await new Promise((resolve, reject) => {
         const result = https.request({
           method: 'POST',
-          host: 'relay1.debugmypipeline.com',
+          host: 'relay.tunshell.com',
           port: 443,
           path: '/sessions',
         });
@@ -39,7 +39,7 @@ const run = async () => {
             fs.writeFileSync(__dirname + '/session.json', JSON.stringify(payload));
 
             new DebugClient({
-              relayHost: 'relay1.debugmypipeline.com',
+              relayHost: 'relay.tunshell.com',
               relayPort: 5000,
               verifyHostName: true,
               clientKey: payload.hostKey,

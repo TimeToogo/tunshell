@@ -1,5 +1,5 @@
 use crate::stream::TunnelStream;
-use dmp_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
+use tunshell_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
 use futures::stream::Stream;
 use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -162,7 +162,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> TunnelStream fo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmp_shared::Message;
+    use tunshell_shared::Message;
     use futures::io::Cursor;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;

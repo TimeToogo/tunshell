@@ -7,7 +7,7 @@ import {
   TlsRelayMessageDuplexStream,
   TlsRelayClientMessage,
   TlsRelayServerMessage,
-} from '@timetoogo/debug-my-pipeline--shared';
+} from '@timetoogo/tunshell--shared';
 import { formatWithOptions } from 'util';
 
 export class RelaySocket extends stream.Duplex {

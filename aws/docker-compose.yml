@@ -13,7 +13,7 @@ services:
       MONGO_INITDB_DATABASE: relay
 
   relay:
-    image: timetoogo/debug-my-pipeline-relay
+    image: timetoogo/tunshell-relay
     container_name: relay
     restart: unless-stopped
     depends_on:
@@ -27,8 +27,8 @@ services:
       MONGO_HOST: mongo
       MONGO_USER: relay
       MONGO_PASS: ${MONGO_PASSWORD}
-      TLS_RELAY_PRIVATE_KEY: /le-ssl/live/relay1.debugmypipeline.com/privkey.pem
-      TLS_RELAY_CERT: /le-ssl/live/relay1.debugmypipeline.com/fullchain.pem
+      TLS_RELAY_PRIVATE_KEY: /le-ssl/live/relay.tunshell.com/privkey.pem
+      TLS_RELAY_CERT: /le-ssl/live/relay.tunshell.com/fullchain.pem
 
   reverse_proxy:
     image: linuxserver/letsencrypt
@@ -37,8 +37,8 @@ services:
       - NET_ADMIN
     environment:
       - TZ=UTC
-      - URL=debugmypipeline.com
-      - SUBDOMAINS=relay1,lets1
+      - URL=tunshell.com
+      - SUBDOMAINS=relay,lets
       - VALIDATION=http
       - ONLY_SUBDOMAINS=true
     volumes:

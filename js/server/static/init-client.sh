@@ -1,5 +1,5 @@
 #!/bin/sh
-## === DEBUGMYPIPELINE SHELL SCRIPT ===
+## === TUNSHELL SHELL SCRIPT ===
 
 set -e
 
@@ -30,7 +30,7 @@ then
     TMPDIR="/tmp"
 fi
 
-TEMP_PATH="$TMPDIR/debugmypipeline"
+TEMP_PATH="$TMPDIR/tunshell"
 CLIENT_PATH="$TEMP_PATH/client"
 
 mkdir -p $TEMP_PATH
@@ -39,10 +39,10 @@ mkdir -p $TEMP_PATH
 echo "Installing client..."
 if [ -x "$(command -v curl)" ]
 then
-    curl -sSf https://artifacts.debugmypipeline.com/client-${TARGET} -o $CLIENT_PATH 
+    curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH 
 else
-    wget https://artifacts.debugmypipeline.com/client-${TARGET} -O $CLIENT_PATH 2> /dev/null
+    wget https://artifacts.tunshell.com/client-${TARGET} -O $CLIENT_PATH 2> /dev/null
 fi
 chmod +x $CLIENT_PATH
 
-DMP_KEY='__KEY__' $CLIENT_PATH
+TUNSHELL_KEY='__KEY__' $CLIENT_PATH

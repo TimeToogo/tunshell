@@ -1,7 +1,7 @@
 FROM node:lts-slim
 
-COPY server/ /app/server/
-COPY shared/ /app/shared/
+COPY js/server/ /app/server/
+COPY js/shared/ /app/shared/
 
 WORKDIR /app/shared
 

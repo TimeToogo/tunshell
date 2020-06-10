@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "dmp-client",
-    "dmp-shared",
-    "dmp-server",
+    "tunshell-client",
+    "tunshell-shared",
+    "tunshell-server",
 ]

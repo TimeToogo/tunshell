@@ -1,5 +1,5 @@
 {
-  "name": "@timetoogo/debug-my-pipeline--relay",
+  "name": "@timetoogo/tunshell--relay",
   "license": "MIT",
   "scripts": {
     "prebuild": "rimraf dist",
@@ -13,7 +13,7 @@
     "@nestjs/core": "^7.0.9",
     "@nestjs/mongoose": "^6.4.0",
     "@nestjs/platform-express": "^7.0.9",
-    "@timetoogo/debug-my-pipeline--shared": "file:../shared",
+    "@timetoogo/tunshell--shared": "file:../shared",
     "dotenv": "^8.2.0",
     "lodash": "^4.17.15",
     "mongoose": "^5.9.11",

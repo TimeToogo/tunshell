@@ -1,12 +1,12 @@
 {
-  "name": "@timetoogo/debug-my-pipeline--client",
+  "name": "@timetoogo/tunshell--client",
   "scripts": {
     "test": "jest",
     "build": "rimraf dist artifacts && webpack && node build/index.js"
   },
   "bin": "dist/bundle.js",
   "dependencies": {
-    "@timetoogo/debug-my-pipeline--shared": "file:../shared",
+    "@timetoogo/tunshell--shared": "file:../shared",
     "chalk": "^4.0.0",
     "node-pty": "^0.9.0",
     "ssh2": "^0.8.9"

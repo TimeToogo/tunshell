@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - enhancement/rust
 
 jobs:
   build_test_deploy:
@@ -14,19 +15,19 @@ jobs:
       with:
         node-version: 12
     - run: npm ci
-      working-directory: shared
+      working-directory: js/shared
     - run: npm run test
-      working-directory: shared
+      working-directory: js/shared
     - run: npm run build
-      working-directory: shared
+      working-directory: js/shared
     - run: npm ci
-      working-directory: server
+      working-directory: js/server
     - run: npm run test -- --forceExit
-      working-directory: server
+      working-directory: js/server
     - name: Publish to Docker Hub
       uses: elgohr/Publish-Docker-Github-Action@master
       with:
-        name: timetoogo/debug-my-pipeline-relay
+        name: timetoogo/tunshell-relay
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         tag_names: true

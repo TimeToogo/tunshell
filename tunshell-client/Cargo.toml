@@ -1,5 +1,5 @@
 [package]
-name = "dmp-client"
+name = "tunshell-client"
 version = "0.1.0"
 authors = ["Elliot Levin <elliotlevin@hotmail.com>"]
 edition = "2018"
@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dmp-shared = { path = "../dmp-shared" }
+tunshell-shared = { path = "../tunshell-shared" }
 anyhow = "1.0.31"
 thrussh = { git = 'https://github.com/TimeToogo/thrussh-fork' }
 tokio = { version = "0.2.21", features=["blocking"] }

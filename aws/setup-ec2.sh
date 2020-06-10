@@ -3,7 +3,7 @@
 
 set -e
 
-echo "Setting up debug-my-pipeline server..."
+echo "Setting up tunshell server..."
 
 if [[ ! $(which docker) ]]
 then
@@ -20,9 +20,9 @@ fi
 
 export MONGO_PASSWORD=$(cat mongo_password)
 
-curl https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/docker-compose.yml > docker-compose.yml
-curl https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/mongo_init.js > mongo_init.js
-curl https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/nginx.conf > nginx.conf
+curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/docker-compose.yml > docker-compose.yml
+curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/mongo_init.js > mongo_init.js
+curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/nginx.conf > nginx.conf
 
 mkdir -p config/nginx/site-confs/
 mv nginx.conf config/nginx/site-confs/default

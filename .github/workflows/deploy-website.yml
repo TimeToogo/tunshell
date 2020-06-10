@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - enhancement/rust
 
 jobs:
   build_and_deploy:
@@ -19,7 +20,7 @@ jobs:
       working-directory: website
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3
-      run: aws s3 sync --delete out/ s3://debugmypipeline.com/ --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE 
+      run: aws s3 sync --delete out/ s3://tunshell.com/ --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE 
       working-directory: website
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}

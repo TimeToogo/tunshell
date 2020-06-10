@@ -15,7 +15,7 @@ export default function Home() {
     setSessionKeys(undefined);
 
     try {
-      const response = await fetch('https://relay1.debugmypipeline.com/sessions', { method: 'POST' });
+      const response = await fetch('https://relay.tunshell.com/sessions', { method: 'POST' });
 
       setSessionKeys(await response.json());
     } finally {
@@ -26,12 +26,12 @@ export default function Home() {
   return (
     <div className="container">
       <Head>
-        <title>Debug my pipeline</title>
+        <title>Tunshell</title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <main>
-        <h1 className="title">Welcome to Debug My Pipeline</h1>
+        <h1 className="title">Welcome to Tunshell</h1>
 
         <ol>
           <li>
@@ -43,13 +43,13 @@ export default function Home() {
           {sessionKeys && (
             <>
               <li>
-                Run this command on your <strong>pipeline</strong>:
-                <pre>sh &lt;(curl -sSf https://lets1.debugmypipeline.com/{sessionKeys.hostKey}.sh)</pre>
+                Run this command on the <strong>target host</strong>:
+                <pre>sh &lt;(curl -sSf https://lets.tunshell.com/{sessionKeys.hostKey}.sh)</pre>
               </li>
 
               <li>
-                Run this command on your <strong>local machine</strong>:
-                <pre>sh &lt;(curl -sSf https://lets1.debugmypipeline.com/{sessionKeys.clientKey}.sh)</pre>
+                Run this command on your <strong>local host</strong>:
+                <pre>sh &lt;(curl -sSf https://lets.tunshell.com/{sessionKeys.clientKey}.sh)</pre>
               </li>
             </>
           )}

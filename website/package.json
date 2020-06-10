@@ -1,5 +1,5 @@
 {
-  "name": "@timetoogo/debug-my-pipeline--website",
+  "name": "@timetoogo/tunshell--website",
   "scripts": {
     "dev": "next dev -p 3003",
     "export": "next build && next export"

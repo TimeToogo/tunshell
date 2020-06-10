@@ -6,7 +6,7 @@ describe('ScriptController', () => {
 
     const result = await controller.getScript('my-test-key.sh');
 
-    expect(result).toContain('=== DEBUGMYPIPELINE SHELL SCRIPT ===');
+    expect(result).toContain('=== TUNSHELL SHELL SCRIPT ===');
     expect(result).toContain('my-test-key');
   });
 
@@ -15,7 +15,7 @@ describe('ScriptController', () => {
 
     const result = await controller.getScript('my-test-key.cmd');
 
-    expect(result).toContain('=== DEBUGMYPIPELINE CMD SCRIPT ===');
+    expect(result).toContain('=== TUNSHELL CMD SCRIPT ===');
     expect(result).toContain('my-test-key');
   });
 

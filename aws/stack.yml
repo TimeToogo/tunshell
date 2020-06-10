@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation template for deploying an EC2 instance for remote debugging pipelines
+Description: CloudFormation template for deploying an EC2 instance for tunshell relays
 Parameters:
   InstanceType:
     Description: EC2 instance type
@@ -57,7 +57,7 @@ Resources:
             sudo mkdir /app
             sudo chown -R $USER:$USER /app
             cd /app 
-            wget https://raw.githubusercontent.com/TimeToogo/debug-my-pipeline/master/aws/setup-ec2.sh
+            wget https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/setup-ec2.sh
             chmod +x setup-ec2.sh
             sh setup-ec2.sh
       InstanceType:

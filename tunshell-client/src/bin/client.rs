@@ -1,5 +1,5 @@
-use dmp_client::Client;
-use dmp_client::Config;
+use tunshell_client::Client;
+use tunshell_client::Config;
 use env_logger;
 use log::error;
 use std::process::exit;

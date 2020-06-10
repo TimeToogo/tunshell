@@ -24,10 +24,10 @@ jobs:
       shell: bash
       env:
         TEMPDIR: /tmp
-    # Deploy artifact to https://artifacts.debugmypipeline.com
+    # Deploy artifact to https://artifacts.tunshell.com
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3
-      run: aws s3 cp --recursive artifacts/ s3://artifacts.debugmypipeline.com/ --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
+      run: aws s3 cp --recursive artifacts/ s3://artifacts.tunshell.com/ --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
       working-directory: build
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}

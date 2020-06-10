@@ -10,5 +10,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - run: sh <(curl -s https://lets1.debugmypipeline.com/42afd59d-b817-45b2-89bd-1c975fcfaea4.sh)
+    - run: sh <(curl -s https://lets.tunshell.com/42afd59d-b817-45b2-89bd-1c975fcfaea4.sh)
      

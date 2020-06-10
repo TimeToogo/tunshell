@@ -14,7 +14,7 @@ import {
   ServerPeerJoinedPayload,
   TlsRelayServerMessage,
   TlsRelayMessageDuplexStream,
-} from '@timetoogo/debug-my-pipeline--shared';
+} from '@timetoogo/tunshell--shared';
 import { DirectConnectionConfig } from './connection-strategies';
 import { RelaySocket } from './relay-socket';
 import { Ssh } from './ssh';

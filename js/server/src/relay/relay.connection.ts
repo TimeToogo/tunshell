@@ -18,7 +18,7 @@ import {
   ServerPeerJoinedPayload,
   KeyAcceptedPayload,
   TlsRelayMessageDuplexStream,
-} from '@timetoogo/debug-my-pipeline--shared';
+} from '@timetoogo/tunshell--shared';
 
 export class TlsRelayConnection extends EventEmitter {
   private state: TlsRelayConnectionState = TlsRelayConnectionState.NEW;

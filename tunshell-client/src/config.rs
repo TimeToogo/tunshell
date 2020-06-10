@@ -8,11 +8,11 @@ pub struct Config {
 
 impl Config {
     pub fn new_from_env() -> Self {
-        let client_key = env::var("DMP_KEY").expect("DMP_KEY environment variable must be set");
+        let client_key = env::var("TUNSHELL_KEY").expect("TUNSHELL_KEY environment variable must be set");
 
         Self {
             client_key,
-            relay_host: "relay1.debugmypipeline.com".to_owned(),
+            relay_host: "relay.tunshell.com".to_owned(),
             relay_port: 5000,
         }
     }
@@ -56,7 +56,7 @@ mod tests {
     }
 
     fn test_new_from_env_with_var() {
-        env::set_var("DMP_KEY", "Example key");
+        env::set_var("TUNSHELL_KEY", "Example key");
 
         let config = Config::new_from_env();
 
@@ -66,7 +66,7 @@ mod tests {
     }
 
     fn test_should_panic_without_key_env_var() {
-        env::remove_var("DMP_KEY");
+        env::remove_var("TUNSHELL_KEY");
 
         Config::new_from_env();
     }

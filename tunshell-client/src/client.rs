@@ -1,6 +1,6 @@
 use crate::{Config, RelayStream, SshClient, SshCredentials, SshServer, TunnelStream};
 use anyhow::{Error, Result};
-use dmp_shared::*;
+use tunshell_shared::*;
 use futures::stream::StreamExt;
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
@@ -45,13 +45,13 @@ impl<'a> Client<'a> {
                 SshServer::new()?
                     .run(
                         peer_socket,
-                        SshCredentials::new("dmp", self.config.client_key()),
+                        SshCredentials::new("tunshell", self.config.client_key()),
                     )
                     .await?
             }
             KeyType::Client => {
                 SshClient::new()?
-                    .connect(peer_socket, SshCredentials::new("dmp", &peer_info.peer_key))
+                    .connect(peer_socket, SshCredentials::new("tunshell", &peer_info.peer_key))
                     .await?
             }
         };
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_connect_to_relay_server() {
-        let config = Config::new("test", "relay1.debugmypipeline.com", 5000);
+        let config = Config::new("test", "relay.tunshell.com", 5000);
         let mut client = Client::new(&config);
 
         let result = Runtime::new().unwrap().block_on(client.connect_to_relay());

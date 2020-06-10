@@ -10,15 +10,15 @@ export interface DebugClientConfig {
 }
 
 export const getDefaultConfig = (): DebugClientConfig => {
-  if (!process.env.DEBUGMYPIPELINE_KEY) {
-    console.error(chalk.red(`Could not find DEBUGMYPIPELINE_KEY env var`));
+  if (!process.env.TUNSHELL_KEY) {
+    console.error(chalk.red(`Could not find TUNSHELL_KEY env var`));
     process.exit(1);
   }
 
   return {
-    relayHost: 'relay1.debugmypipeline.com',
+    relayHost: 'relay.tunshell.com',
     relayPort: 5000,
-    clientKey: process.env.DEBUGMYPIPELINE_KEY,
+    clientKey: process.env.TUNSHELL_KEY,
     verifyHostName: true,
     directConnectStrategies: [],
   };

@@ -59,7 +59,7 @@ do
       export CFLAGS="-I$MUSL_PREFIX/include $CFLAGS"
    fi
 
-   cat > $SCRIPT_DIR/../dmp-client/.cargo/config << EOF
+   cat > $SCRIPT_DIR/../tunshell-client/.cargo/config << EOF
 [target.$RUST_TARGET]
 linker = "$CC"
 EOF
@@ -97,8 +97,8 @@ EOF
    export SODIUM_STATIC=1
    export PKG_CONFIG_ALL_STATIC=1
 
-   echo "Compiling dmp-client for $RUST_TARGET..."
-   cd $SCRIPT_DIR/../dmp-client
+   echo "Compiling tunshell-client for $RUST_TARGET..."
+   cd $SCRIPT_DIR/../tunshell-client
    cargo build --release --target $RUST_TARGET
    cp $SCRIPT_DIR/../target/$RUST_TARGET/release/client $SCRIPT_DIR/artifacts/client-$RUST_TARGET
 done

@@ -12,7 +12,7 @@ import {
   TlsRelayServerMessageType,
   TlsRelayClientMessageType,
   ClientTimePayload,
-} from '@timetoogo/debug-my-pipeline--shared';
+} from '@timetoogo/tunshell--shared';
 
 const mockConfig = (config: Partial<TlsRelayConfig['connection']> = {}): TlsRelayConfig['connection'] =>
   _.defaultsDeep(config, {

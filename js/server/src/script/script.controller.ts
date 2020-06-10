@@ -6,7 +6,7 @@ const SCRIPTS = {
   cmd: fs.readFileSync(process.cwd() + `/static/init-client.cmd`).toString('utf8'),
 };
 
-@Controller({ host: 'lets1.debugmypipeline.com' })
+@Controller({ host: 'lets.tunshell.com' })
 export class ScriptController {
   @Get('/:key')
   async getScript(@Param('key') keyWithExt: string): Promise<string> {
