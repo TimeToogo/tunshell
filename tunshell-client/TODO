@@ -1,7 +1,8 @@
 tunshell todo:
 
-1. clean up code 
-2. direct connections
-3. fix up "early eof" error on client by fixing the handling server-side
-4. re-write server in Rust
-5. documentation
+ - clean up code / tests
+ - direct connections
+ - get compiling on windows
+ - fix up "early eof" error on client by fixing the handling server-side
+ - re-write server in Rust
+ - documentation

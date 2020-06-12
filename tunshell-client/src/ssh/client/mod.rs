@@ -105,7 +105,7 @@ impl SshClient {
                        return Err(err);
                    }
                 },
-                message = channel.wait() => match message {
+                ssh_message = channel.wait() => match ssh_message {
                     Some(thrussh::ChannelMsg::Data { data }) => {
                         info!("received {} bytes from ssh channel", data.len());
                         stdout.write(&data[..]).await?;

@@ -217,3 +217,11 @@ impl Drop for HostShell {
             .unwrap_or_else(|err| debug!("Failed to disable terminal raw mode: {:?}", err));
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
+    // use tokio::runtime::Runtime;
+
+}

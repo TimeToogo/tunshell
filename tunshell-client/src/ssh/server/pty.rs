@@ -297,7 +297,7 @@ mod tests {
             )
             .expect("Failed to initialise ShellPty");
 
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::thread::sleep(std::time::Duration::from_millis(500));
 
             pty.write("echo 'foobar'\n".as_bytes())
                 .expect("Failed to write to shell");

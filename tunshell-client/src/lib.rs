@@ -1,9 +1,11 @@
-mod config;
 mod client;
-mod stream;
+mod config;
+mod p2p;
 mod ssh;
+mod stream;
 
-pub use config::*;
 pub use client::*;
-pub use stream::*;
+pub use config::*;
+pub use p2p::*;
 pub use ssh::*;
+pub use stream::*;

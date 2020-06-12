@@ -75,6 +75,7 @@ impl<'a> Client<'a> {
             .unwrap();
 
         let network_stream = TcpStream::connect(&relay_addr).await?;
+        network_stream.set_keepalive(Some(std::time::Duration::from_secs(30)))?;
         let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
 
         Ok(transport_stream)
@@ -184,5 +185,18 @@ mod tests {
         let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
 
         result.unwrap();
+    }
+
+    #[test]
+    fn test_send_invalid_key() {
+        let config = Config::new("invalid_key", "relay.tunshell.com", 5000);
+        let mut client = Client::new(&config);
+
+        let result = Runtime::new().unwrap().block_on(client.start_session());
+
+        match result {
+            Ok(_) => panic!("should not return ok"),
+            Err(err) => assert_eq!(err.to_string(), "The session key has expired or is invalid"),
+        }
     }
 }

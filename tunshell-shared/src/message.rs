@@ -62,6 +62,8 @@ pub struct PeerJoinedPayload {
 #[serde(rename_all = "camelCase")]
 pub struct AttemptDirectConnectPayload {
     pub connect_at: u64,
+    pub peer_listen_port: u16,
+    pub self_listen_port: u16,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -343,17 +345,20 @@ mod tests {
 
     #[test]
     fn test_server_serialise_attempt_direct_connect() {
-        let message =
-            ServerMessage::AttemptDirectConnect(AttemptDirectConnectPayload { connect_at: 12345 });
+        let message = ServerMessage::AttemptDirectConnect(AttemptDirectConnectPayload {
+            connect_at: 12345,
+            peer_listen_port: 12,
+            self_listen_port: 123,
+        });
 
         let raw_message = message.serialise().unwrap();
 
         assert_eq!(raw_message.type_id, 6);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
-            r#"{"connectAt":12345}"#
+            r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#
         );
-        assert_eq!(raw_message.length, 19);
+        assert_eq!(raw_message.length, 60);
     }
 
     #[test]
@@ -450,13 +455,22 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_attempt_direct_connect() {
-        let raw_message = RawMessage::new(6, Vec::from(r#"{"connectAt": 12345}"#.as_bytes()));
+        let raw_message = RawMessage::new(
+            6,
+            Vec::from(
+                r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#.as_bytes(),
+            ),
+        );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
         assert_eq!(
             message,
-            ServerMessage::AttemptDirectConnect(AttemptDirectConnectPayload { connect_at: 12345 })
+            ServerMessage::AttemptDirectConnect(AttemptDirectConnectPayload {
+                connect_at: 12345,
+                peer_listen_port: 12,
+                self_listen_port: 123,
+            })
         )
     }
 
@@ -514,7 +528,10 @@ mod tests {
         let raw_message = message.serialise().unwrap();
 
         assert_eq!(raw_message.type_id, 2);
-        assert_eq!(raw_message.data, Vec::from(r#"{"clientTime":12345}"#.as_bytes()));
+        assert_eq!(
+            raw_message.data,
+            Vec::from(r#"{"clientTime":12345}"#.as_bytes())
+        );
         assert_eq!(raw_message.length, 20);
     }
 
@@ -582,7 +599,10 @@ mod tests {
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
-        assert_eq!(message, ClientMessage::Time(TimePayload { client_time: 12345 }));
+        assert_eq!(
+            message,
+            ClientMessage::Time(TimePayload { client_time: 12345 })
+        );
     }
 
     #[test]
