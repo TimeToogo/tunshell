@@ -1,4 +1,7 @@
-use crate::{Config, RelayStream, SshClient, SshCredentials, SshServer, TunnelStream};
+use crate::{
+    Config, P2PConnection, RelayStream, SshClient, SshCredentials, SshServer, TcpConnection,
+    TunnelStream,
+};
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
 use std::net::ToSocketAddrs;
@@ -165,9 +168,25 @@ impl<'a> Client<'a> {
     async fn attempt_direct_connection(
         &mut self,
         _message_stream: &mut ClientMessageStream,
-        _peer_info: &PeerJoinedPayload,
-        _connection_info: &AttemptDirectConnectPayload,
+        peer_info: &PeerJoinedPayload,
+        connection_info: &AttemptDirectConnectPayload,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
+        println!("Attempting direct connection to {}", peer_info.peer_ip_address);
+        let current_timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let sleep_duration = std::cmp::max(0, connection_info.connect_at - current_timestamp);
+        std::thread::sleep(std::time::Duration::from_millis(sleep_duration));
+
+        let tcp_future = TcpConnection::connect(&peer_info, &connection_info);
+
+        tokio::select! {
+            connection = tcp_future => if let Ok(connection) = connection {
+                return Ok(Some(Box::new(connection)))
+            }
+        };
+
         Ok(None)
     }
 }
