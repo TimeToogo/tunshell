@@ -167,7 +167,9 @@ impl ShellPty {
 
 impl ShellState {
     fn handle_exit(&self) -> Result<()> {
-        if self.exit_status.lock().unwrap().is_some() {
+        let mut exit_status = self.exit_status.lock().unwrap();
+
+        if exit_status.is_some() {
             return Ok(());
         }
 
@@ -181,7 +183,7 @@ impl ShellState {
             Err(err) => return Err(Error::new(err)),
         };
 
-        self.exit_status.lock().unwrap().replace(status);
+        exit_status.replace(status);
 
         Ok(())
     }
@@ -297,7 +299,7 @@ mod tests {
             )
             .expect("Failed to initialise ShellPty");
 
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_millis(1000));
 
             pty.write("echo 'foobar'\n".as_bytes())
                 .expect("Failed to write to shell");
