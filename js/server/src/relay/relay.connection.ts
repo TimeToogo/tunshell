@@ -19,6 +19,7 @@ import {
   KeyAcceptedPayload,
   TlsRelayMessageDuplexStream,
 } from '@timetoogo/tunshell--shared';
+import _ = require('lodash');
 
 export class TlsRelayConnection extends EventEmitter {
   private state: TlsRelayConnectionState = TlsRelayConnectionState.NEW;
@@ -137,7 +138,7 @@ export class TlsRelayConnection extends EventEmitter {
             reject(
               new Error(
                 `Connection timed out while waiting for ${types
-                  .map((i) => TlsRelayClientMessageType[i])
+                  .map(i => TlsRelayClientMessageType[i])
                   .join(', ')} messages`,
               ),
             );
@@ -224,11 +225,17 @@ export class TlsRelayConnection extends EventEmitter {
     };
   };
 
-  public attemptDirectConnect = async (coordinatedPeerTime: number): Promise<boolean> => {
-    await this.sendJsonMessage<ServerDirectConnectAttemptPayload>({
+  public attemptDirectConnect = async (
+    coordinatedPeerTime: number,
+    selfListenPort: number = undefined,
+    peerListenPort: number = undefined,
+  ): Promise<boolean> => {
+      await this.sendJsonMessage<ServerDirectConnectAttemptPayload>({
       type: TlsRelayServerMessageType.ATTEMPT_DIRECT_CONNECT,
       data: {
         connectAt: coordinatedPeerTime,
+        selfListenPort: selfListenPort || _.random(20000, 40000),
+        peerListenPort: peerListenPort || _.random(20000, 40000),
       },
     });
 
@@ -309,7 +316,7 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     return new Promise<void>((resolve, reject) =>
-      this.messageStream.write(message, (err) => (err ? reject(err) : resolve())),
+      this.messageStream.write(message, err => (err ? reject(err) : resolve())),
     );
   };
 
@@ -319,16 +326,16 @@ export class TlsRelayConnection extends EventEmitter {
     }
 
     return new Promise<void>((resolve, reject) =>
-      this.messageStream.writeJson(message, null, (err) => (err ? reject(err) : resolve())),
+      this.messageStream.writeJson(message, null, err => (err ? reject(err) : resolve())),
     );
   };
 
   private handleUnexpectedMessage = (message: TlsRelayClientMessage) => {
     this.handleError(
       new Error(
-        `Unexpected message received while in connection state ${TlsRelayConnectionState[this.state]}: ${
-          TlsRelayClientMessageType[message.type] || 'unknown'
-        }`,
+        `Unexpected message received while in connection state ${
+          TlsRelayConnectionState[this.state]
+        }: ${TlsRelayClientMessageType[message.type] || 'unknown'}`,
       ),
     );
   };

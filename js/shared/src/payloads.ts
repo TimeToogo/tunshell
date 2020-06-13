@@ -1,6 +1,8 @@
 
 export interface ServerDirectConnectAttemptPayload {
   connectAt: number
+  selfListenPort: number
+  peerListenPort: number
 }
 
 export interface ServerPeerJoinedPayload {

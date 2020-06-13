@@ -70,8 +70,10 @@ impl P2PConnection for TcpConnection {
 
         let peer_addr =
             peer_info.peer_ip_address.clone() + ":" + &connection_info.peer_listen_port.to_string();
+
         let connect_future = TcpStream::connect(peer_addr)
             .or_else(|_| futures::future::pending::<std::io::Result<TcpStream>>());
+
         let listen_future = listener.accept().or_else(|_| {
             futures::future::pending::<std::io::Result<(TcpStream, std::net::SocketAddr)>>()
         });
@@ -79,8 +81,6 @@ impl P2PConnection for TcpConnection {
         tokio::select! {
             socket = connect_future => if let Ok(socket) = socket {
                 return Ok(TcpConnection { socket });
-            } else {
-                println!("{:?}", socket)
             },
             socket = listen_future => if let Ok((socket, _)) = socket {
                 return Ok(TcpConnection { socket })
@@ -215,6 +215,57 @@ mod tests {
             );
 
             assert!(result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_connect_simultaneous_open() {
+        Runtime::new().unwrap().block_on(async {
+            let peer_info = PeerJoinedPayload {
+                peer_ip_address: "127.0.0.1".to_owned(),
+                peer_key: "test".to_owned(),
+            };
+
+            let connection1 = TcpConnection::connect(
+                &peer_info,
+                &AttemptDirectConnectPayload {
+                    connect_at: 1,
+                    peer_listen_port: 22664,
+                    self_listen_port: 22665,
+                },
+            );
+
+            let connection2 = TcpConnection::connect(
+                &peer_info,
+                &AttemptDirectConnectPayload {
+                    connect_at: 1,
+                    peer_listen_port: 22665,
+                    self_listen_port: 22664,
+                },
+            );
+
+            let (mut connection1, mut connection2) =
+                futures::try_join!(connection1, connection2).expect("failed to connect");
+
+            connection1.write("hello from 1".as_bytes()).await.unwrap();
+
+            let mut buff = [0; 1024];
+            let read = connection2.read(&mut buff).await.unwrap();
+
+            assert_eq!(
+                String::from_utf8(buff[..read].to_vec()).unwrap(),
+                "hello from 1"
+            );
+
+            connection2.write("hello from 2".as_bytes()).await.unwrap();
+
+            let mut buff = [0; 1024];
+            let read = connection1.read(&mut buff).await.unwrap();
+
+            assert_eq!(
+                String::from_utf8(buff[..read].to_vec()).unwrap(),
+                "hello from 2"
+            );
         });
     }
 }

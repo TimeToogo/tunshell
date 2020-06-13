@@ -137,7 +137,7 @@ impl ShellPty {
                         info!("finished reading from pty");
 
                         state
-                            .handle_exit()
+                            .handle_exit(true)
                             .unwrap_or_else(|err| error!("Failed to exit shell: {}", err));
 
                         handler
@@ -161,12 +161,12 @@ impl ShellPty {
     }
 
     fn exit_sync(&mut self) -> Result<()> {
-        self.state.handle_exit()
+        self.state.handle_exit(false)
     }
 }
 
 impl ShellState {
-    fn handle_exit(&self) -> Result<()> {
+    fn handle_exit(&self, wait_for_exit: bool) -> Result<()> {
         let mut exit_status = self.exit_status.lock().unwrap();
 
         if exit_status.is_some() {
@@ -174,13 +174,20 @@ impl ShellState {
         }
 
         let mut shell = self.shell.lock().unwrap();
-        let status = match shell.try_wait() {
-            Ok(None) => {
-                shell.kill().expect("Failed to shutdown shell");
-                portable_pty::ExitStatus::with_exit_code(1)
+        let status = if wait_for_exit {
+            match shell.wait() {
+                Ok(status) => status,
+                Err(err) => return Err(Error::new(err)),
             }
-            Ok(Some(status)) => status,
-            Err(err) => return Err(Error::new(err)),
+        } else {
+            match shell.try_wait() {
+                Ok(None) => {
+                    shell.kill().expect("Failed to shutdown shell");
+                    portable_pty::ExitStatus::with_exit_code(1)
+                }
+                Ok(Some(status)) => status,
+                Err(err) => return Err(Error::new(err)),
+            }
         };
 
         exit_status.replace(status);

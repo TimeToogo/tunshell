@@ -127,7 +127,7 @@ describe('TlsRelayConnection', () => {
         'data',
         serialiser.serialiseJson({
           type: TlsRelayClientMessageType.KEY,
-          data: {"key": "12345678900987654321"},
+          data: { key: '12345678900987654321' },
         }),
       );
 
@@ -223,7 +223,7 @@ describe('TlsRelayConnection', () => {
     const peer = ({
       getKey: () => 'peer-key',
       getSocket: () => ({ remoteAddress: 'peer-ip' }),
-      notifyPeerClosed: () => {}
+      notifyPeerClosed: () => {},
     } as any) as TlsRelayConnection;
 
     try {
@@ -313,13 +313,15 @@ describe('TlsRelayConnection', () => {
         10,
       );
 
-      const result = await connection.attemptDirectConnect(coordinatedTime);
+      const result = await connection.attemptDirectConnect(coordinatedTime, 1, 2);
 
       expect(result).toBe(true);
       expect(serialiser.deserialiseJson(socket.write.mock.calls[0][0] as Buffer)).toStrictEqual({
         type: TlsRelayServerMessageType.ATTEMPT_DIRECT_CONNECT,
         data: {
           connectAt: coordinatedTime,
+          selfListenPort: 1,
+          peerListenPort: 2,
         },
       });
       expect(connection.getState()).toBe(TlsRelayConnectionState.DIRECT_CONNECTION);
@@ -349,13 +351,15 @@ describe('TlsRelayConnection', () => {
         10,
       );
 
-      const result = await connection.attemptDirectConnect(coordinatedTime);
+      const result = await connection.attemptDirectConnect(coordinatedTime, 1, 2);
 
       expect(result).toBe(false);
       expect(serialiser.deserialiseJson(socket.write.mock.calls[0][0] as Buffer)).toStrictEqual({
         type: TlsRelayServerMessageType.ATTEMPT_DIRECT_CONNECT,
         data: {
           connectAt: coordinatedTime,
+          selfListenPort: 1,
+          peerListenPort: 2,
         },
       });
       expect(connection.getState()).toBe(TlsRelayConnectionState.DIRECT_CONNECT_FAILED);
@@ -404,7 +408,7 @@ describe('TlsRelayConnection', () => {
         10,
       );
 
-      const result = await connection.attemptDirectConnect(coordinatedTime);
+      const result = await connection.attemptDirectConnect(coordinatedTime, 1, 2);
 
       expect(result).toBe(true);
 
@@ -414,6 +418,8 @@ describe('TlsRelayConnection', () => {
         type: TlsRelayServerMessageType.ATTEMPT_DIRECT_CONNECT,
         data: {
           connectAt: coordinatedTime,
+          selfListenPort: 1,
+          peerListenPort: 2,
         },
       });
       expect(serialiser.deserialise(socket.write.mock.calls[1][0] as Buffer)).toStrictEqual({
