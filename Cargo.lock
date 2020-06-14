@@ -1197,6 +1197,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "byteorder",
  "crossterm",
  "cryptovec",
  "env_logger",
@@ -1210,6 +1211,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tunshell-shared",
+ "twox-hash",
  "webpki",
  "webpki-roots",
 ]
@@ -1228,6 +1230,15 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "twox-hash"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bfd5b7557925ce778ff9b9ef90e3ade34c524b5ff10e239c69a42d546d2af56"
+dependencies = [
+ "rand",
 ]
 
 [[package]]

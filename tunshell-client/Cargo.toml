@@ -10,7 +10,7 @@ edition = "2018"
 tunshell-shared = { path = "../tunshell-shared" }
 anyhow = "1.0.31"
 thrussh = { git = 'https://github.com/TimeToogo/thrussh-fork' }
-tokio = { version = "0.2.21", features=["blocking", "dns", "time"] }
+tokio = { version = "0.2.21", features=["blocking", "dns", "time", "udp"] }
 tokio-rustls = "0.13.1"
 webpki = "0.21.2"
 webpki-roots = "0.19.0"
@@ -24,3 +24,5 @@ log = "0.4.8"
 env_logger = "0.7.1"
 libc = "0.2.71"
 async-trait = "0.1.33"
+twox-hash = "1.5.0"
+byteorder = "1.3.4"

@@ -90,7 +90,7 @@ impl P2PConnection for TcpConnection {
             }
         };
 
-        return Err(Error::msg("Direct TCP connection failed"));
+        Err(Error::msg("Direct TCP connection failed"))
     }
 }
 
