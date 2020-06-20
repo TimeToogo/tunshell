@@ -1,8 +1,8 @@
 tunshell todo:
 
  - clean up code / tests
- - direct connections
- - get compiling on windows
+ - finalise implementation for reliable-UDP protocol
+ - replace thrussh with custom protocol over TLS
  - fix up "early eof" error on client by fixing the handling server-side
  - re-write server in Rust
  - documentation

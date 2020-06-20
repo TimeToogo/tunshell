@@ -1202,6 +1202,7 @@ dependencies = [
  "cryptovec",
  "env_logger",
  "futures",
+ "lazy_static",
  "libc",
  "log",
  "portable-pty",

@@ -11,7 +11,8 @@ use std::hash::Hasher;
 use std::io::Cursor;
 use std::io::Result as IoResult;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
+use std::time::{Duration, Instant};
 use thrussh::Tcp;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::udp::{RecvHalf, SendHalf};
@@ -19,19 +20,32 @@ use tokio::net::UdpSocket;
 use tunshell_shared::{AttemptDirectConnectPayload, PeerJoinedPayload};
 
 const MAX_RECV_BUFF: u32 = 102400;
-const RECV_TIMEOUT: u16 = 30;
+const RECV_TIMEOUT: u16 = 10;
+const SEND_TIMEOUT: u16 = 10;
+const MAX_PACKET_SIZE: usize = 576;
+const UDP_MESSAGE_HEADER_SIZE: usize = 4 + 4 + 4 + 2 + 4;
+const DEFAULT_RTT_ESTIMATE: u16 = 3000;
 
 pub struct UdpConnection {
     recv_sequence_number: u32,
     recv_message_buff: Vec<UdpMessage>,
     recv_buff: Vec<u8>,
-    recv_state: Option<UdpRecvState>,
     send_sequence_number: u32,
-    send_buff: Vec<UdpMessage>,
-    sent_buff: Vec<UdpMessage>,
-    send_state: Option<UdpSendState>,
+    send_buff: Vec<u8>,
+    sending_packet: Option<UdpMessage>,
+    sent_packets: Vec<SentPacket>,
     peer_ack_number: u32,
     peer_window: u32,
+    send_zero_window_waker: Option<Waker>,
+    rtt_estimate: Duration,
+    recv_state: Option<UdpRecvState>,
+    send_state: Option<UdpSendState>,
+}
+
+#[derive(Debug, PartialEq)]
+struct SentPacket {
+    packet: UdpMessage,
+    sent_at: Instant,
 }
 
 enum UdpRecvState {
@@ -44,7 +58,7 @@ enum UdpSendState {
     Waiting(BoxFuture<'static, (SendHalf, IoResult<usize>)>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct UdpMessage {
     sequence_number: u32,
     ack_number: u32,
@@ -54,10 +68,8 @@ struct UdpMessage {
     payload: Vec<u8>,
 }
 
-const UDP_MESSAGE_HEADER_SIZE: usize = 4 + 4 + 4 + 2 + 4;
-
 impl UdpMessage {
-    fn from(data: Vec<u8>) -> (IoResult<UdpMessage>, Vec<u8>) {
+    fn parse(data: Vec<u8>) -> (IoResult<UdpMessage>, Vec<u8>) {
         if data.len() < UDP_MESSAGE_HEADER_SIZE {
             error!("received packet is too small: {}", data.len());
             return (
@@ -102,6 +114,31 @@ impl UdpMessage {
         };
 
         return (Ok(message), data);
+    }
+
+    fn create(
+        sequence_number: u32,
+        ack_number: u32,
+        window: u32,
+        peer_window: u32,
+        mut buff: Vec<u8>,
+    ) -> (UdpMessage, Vec<u8>) {
+        let length = std::cmp::min(buff.len(), MAX_PACKET_SIZE - UDP_MESSAGE_HEADER_SIZE) as u16;
+        let length = std::cmp::min(length as u32, peer_window) as u16;
+        let payload = buff.drain(..(length as usize)).collect::<Vec<u8>>();
+
+        let mut message = UdpMessage {
+            sequence_number,
+            ack_number,
+            window,
+            length,
+            checksum: 0,
+            payload,
+        };
+
+        message.checksum = message.calculate_checksum();
+
+        return (message, buff);
     }
 
     fn to_vec(&self) -> Vec<u8> {
@@ -150,7 +187,7 @@ impl UdpMessage {
 }
 
 impl UdpConnection {
-    fn new(socket: UdpSocket) -> Self {
+    fn new(socket: UdpSocket, rtt_estimate: Option<Duration>) -> Self {
         let (recv, send) = socket.split();
 
         Self {
@@ -160,10 +197,14 @@ impl UdpConnection {
             recv_state: Some(UdpRecvState::Idle(recv)),
             send_sequence_number: 0,
             send_buff: vec![],
-            sent_buff: vec![],
+            sending_packet: None,
+            sent_packets: vec![],
             send_state: Some(UdpSendState::Idle(send)),
+            send_zero_window_waker: None,
             peer_ack_number: 0,
             peer_window: MAX_RECV_BUFF,
+            rtt_estimate: rtt_estimate
+                .unwrap_or(Duration::from_millis(DEFAULT_RTT_ESTIMATE as u64)),
         }
     }
 }
@@ -183,13 +224,17 @@ impl UdpRecvState {
 
     async fn await_for_next_recv(mut socket: RecvHalf) -> (RecvHalf, IoResult<Vec<u8>>) {
         let mut buff = [0u8; 1024];
+
         let result = tokio::select! {
             result = socket.recv(&mut buff) => result,
             _ = tokio::time::delay_for(std::time::Duration::from_secs(RECV_TIMEOUT as u64)) => IoResult::Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
         };
 
         let result = match result {
-            Ok(read) => Ok(Vec::from(&buff[..read])),
+            Ok(read) => {
+                info!("received {} bytes", read);
+                Ok(Vec::from(&buff[..read]))
+            }
             Err(err) => Err(err),
         };
 
@@ -200,16 +245,23 @@ impl UdpRecvState {
 impl UdpConnection {
     fn handle_recv(&mut self, mut data: Vec<u8>) -> IoResult<()> {
         while data.len() > 0 {
-            let (result, remaining) = UdpMessage::from(data);
+            let (result, remaining) = UdpMessage::parse(data);
             data = remaining;
 
             let result = match result {
                 Ok(message) => self.handle_recv_message(message),
-                Err(err) => return Err(err),
+                Err(err) => {
+                    error!("corrupted packet received: {:?}, {:?}", err, data);
+                    return Ok(());
+                }
             };
 
-            if let Err(err) = result {
-                return Err(err);
+            match result {
+                Err(err) if err.kind() == std::io::ErrorKind::InvalidData => {
+                    error!("corrupted packet received: {:?}, {:?}", err, data)
+                }
+                Err(err) => return Err(err),
+                Ok(_) => {}
             }
         }
 
@@ -251,7 +303,7 @@ impl UdpConnection {
         }
 
         // Insert the message in recv_message_buff while
-        // maintaining ascending sequence numbers
+        // maintaining ascending sequence number ordering
         let insert_at = self
             .recv_message_buff
             .iter()
@@ -265,6 +317,7 @@ impl UdpConnection {
 
         self.recv_message_buff.insert(insert_at, message);
         self.process_recv_messages();
+        self.handle_peer_ack_update();
         Ok(())
     }
 
@@ -273,6 +326,10 @@ impl UdpConnection {
 
         for message in self.recv_message_buff.iter() {
             if self.recv_sequence_number != message.sequence_number {
+                info!(
+                    "not next sequence number, actual {} != expected {}",
+                    message.sequence_number, self.recv_sequence_number
+                );
                 break;
             }
 
@@ -283,7 +340,6 @@ impl UdpConnection {
         }
 
         self.recv_message_buff.drain(..consumed);
-        self.send_ack_update();
     }
 }
 
@@ -322,9 +378,141 @@ impl AsyncRead for UdpConnection {
     }
 }
 
+impl UdpSendState {
+    // This method copies the supplied buffer into it's future if it's in an idle state
+    // this future is then polled on subsequent calls regardless of the supplied buffer
+    // and it could return an IoResult::Ok with the amount of bytes sent from the
+    // previous invocation. Hence it is only safe to use this method which does not
+    // change the supplied buffer until it returns a Poll::Ready result.
+    fn poll(self, cx: &mut Context<'_>, buff: &[u8]) -> (Self, Poll<IoResult<usize>>) {
+        let mut future = match self {
+            Self::Waiting(future) => future,
+            Self::Idle(socket) => Self::await_for_next_send(socket, buff.to_vec()).boxed(),
+        };
+
+        match future.as_mut().poll(cx) {
+            Poll::Pending => (Self::Waiting(future), Poll::Pending),
+            Poll::Ready((socket, result)) => (Self::Idle(socket), Poll::Ready(result)),
+        }
+    }
+
+    async fn await_for_next_send(
+        mut socket: SendHalf,
+        buff: Vec<u8>,
+    ) -> (SendHalf, IoResult<usize>) {
+        let result = tokio::select! {
+            result = socket.send(&buff) => result,
+            _ = tokio::time::delay_for(std::time::Duration::from_secs(SEND_TIMEOUT as u64)) => IoResult::Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+        };
+
+        (socket, result)
+    }
+}
+
 impl UdpConnection {
-    fn send_ack_update(&mut self) {
-        // TODO
+    fn handle_peer_ack_update(&mut self) {
+        if self.calculate_peer_window() > 0 {
+            if let Some(waker) = self.send_zero_window_waker.take() {
+                info!("window size increased, waking send operation");
+                waker.wake();
+            }
+        }
+
+        // ACK'd packets will not have to be resent
+        // hence we can remove them from the sent vector
+        let peer_ack_number = self.peer_ack_number;
+        self.sent_packets
+            .retain(|i| i.packet.ack_number > peer_ack_number);
+    }
+
+    fn poll_send_data(
+        &mut self,
+        cx: &mut Context<'_>,
+        mut data: Vec<u8>,
+    ) -> Poll<IoResult<Vec<u8>>> {
+        if self.send_buff.len() == 0 {
+            let (packet, remaining) = if let Some(dropped) = self.get_dropped_packet() {
+                warn!(
+                    "resending dropped packet with sequence number {}",
+                    dropped.sequence_number
+                );
+                (dropped, data)
+            } else {
+                let (packet, remaining) = UdpMessage::create(
+                    self.send_sequence_number,
+                    self.recv_sequence_number,
+                    self.calculate_own_window(),
+                    self.calculate_peer_window(),
+                    data,
+                );
+
+                self.send_sequence_number += packet.payload.len() as u32;
+
+                (packet, remaining)
+            };
+
+            self.send_buff.extend_from_slice(&packet.to_vec()[..]);
+            self.sending_packet.replace(packet);
+
+            data = remaining;
+        }
+
+        let (new_state, result) = self.send_state.take().unwrap().poll(cx, &self.send_buff);
+        self.send_state.replace(new_state);
+
+        match result {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
+            Poll::Ready(Ok(sent)) => {
+                info!("sent {} bytes", sent);
+                self.send_buff.drain(..sent);
+
+                // Append to sent_packets for resend if packets are dropped
+                if self.send_buff.is_empty() {
+                    let packet = self.sending_packet.take().unwrap();
+                    self.sent_packets.push(SentPacket {
+                        packet,
+                        sent_at: Instant::now(),
+                    });
+                }
+
+                Poll::Ready(Ok(data))
+            }
+        }
+    }
+
+    fn get_dropped_packet(&mut self) -> Option<UdpMessage> {
+        match self.sent_packets.first() {
+            Some(packet) if self.has_dropped(&packet) => Some(self.sent_packets.remove(0).packet),
+            _ => None,
+        }
+    }
+
+    fn has_dropped(&self, packet: &SentPacket) -> bool {
+        // TODO: rtt estimation instead of hard coded timeout
+        return self.peer_ack_number < packet.packet.end_sequence_number()
+            && Instant::now().duration_since(packet.sent_at)
+                >= self.get_normalised_rtt_estimate() * 2;
+    }
+
+    fn get_normalised_rtt_estimate(&self) -> Duration {
+        return std::cmp::max(Duration::from_millis(100), self.rtt_estimate);
+    }
+
+    fn calculate_own_window(&self) -> u32 {
+        return std::cmp::max(
+            0,
+            MAX_RECV_BUFF
+                - self.recv_buff.len() as u32
+                - (self.recv_message_buff.len() * MAX_PACKET_SIZE) as u32,
+        );
+    }
+
+    fn calculate_peer_window(&self) -> u32 {
+        return std::cmp::max(
+            0,
+            self.peer_window - self.send_sequence_number - self.peer_ack_number,
+        );
     }
 }
 
@@ -334,15 +522,36 @@ impl AsyncWrite for UdpConnection {
         cx: &mut Context<'_>,
         buff: &[u8],
     ) -> Poll<IoResult<usize>> {
-        todo!();
+        assert!(buff.len() > 0);
+
+        // TODO: remove unnecessary copying
+        let mut sending = Vec::from(buff);
+
+        // TODO: Congestion control
+
+        while sending.len() > 0 {
+            if self.calculate_peer_window() == 0 {
+                info!("window size is 0, waiting for window update");
+                self.send_zero_window_waker.replace(cx.waker().clone());
+                return Poll::Pending;
+            }
+
+            sending = match self.poll_send_data(cx, sending) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                Poll::Ready(Ok(remaining)) => remaining,
+            };
+        }
+
+        Poll::Ready(Ok(buff.len() - sending.len()))
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        todo!();
+        todo!()
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        todo!();
+        todo!()
     }
 }
 
@@ -368,10 +577,10 @@ impl P2PConnection for UdpConnection {
 
         tokio::select! {
             result = negotiate_connection(&mut socket, peer_info, connection_info) => return match result {
-                Ok(_) => Ok(UdpConnection::new(socket)),
+                Ok(rtt_estimate) => Ok(UdpConnection::new(socket, Some(rtt_estimate))),
                 Err(err) => Err(err)
             },
-            _ = tokio::time::delay_for(std::time::Duration::from_secs(3)) => {
+            _ = tokio::time::delay_for(Duration::from_secs(3)) => {
                 info!("timed out while attempting UDP connection");
             }
         };
@@ -385,9 +594,10 @@ async fn negotiate_connection(
     mut socket: &mut UdpSocket,
     peer_info: &PeerJoinedPayload,
     connection_info: &AttemptDirectConnectPayload,
-) -> Result<()> {
+) -> Result<Duration> {
     let peer_addr =
         peer_info.peer_ip_address.clone() + ":" + &connection_info.peer_listen_port.to_string();
+    let initiated_at = Instant::now();
 
     info!("Attempting to connect to {}", peer_addr);
     send_hello(&mut socket, Some(peer_addr)).await?;
@@ -397,10 +607,14 @@ async fn negotiate_connection(
     socket.connect(peer_addr).await?;
 
     send_hello(&mut socket, Option::None::<String>).await?;
-    wait_for_hello(&mut socket).await?;
-    info!("Connection confirmed {}", peer_addr);
 
-    Ok(())
+    let rtt_estimate = Instant::now() - initiated_at;
+    info!(
+        "Connection confirmed with {} (rtt estimate: {:?})",
+        peer_addr, rtt_estimate
+    );
+
+    Ok(rtt_estimate)
 }
 
 async fn send_hello(
@@ -434,6 +648,8 @@ mod tests {
     use super::*;
     use futures::FutureExt;
     use futures::TryFutureExt;
+    use lazy_static::lazy_static;
+    use std::sync::Mutex;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;
 
@@ -443,7 +659,7 @@ mod tests {
             0u8, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 4, 0, 0, 0, 5, 1, 2, 3, 4, 5, 6,
         ];
 
-        let (message, remaining) = UdpMessage::from(raw_data);
+        let (message, remaining) = UdpMessage::parse(raw_data);
         let message = message.unwrap();
 
         assert_eq!(message.sequence_number, 1);
@@ -459,7 +675,7 @@ mod tests {
     fn test_parse_udp_message_too_short() {
         let raw_data = vec![1, 2, 3, 4];
 
-        let (message, remaining) = UdpMessage::from(raw_data);
+        let (message, remaining) = UdpMessage::parse(raw_data);
 
         assert!(message.is_err());
         assert_eq!(remaining, vec![1, 2, 3, 4]);
@@ -469,7 +685,7 @@ mod tests {
     fn test_parse_udp_message_not_enough_payload() {
         let raw_data = vec![0u8, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 4, 0, 0, 0, 5, 1];
 
-        let (message, _) = UdpMessage::from(raw_data);
+        let (message, _) = UdpMessage::parse(raw_data);
 
         assert!(message.is_err());
     }
@@ -487,6 +703,20 @@ mod tests {
 
         assert_eq!(message.calculate_checksum(), 3014949120);
     }
+
+    #[test]
+    fn test_udp_message_create() {
+        let (message, remaining) = UdpMessage::create(100, 200, 300, 10, vec![1, 2, 3, 4, 5]);
+
+        assert_eq!(message.sequence_number, 100);
+        assert_eq!(message.ack_number, 200);
+        assert_eq!(message.window, 300);
+        assert_eq!(message.length, 5);
+        assert!(message.is_checksum_valid());
+        assert_eq!(message.payload, vec![1, 2, 3, 4, 5]);
+        assert_eq!(remaining, Vec::<u8>::new());
+    }
+
     #[test]
     fn test_udp_message_to_vec() {
         let message = UdpMessage {
@@ -519,7 +749,7 @@ mod tests {
             ],
         };
 
-        let (parsed_message, remaining) = UdpMessage::from(message.to_vec());
+        let (parsed_message, remaining) = UdpMessage::parse(message.to_vec());
         let parsed_message = parsed_message.unwrap();
 
         assert_eq!(parsed_message, message);
@@ -576,34 +806,44 @@ mod tests {
         assert!(message3.overlaps(&message2));
     }
 
-    static mut UDP_PORT_NUMBER: u16 = 22660;
+    lazy_static! {
+        static ref UDP_PORT_NUMBER: Mutex<u16> = Mutex::from(25660);
+    }
 
-    async fn init_new_udp_connection_writable() -> (UdpConnection, UdpSocket) {
-        let (port1, port2) = unsafe {
-            UDP_PORT_NUMBER += 2;
-            (UDP_PORT_NUMBER, UDP_PORT_NUMBER - 1)
+    async fn init_new_udp_connection_raw_half() -> (UdpConnection, UdpSocket) {
+        let (port1, port2) = {
+            let mut port = UDP_PORT_NUMBER.lock().unwrap();
+
+            *port += 2;
+            (*port, *port - 1)
         };
 
-        let connection = UdpConnection::new(
-            UdpSocket::bind("0.0.0.0:".to_owned() + &port1.to_string())
-                .await
-                .unwrap(),
-        );
-        let write_socket = UdpSocket::bind("0.0.0.0:".to_owned() + &port2.to_string())
+        let socket1 = UdpSocket::bind("0.0.0.0:".to_owned() + &port1.to_string())
             .await
             .unwrap();
-        write_socket
+
+        socket1
+            .connect("127.0.0.1:".to_owned() + &port2.to_string())
+            .await
+            .unwrap();
+
+        let socket2 = UdpSocket::bind("0.0.0.0:".to_owned() + &port2.to_string())
+            .await
+            .unwrap();
+        socket2
             .connect("127.0.0.1:".to_owned() + &port1.to_string())
             .await
             .unwrap();
 
-        return (connection, write_socket);
+        let connection = UdpConnection::new(socket1, None);
+
+        return (connection, socket2);
     }
 
     #[test]
     fn test_connection_recv_valid_message() {
         Runtime::new().unwrap().block_on(async {
-            let (mut connection, mut write_socket) = init_new_udp_connection_writable().await;
+            let (mut connection, mut raw_socket) = init_new_udp_connection_raw_half().await;
 
             let mut message = UdpMessage {
                 sequence_number: 0,
@@ -613,12 +853,10 @@ mod tests {
                 checksum: 0,
                 payload: vec![1, 2, 3],
             };
+
             message.checksum = message.calculate_checksum();
 
-            write_socket
-                .send(message.to_vec().as_slice())
-                .await
-                .unwrap();
+            raw_socket.send(message.to_vec().as_slice()).await.unwrap();
 
             let mut buff = [0u8; 1024];
             let read = connection.read(&mut buff).await.unwrap();
@@ -635,7 +873,7 @@ mod tests {
     #[test]
     fn test_connection_recv_out_of_order_messages() {
         Runtime::new().unwrap().block_on(async {
-            let (mut connection, mut write_socket) = init_new_udp_connection_writable().await;
+            let (mut connection, mut raw_socket) = init_new_udp_connection_raw_half().await;
 
             let mut message1 = UdpMessage {
                 sequence_number: 3,
@@ -647,10 +885,7 @@ mod tests {
             };
             message1.checksum = message1.calculate_checksum();
 
-            write_socket
-                .send(message1.to_vec().as_slice())
-                .await
-                .unwrap();
+            raw_socket.send(message1.to_vec().as_slice()).await.unwrap();
 
             let mut message2 = UdpMessage {
                 sequence_number: 0,
@@ -662,10 +897,7 @@ mod tests {
             };
             message2.checksum = message2.calculate_checksum();
 
-            write_socket
-                .send(message2.to_vec().as_slice())
-                .await
-                .unwrap();
+            raw_socket.send(message2.to_vec().as_slice()).await.unwrap();
 
             let mut buff = [0u8; 1024];
             let read = connection.read(&mut buff).await.unwrap();
@@ -733,25 +965,106 @@ mod tests {
             let (mut connection1, mut connection2) =
                 futures::try_join!(connection1, connection2).expect("failed to connect");
 
-            // connection1.write("hello from 1".as_bytes()).await.unwrap();
+            for i in 1..10 {
+                connection1
+                    .write((i.to_string() + " -- hello from 1").as_bytes())
+                    .await
+                    .unwrap();
 
-            // let mut buff = [0; 1024];
-            // let read = connection2.read(&mut buff).await.unwrap();
+                let mut buff = [0; 1024];
+                let read = connection2.read(&mut buff).await.unwrap();
 
-            // assert_eq!(
-            //     String::from_utf8(buff[..read].to_vec()).unwrap(),
-            //     "hello from 1"
-            // );
+                assert_eq!(
+                    String::from_utf8(buff[..read].to_vec()).unwrap(),
+                    (i.to_string() + " -- hello from 1")
+                );
 
-            // connection2.write("hello from 2".as_bytes()).await.unwrap();
+                connection2
+                    .write((i.to_string() + " -- hello from 2").as_bytes())
+                    .await
+                    .unwrap();
 
-            // let mut buff = [0; 1024];
-            // let read = connection1.read(&mut buff).await.unwrap();
+                let mut buff = [0; 1024];
+                let read = connection1.read(&mut buff).await.unwrap();
 
-            // assert_eq!(
-            //     String::from_utf8(buff[..read].to_vec()).unwrap(),
-            //     "hello from 2"
-            // );
+                assert_eq!(
+                    String::from_utf8(buff[..read].to_vec()).unwrap(),
+                    (i.to_string() + " -- hello from 2")
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_connection_resends_dropped_packet() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut connection, mut raw_socket) = init_new_udp_connection_raw_half().await;
+
+            connection.rtt_estimate = Duration::from_millis(100);
+
+            let buff = [1, 2, 3, 4];
+            connection.write_all(&buff).await.unwrap();
+
+            assert_eq!(
+                connection
+                    .sent_packets
+                    .iter()
+                    .map(|i| &i.packet)
+                    .collect::<Vec<&UdpMessage>>(),
+                vec![
+                    &UdpMessage::create(0, 0, MAX_RECV_BUFF, MAX_RECV_BUFF, [1, 2, 3, 4].to_vec())
+                        .0,
+                ]
+            );
+
+            // Wait for resend timeout
+            tokio::time::delay_for(connection.get_normalised_rtt_estimate() * 2).await;
+
+            // Trigger another write to force resend
+            let buff = [5, 6, 7, 8];
+            connection.write_all(&buff).await.unwrap();
+
+            let mut messages = vec![];
+
+            for _ in 1..=3 {
+                let mut buff = [0u8; 1024];
+
+                let read = tokio::select! {
+                    result = raw_socket.recv(&mut buff[..]) => result.unwrap(),
+                    _ = tokio::time::delay_for(Duration::from_millis(100)) => break,
+                };
+
+                messages.push(UdpMessage::parse(buff[..read].to_vec()).0.unwrap());
+            }
+
+            assert_eq!(
+                messages,
+                vec![
+                    UdpMessage::create(0, 0, MAX_RECV_BUFF, MAX_RECV_BUFF, [1, 2, 3, 4].to_vec()).0,
+                    UdpMessage::create(0, 0, MAX_RECV_BUFF, MAX_RECV_BUFF, [1, 2, 3, 4].to_vec()).0,
+                    UdpMessage::create(4, 0, MAX_RECV_BUFF, MAX_RECV_BUFF, [5, 6, 7, 8].to_vec()).0,
+                ]
+            );
+
+            // Send ACK for received packets.
+            raw_socket
+                .send(
+                    UdpMessage::create(0, 8, MAX_RECV_BUFF, MAX_RECV_BUFF, vec![1])
+                        .0
+                        .to_vec()
+                        .as_slice(),
+                )
+                .await
+                .unwrap();
+
+            let mut buff = [0u8; 1024];
+            let read = connection.read(&mut buff).await.unwrap();
+
+            assert_eq!(&buff[..read], &[1]);
+
+            // Since all packets have been ACK'd the sent packet vec
+            // should have been cleared
+            assert_eq!(connection.sent_packets, vec![]);
         });
     }
 }
