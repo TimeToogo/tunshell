@@ -11,6 +11,7 @@ use std::hash::Hasher;
 use std::io::Cursor;
 use std::io::Result as IoResult;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 use thrussh::Tcp;
@@ -25,8 +26,21 @@ const SEND_TIMEOUT: u16 = 10;
 const MAX_PACKET_SIZE: usize = 576;
 const UDP_MESSAGE_HEADER_SIZE: usize = 4 + 4 + 4 + 2 + 4;
 const DEFAULT_RTT_ESTIMATE: u16 = 3000;
+const KEEP_ALIVE_INTERVAL: u32 = 30000;
 
 pub struct UdpConnection {
+    handle: Arc<Mutex<ConnectionHandle>>,
+    tasks: Vec<tokio::task::JoinHandle<()>>,
+}
+
+#[derive(PartialEq)]
+enum State {
+    Active,
+    Closed,
+}
+
+struct ConnectionHandle {
+    state: State,
     recv_sequence_number: u32,
     recv_message_buff: Vec<UdpMessage>,
     recv_buff: Vec<u8>,
@@ -34,10 +48,12 @@ pub struct UdpConnection {
     send_buff: Vec<u8>,
     sending_packet: Option<UdpMessage>,
     sent_packets: Vec<SentPacket>,
+    last_send_at: Option<Instant>,
     peer_ack_number: u32,
     peer_window: u32,
     send_zero_window_waker: Option<Waker>,
     rtt_estimate: Duration,
+    keep_alive_interval: Duration,
     recv_state: Option<UdpRecvState>,
     send_state: Option<UdpSendState>,
 }
@@ -187,10 +203,149 @@ impl UdpMessage {
 }
 
 impl UdpConnection {
-    fn new(socket: UdpSocket, rtt_estimate: Option<Duration>) -> Self {
+    fn new(
+        socket: UdpSocket,
+        rtt_estimate: Option<Duration>,
+        keep_alive_interval: Option<Duration>,
+    ) -> Self {
+        let handle = Arc::new(Mutex::new(ConnectionHandle::new(
+            socket,
+            rtt_estimate,
+            keep_alive_interval,
+        )));
+        let mut tasks = vec![];
+
+        tasks.push(Self::resend_dropped_packets(Arc::clone(&handle)));
+        tasks.push(Self::send_keep_alive_packets(Arc::clone(&handle)));
+        tasks.push(Self::send_window_updates(Arc::clone(&handle)));
+
+        Self { handle, tasks }
+    }
+
+    fn resend_dropped_packets(
+        handle_arc: Arc<Mutex<ConnectionHandle>>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            loop {
+                if !handle_arc.lock().unwrap().is_active() {
+                    break;
+                }
+
+                let rtt_estimate = { handle_arc.lock().unwrap().get_normalised_rtt_estimate() };
+
+                tokio::time::delay_for(rtt_estimate).await;
+
+                {
+                    let mut handle = handle_arc.lock().unwrap();
+
+                    if !handle.has_dropped_packet() {
+                        continue;
+                    }
+
+                    handle.push_dropped_packet();
+                }
+
+                let flush_handle = Arc::clone(&handle_arc);
+                futures::future::poll_fn(move |cx| flush_handle.lock().unwrap().poll_send_buff(cx))
+                    .await
+                    .unwrap();
+            }
+        })
+    }
+
+    fn send_keep_alive_packets(
+        handle_arc: Arc<Mutex<ConnectionHandle>>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            loop {
+                if !handle_arc.lock().unwrap().is_active() {
+                    break;
+                }
+
+                let keep_alive_interval = { handle_arc.lock().unwrap().keep_alive_interval };
+
+                tokio::time::delay_for(keep_alive_interval).await;
+
+                {
+                    let mut handle = handle_arc.lock().unwrap();
+
+                    let should_send_keep_alive = handle.last_send_at.is_none()
+                        || (Instant::now() - handle.last_send_at.unwrap()) > keep_alive_interval;
+
+                    if !should_send_keep_alive {
+                        continue;
+                    }
+
+                    info!("sending keep alive");
+                    handle.push_keep_alive_packet();
+                }
+
+                let flush_handle = Arc::clone(&handle_arc);
+                futures::future::poll_fn(move |cx| flush_handle.lock().unwrap().poll_send_buff(cx))
+                    .await
+                    .unwrap();
+            }
+        })
+    }
+
+    fn send_window_updates(
+        handle_arc: Arc<Mutex<ConnectionHandle>>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            loop {
+                if !handle_arc.lock().unwrap().is_active() {
+                    break;
+                }
+
+                let original_window = { handle_arc.lock().unwrap().calculate_own_window() };
+                let rtt_estimate = { handle_arc.lock().unwrap().get_normalised_rtt_estimate() };
+
+                tokio::time::delay_for(rtt_estimate).await;
+
+                {
+                    let mut handle = handle_arc.lock().unwrap();
+
+                    let current_window = { handle_arc.lock().unwrap().calculate_own_window() };
+
+                    if original_window == 0 && current_window > 0 {
+                        continue;
+                    }
+
+                    info!("sending window update");
+                    handle.push_keep_alive_packet();
+                }
+
+                let flush_handle = Arc::clone(&handle_arc);
+                futures::future::poll_fn(move |cx| flush_handle.lock().unwrap().poll_send_buff(cx))
+                    .await
+                    .unwrap();
+            }
+        })
+    }
+}
+
+impl Drop for UdpConnection {
+    fn drop(&mut self) {
+        if self.handle.is_poisoned() {
+            return;
+        }
+
+        let mut handle = self.handle.lock().unwrap();
+        handle.close();
+        debug!("Dropped udp connection handle");
+    }
+}
+
+impl ConnectionHandle {
+    fn new(
+        socket: UdpSocket,
+        rtt_estimate: Option<Duration>,
+        keep_alive_interval: Option<Duration>,
+    ) -> Self {
         let (recv, send) = socket.split();
 
         Self {
+            state: State::Active,
             recv_sequence_number: 0,
             recv_message_buff: vec![],
             recv_buff: vec![],
@@ -200,12 +355,24 @@ impl UdpConnection {
             sending_packet: None,
             sent_packets: vec![],
             send_state: Some(UdpSendState::Idle(send)),
+            last_send_at: None,
             send_zero_window_waker: None,
             peer_ack_number: 0,
             peer_window: MAX_RECV_BUFF,
+            keep_alive_interval: keep_alive_interval
+                .unwrap_or(Duration::from_millis(KEEP_ALIVE_INTERVAL as u64)),
             rtt_estimate: rtt_estimate
                 .unwrap_or(Duration::from_millis(DEFAULT_RTT_ESTIMATE as u64)),
         }
+    }
+
+    fn is_active(&self) -> bool {
+        self.state != State::Closed
+    }
+
+    fn close(&mut self) {
+        // Signal all tasks to finish
+        self.state = State::Closed;
     }
 }
 
@@ -242,7 +409,7 @@ impl UdpRecvState {
     }
 }
 
-impl UdpConnection {
+impl ConnectionHandle {
     fn handle_recv(&mut self, mut data: Vec<u8>) -> IoResult<()> {
         while data.len() > 0 {
             let (result, remaining) = UdpMessage::parse(data);
@@ -345,24 +512,28 @@ impl UdpConnection {
 
 impl AsyncRead for UdpConnection {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buff: &mut [u8],
     ) -> Poll<IoResult<usize>> {
         assert!(buff.len() > 0);
 
+        let mut handle = self.handle.lock().unwrap();
+
         loop {
-            let available_to_read = std::cmp::min(buff.len(), self.recv_buff.len());
+            let available_to_read = std::cmp::min(buff.len(), handle.recv_buff.len());
 
             if available_to_read > 0 {
-                buff[..available_to_read].copy_from_slice(&self.recv_buff[..available_to_read]);
-                self.recv_buff.drain(..available_to_read);
+                buff[..available_to_read].copy_from_slice(&handle.recv_buff[..available_to_read]);
+                handle.recv_buff.drain(..available_to_read);
+
+                // TODO: send window update
 
                 return Poll::Ready(Ok(available_to_read));
             }
 
-            let (new_state, result) = self.recv_state.take().unwrap().poll(cx);
-            self.recv_state.replace(new_state);
+            let (new_state, result) = handle.recv_state.take().unwrap().poll(cx);
+            handle.recv_state.replace(new_state);
 
             let data = match result {
                 Poll::Ready(Ok(data)) => data,
@@ -370,7 +541,7 @@ impl AsyncRead for UdpConnection {
                 Poll::Pending => return Poll::Pending,
             };
 
-            match self.handle_recv(data) {
+            match handle.handle_recv(data) {
                 Ok(_) => {}
                 Err(err) => return Poll::Ready(Err(err)),
             }
@@ -409,7 +580,7 @@ impl UdpSendState {
     }
 }
 
-impl UdpConnection {
+impl ConnectionHandle {
     fn handle_peer_ack_update(&mut self) {
         if self.calculate_peer_window() > 0 {
             if let Some(waker) = self.send_zero_window_waker.take() {
@@ -419,7 +590,7 @@ impl UdpConnection {
         }
 
         // ACK'd packets will not have to be resent
-        // hence we can remove them from the sent vector
+        // hence we can remove them from sent_packets
         let peer_ack_number = self.peer_ack_number;
         self.sent_packets
             .retain(|i| i.packet.ack_number > peer_ack_number);
@@ -431,30 +602,32 @@ impl UdpConnection {
         mut data: Vec<u8>,
     ) -> Poll<IoResult<Vec<u8>>> {
         if self.send_buff.len() == 0 {
-            let (packet, remaining) = if let Some(dropped) = self.get_dropped_packet() {
-                warn!(
-                    "resending dropped packet with sequence number {}",
-                    dropped.sequence_number
-                );
-                (dropped, data)
-            } else {
-                let (packet, remaining) = UdpMessage::create(
-                    self.send_sequence_number,
-                    self.recv_sequence_number,
-                    self.calculate_own_window(),
-                    self.calculate_peer_window(),
-                    data,
-                );
-
-                self.send_sequence_number += packet.payload.len() as u32;
-
-                (packet, remaining)
-            };
+            let (packet, remaining) = UdpMessage::create(
+                self.send_sequence_number,
+                self.recv_sequence_number,
+                self.calculate_own_window(),
+                self.calculate_peer_window(),
+                data,
+            );
 
             self.send_buff.extend_from_slice(&packet.to_vec()[..]);
             self.sending_packet.replace(packet);
 
             data = remaining;
+        }
+
+        let result = self.poll_send_buff(cx);
+
+        match result {
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
+            Poll::Pending => Poll::Ready(Ok(data)),
+            Poll::Ready(Ok(_)) => Poll::Ready(Ok(data)),
+        }
+    }
+
+    fn poll_send_buff(&mut self, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        if self.send_buff.is_empty() {
+            return Poll::Ready(Ok(()));
         }
 
         let (new_state, result) = self.send_state.take().unwrap().poll(cx, &self.send_buff);
@@ -470,18 +643,25 @@ impl UdpConnection {
                 // Append to sent_packets for resend if packets are dropped
                 if self.send_buff.is_empty() {
                     let packet = self.sending_packet.take().unwrap();
+                    self.send_sequence_number =
+                        std::cmp::max(self.send_sequence_number, packet.end_sequence_number());
                     self.sent_packets.push(SentPacket {
                         packet,
                         sent_at: Instant::now(),
                     });
+                    self.last_send_at.replace(Instant::now());
                 }
 
-                Poll::Ready(Ok(data))
+                Poll::Ready(Ok(()))
             }
         }
     }
 
-    fn get_dropped_packet(&mut self) -> Option<UdpMessage> {
+    fn has_dropped_packet(&mut self) -> bool {
+        !self.sent_packets.is_empty() && self.has_dropped(self.sent_packets.first().unwrap())
+    }
+
+    fn pop_dropped_packet(&mut self) -> Option<UdpMessage> {
         match self.sent_packets.first() {
             Some(packet) if self.has_dropped(&packet) => Some(self.sent_packets.remove(0).packet),
             _ => None,
@@ -489,10 +669,35 @@ impl UdpConnection {
     }
 
     fn has_dropped(&self, packet: &SentPacket) -> bool {
-        // TODO: rtt estimation instead of hard coded timeout
         return self.peer_ack_number < packet.packet.end_sequence_number()
             && Instant::now().duration_since(packet.sent_at)
                 >= self.get_normalised_rtt_estimate() * 2;
+    }
+
+    fn push_dropped_packet(&mut self) {
+        assert!(self.has_dropped_packet());
+        assert!(self.send_buff.is_empty());
+
+        let packet = self.pop_dropped_packet().unwrap();
+
+        info!("resending dropped packet (seq: {})", packet.sequence_number);
+        self.send_buff.extend_from_slice(&packet.to_vec()[..]);
+        self.sending_packet.replace(packet);
+    }
+
+    fn push_keep_alive_packet(&mut self) {
+        assert!(self.send_buff.is_empty());
+
+        let (packet, _) = UdpMessage::create(
+            self.send_sequence_number,
+            self.recv_sequence_number,
+            self.calculate_own_window(),
+            self.calculate_peer_window(),
+            vec![],
+        );
+
+        self.send_buff.extend_from_slice(&packet.to_vec()[..]);
+        self.sending_packet.replace(packet);
     }
 
     fn get_normalised_rtt_estimate(&self) -> Duration {
@@ -518,11 +723,15 @@ impl UdpConnection {
 
 impl AsyncWrite for UdpConnection {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buff: &[u8],
     ) -> Poll<IoResult<usize>> {
         assert!(buff.len() > 0);
+
+        println!("buff: {:?}", buff);
+
+        let mut handle = self.handle.lock().unwrap();
 
         // TODO: remove unnecessary copying
         let mut sending = Vec::from(buff);
@@ -530,24 +739,30 @@ impl AsyncWrite for UdpConnection {
         // TODO: Congestion control
 
         while sending.len() > 0 {
-            if self.calculate_peer_window() == 0 {
+            if handle.calculate_peer_window() == 0 {
                 info!("window size is 0, waiting for window update");
-                self.send_zero_window_waker.replace(cx.waker().clone());
+                handle.send_zero_window_waker.replace(cx.waker().clone());
                 return Poll::Pending;
             }
 
-            sending = match self.poll_send_data(cx, sending) {
-                Poll::Pending => return Poll::Pending,
+            sending = match handle.poll_send_data(cx, sending) {
+                Poll::Pending => {
+                    println!("pending");
+                    return Poll::Pending;
+                }
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                 Poll::Ready(Ok(remaining)) => remaining,
             };
         }
 
+        println!("ok (written: {})", buff.len() - sending.len());
         Poll::Ready(Ok(buff.len() - sending.len()))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        todo!()
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
+        info!("flushing udp connection");
+        let mut handle = self.handle.lock().unwrap();
+        handle.poll_send_buff(cx)
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
@@ -577,7 +792,7 @@ impl P2PConnection for UdpConnection {
 
         tokio::select! {
             result = negotiate_connection(&mut socket, peer_info, connection_info) => return match result {
-                Ok(rtt_estimate) => Ok(UdpConnection::new(socket, Some(rtt_estimate))),
+                Ok(rtt_estimate) => Ok(UdpConnection::new(socket, Some(rtt_estimate), None)),
                 Err(err) => Err(err)
             },
             _ = tokio::time::delay_for(Duration::from_secs(3)) => {
@@ -835,7 +1050,7 @@ mod tests {
             .await
             .unwrap();
 
-        let connection = UdpConnection::new(socket1, None);
+        let connection = UdpConnection::new(socket1, None, Some(Duration::from_secs(1)));
 
         return (connection, socket2);
     }
@@ -862,11 +1077,13 @@ mod tests {
             let read = connection.read(&mut buff).await.unwrap();
 
             assert_eq!(buff[..read], [1, 2, 3]);
-            assert_eq!(connection.recv_buff, Vec::<u8>::new());
-            assert_eq!(connection.recv_message_buff, Vec::<UdpMessage>::new());
-            assert_eq!(connection.recv_sequence_number, 3);
-            assert_eq!(connection.peer_ack_number, 1);
-            assert_eq!(connection.peer_window, 2);
+
+            let handle = connection.handle.lock().unwrap();
+            assert_eq!(handle.recv_buff, Vec::<u8>::new());
+            assert_eq!(handle.recv_message_buff, Vec::<UdpMessage>::new());
+            assert_eq!(handle.recv_sequence_number, 3);
+            assert_eq!(handle.peer_ack_number, 1);
+            assert_eq!(handle.peer_window, 2);
         });
     }
 
@@ -903,11 +1120,13 @@ mod tests {
             let read = connection.read(&mut buff).await.unwrap();
 
             assert_eq!(buff[..read], [1, 2, 3, 4, 5, 6]);
-            assert_eq!(connection.recv_buff, Vec::<u8>::new());
-            assert_eq!(connection.recv_message_buff, Vec::<UdpMessage>::new());
-            assert_eq!(connection.recv_sequence_number, 6);
-            assert_eq!(connection.peer_ack_number, 1);
-            assert_eq!(connection.peer_window, 2);
+
+            let mut handle = connection.handle.lock().unwrap();
+            assert_eq!(handle.recv_buff, Vec::<u8>::new());
+            assert_eq!(handle.recv_message_buff, Vec::<UdpMessage>::new());
+            assert_eq!(handle.recv_sequence_number, 6);
+            assert_eq!(handle.peer_ack_number, 1);
+            assert_eq!(handle.peer_window, 2);
         });
     }
 
@@ -997,28 +1216,46 @@ mod tests {
 
     #[test]
     fn test_connection_resends_dropped_packet() {
+        env_logger::init();
         Runtime::new().unwrap().block_on(async {
             let (mut connection, mut raw_socket) = init_new_udp_connection_raw_half().await;
 
-            connection.rtt_estimate = Duration::from_millis(100);
+            {
+                let mut handle = connection.handle.lock().unwrap();
+                handle.rtt_estimate = Duration::from_millis(1000);
+            }
 
             let buff = [1, 2, 3, 4];
             connection.write_all(&buff).await.unwrap();
+            connection.flush().await.unwrap();
 
-            assert_eq!(
-                connection
-                    .sent_packets
-                    .iter()
-                    .map(|i| &i.packet)
-                    .collect::<Vec<&UdpMessage>>(),
-                vec![
-                    &UdpMessage::create(0, 0, MAX_RECV_BUFF, MAX_RECV_BUFF, [1, 2, 3, 4].to_vec())
+            {
+                let handle = connection.handle.lock().unwrap();
+
+                assert_eq!(
+                    handle
+                        .sent_packets
+                        .iter()
+                        .map(|i| &i.packet)
+                        .collect::<Vec<&UdpMessage>>(),
+                    vec![
+                        &UdpMessage::create(
+                            0,
+                            0,
+                            MAX_RECV_BUFF,
+                            MAX_RECV_BUFF,
+                            [1, 2, 3, 4].to_vec()
+                        )
                         .0,
-                ]
-            );
+                    ]
+                );
+            }
 
             // Wait for resend timeout
-            tokio::time::delay_for(connection.get_normalised_rtt_estimate() * 2).await;
+            {
+                let handle = connection.handle.lock().unwrap();
+                tokio::time::delay_for(handle.get_normalised_rtt_estimate() * 3).await;
+            }
 
             // Trigger another write to force resend
             let buff = [5, 6, 7, 8];
@@ -1064,7 +1301,40 @@ mod tests {
 
             // Since all packets have been ACK'd the sent packet vec
             // should have been cleared
-            assert_eq!(connection.sent_packets, vec![]);
+            {
+                let handle = connection.handle.lock().unwrap();
+                assert_eq!(handle.sent_packets, vec![]);
+            }
+        });
+    }
+
+    #[test]
+    fn test_connection_sends_keep_alive_packets() {
+        Runtime::new().unwrap().block_on(async {
+            let (connection, mut raw_socket) = init_new_udp_connection_raw_half().await;
+
+            // Wait for keep alive timeout
+            let keep_alive_interval = { connection.handle.lock().unwrap().keep_alive_interval };
+
+            tokio::time::delay_for(keep_alive_interval).await;
+
+            let mut messages = vec![];
+
+            for _ in 1..=2 {
+                let mut buff = [0u8; 1024];
+
+                let read = tokio::select! {
+                    result = raw_socket.recv(&mut buff[..]) => result.unwrap(),
+                    _ = tokio::time::delay_for(Duration::from_millis(100)) => break,
+                };
+
+                messages.push(UdpMessage::parse(buff[..read].to_vec()).0.unwrap());
+            }
+
+            assert_eq!(
+                messages,
+                vec![UdpMessage::create(0, 0, MAX_RECV_BUFF, MAX_RECV_BUFF, [].to_vec()).0,]
+            );
         });
     }
 }

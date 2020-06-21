@@ -1,6 +1,6 @@
 use crate::{
     Config, P2PConnection, RelayStream, SshClient, SshCredentials, SshServer, TcpConnection,
-    TunnelStream,
+    TunnelStream, UdpConnection,
 };
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
@@ -171,7 +171,10 @@ impl<'a> Client<'a> {
         peer_info: &PeerJoinedPayload,
         connection_info: &AttemptDirectConnectPayload,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
-        println!("Attempting direct connection to {}", peer_info.peer_ip_address);
+        println!(
+            "Attempting direct connection to {}",
+            peer_info.peer_ip_address
+        );
         let current_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -180,9 +183,13 @@ impl<'a> Client<'a> {
         std::thread::sleep(std::time::Duration::from_millis(sleep_duration));
 
         let tcp_future = TcpConnection::connect(&peer_info, &connection_info);
+        let udp_future = UdpConnection::connect(&peer_info, &connection_info);
 
         tokio::select! {
             connection = tcp_future => if let Ok(connection) = connection {
+                return Ok(Some(Box::new(connection)))
+            },
+            udp_future = udp_future => if let Ok(connection) = udp_future {
                 return Ok(Some(Box::new(connection)))
             }
         };
