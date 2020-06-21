@@ -311,7 +311,7 @@ describe('TlsRelayServer', () => {
         [
           'Peer joined',
           {
-            peerIpAddress: peerConnection.getSocket().remoteAddress,
+            peerIpAddress: peerConnection.getSocket().remoteAddress.replace(/^.*:/, ''),
             peerKey: 'host-key--1234567890',
           },
         ],
@@ -323,7 +323,7 @@ describe('TlsRelayServer', () => {
         [
           'Peer joined',
           {
-            peerIpAddress: connection.getSocket().remoteAddress,
+            peerIpAddress: connection.getSocket().remoteAddress.replace(/^.*:/, ''),
             peerKey: 'client-key--1234567890',
           },
         ],
@@ -480,7 +480,7 @@ describe('TlsRelayServer', () => {
         [
           'Peer joined',
           {
-            peerIpAddress: peerConnection.getSocket().remoteAddress,
+            peerIpAddress: peerConnection.getSocket().remoteAddress.replace(/^.*:/, ''),
             peerKey: 'host-key--1234567890',
           },
         ],
@@ -494,7 +494,7 @@ describe('TlsRelayServer', () => {
         [
           'Peer joined',
           {
-            peerIpAddress: connection.getSocket().remoteAddress,
+            peerIpAddress: connection.getSocket().remoteAddress.replace(/^.*:/, ''),
             peerKey: 'client-key--1234567890',
           },
         ],
@@ -649,7 +649,7 @@ describe('TlsRelayServer', () => {
         [
           'Peer joined',
           {
-            peerIpAddress: peerConnection.getSocket().remoteAddress,
+            peerIpAddress: peerConnection.getSocket().remoteAddress.replace(/^.*:/, ''),
             peerKey: 'host-key--1234567890',
           },
         ],
@@ -662,7 +662,7 @@ describe('TlsRelayServer', () => {
         [
           'Peer joined',
           {
-            peerIpAddress: connection.getSocket().remoteAddress,
+            peerIpAddress: connection.getSocket().remoteAddress.replace(/^.*:/, ''),
             peerKey: 'client-key--1234567890',
           },
         ],

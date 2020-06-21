@@ -296,7 +296,7 @@ export class TlsRelayConnection extends EventEmitter {
       type: TlsRelayServerMessageType.PEER_JOINED,
       data: {
         peerKey: peer.getKey(),
-        peerIpAddress: this.peer.getSocket().remoteAddress,
+        peerIpAddress: this.peer.getSocket().remoteAddress.replace(/^.*:/, ''),
       },
     });
 

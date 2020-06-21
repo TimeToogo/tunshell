@@ -4,6 +4,7 @@ use crate::{
 };
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
+use log::*;
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -186,11 +187,13 @@ impl<'a> Client<'a> {
         let udp_future = UdpConnection::connect(&peer_info, &connection_info);
 
         tokio::select! {
-            connection = tcp_future => if let Ok(connection) = connection {
-                return Ok(Some(Box::new(connection)))
+            connection = tcp_future => match connection {
+                Ok(connection) => return Ok(Some(Box::new(connection))),
+                Err(err) => error!("Error while establishing TCP connection: {}", err)
             },
-            udp_future = udp_future => if let Ok(connection) = udp_future {
-                return Ok(Some(Box::new(connection)))
+            connection = udp_future => match connection {
+                Ok(connection) => return Ok(Some(Box::new(connection))),
+                Err(err) => error!("Error while establishing UDP connection: {}", err)
             }
         };
 
