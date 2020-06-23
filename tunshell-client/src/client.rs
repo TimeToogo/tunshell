@@ -1,6 +1,11 @@
 use crate::{
-    Config, P2PConnection, RelayStream, SshClient, SshCredentials, SshServer, TcpConnection,
-    TunnelStream, UdpConnection,
+    p2p::{self, P2PConnection},
+    Config,
+    RelayStream,
+    SshClient,
+    SshCredentials,
+    SshServer,
+    TunnelStream, //, UdpConnection,
 };
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
@@ -183,18 +188,18 @@ impl<'a> Client<'a> {
         let sleep_duration = std::cmp::max(0, connection_info.connect_at - current_timestamp);
         std::thread::sleep(std::time::Duration::from_millis(sleep_duration));
 
-        let tcp_future = TcpConnection::connect(&peer_info, &connection_info);
-        let udp_future = UdpConnection::connect(&peer_info, &connection_info);
+        let tcp_future = p2p::tcp::TcpConnection::connect(&peer_info, &connection_info);
+        // let udp_future = UdpConnection::connect(&peer_info, &connection_info);
 
         tokio::select! {
             connection = tcp_future => match connection {
                 Ok(connection) => return Ok(Some(Box::new(connection))),
                 Err(err) => error!("Error while establishing TCP connection: {}", err)
             },
-            connection = udp_future => match connection {
-                Ok(connection) => return Ok(Some(Box::new(connection))),
-                Err(err) => error!("Error while establishing UDP connection: {}", err)
-            }
+            // connection = udp_future => match connection {
+            //     Ok(connection) => return Ok(Some(Box::new(connection))),
+            //     Err(err) => error!("Error while establishing UDP connection: {}", err)
+            // }
         };
 
         Ok(None)

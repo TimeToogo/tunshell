@@ -80,7 +80,7 @@ struct UdpMessage {
     ack_number: u32,
     window: u32,
     length: u16,
-    checksum: u32,
+    checksum: u32,  
     payload: Vec<u8>,
 }
 

@@ -1,4 +1,4 @@
-use crate::P2PConnection;
+use crate::p2p::P2PConnection;
 use crate::TunnelStream;
 use anyhow::{Error, Result};
 use async_trait::async_trait;

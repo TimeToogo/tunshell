@@ -3,11 +3,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use tunshell_shared::{AttemptDirectConnectPayload, PeerJoinedPayload};
 
-mod tcp;
-mod udp;
-
-pub use tcp::*;
-pub use udp::*;
+pub mod tcp;
+pub mod udp;
 
 #[async_trait]
 pub trait P2PConnection: TunnelStream {
