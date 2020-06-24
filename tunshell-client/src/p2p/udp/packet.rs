@@ -1,3 +1,4 @@
+use super::SequenceNumber;
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::*;
@@ -13,10 +14,10 @@ pub(super) const UDP_MESSAGE_HEADER_SIZE: usize = 4 + 4 + 4 + 2 + 4;
 #[derive(Debug, PartialEq, Clone)]
 pub(super) struct UdpPacket {
     /// The index (relative to the start of the connection) of the first bytes in the packet
-    pub(super) sequence_number: u32,
+    pub(super) sequence_number: SequenceNumber,
 
     /// The number of acknowledged bytes by the sender during the connection
-    pub(super) ack_number: u32,
+    pub(super) ack_number: SequenceNumber,
 
     /// The amount of available space at the sender
     pub(super) window: u32,
@@ -47,8 +48,8 @@ impl UdpPacket {
 
         let mut cursor = Cursor::new(data);
 
-        let sequence_number = cursor.read_u32::<BigEndian>().unwrap();
-        let ack_number = cursor.read_u32::<BigEndian>().unwrap();
+        let sequence_number = SequenceNumber(cursor.read_u32::<BigEndian>().unwrap());
+        let ack_number = SequenceNumber(cursor.read_u32::<BigEndian>().unwrap());
         let window = cursor.read_u32::<BigEndian>().unwrap();
         let length = cursor.read_u16::<BigEndian>().unwrap();
         let checksum = cursor.read_u32::<BigEndian>().unwrap();
@@ -76,24 +77,13 @@ impl UdpPacket {
         })
     }
 
-    fn create(
-        sequence_number: u32,
-        ack_number: u32,
+    pub(super) fn create(
+        sequence_number: SequenceNumber,
+        ack_number: SequenceNumber,
         window: u32,
-        peer_window: u32,
         buff: &[u8],
     ) -> UdpPacket {
         let length = std::cmp::min(buff.len(), MAX_PACKET_SIZE - UDP_MESSAGE_HEADER_SIZE) as u16;
-        let length = std::cmp::min(
-            length as u32,
-            if peer_window < (UDP_MESSAGE_HEADER_SIZE as u32) {
-                0
-            } else {
-                peer_window - (UDP_MESSAGE_HEADER_SIZE as u32)
-            } as u32,
-        ) as u16;
-
-        assert!(length > 0);
 
         let payload = buff[..(length as usize)].to_vec();
 
@@ -111,14 +101,16 @@ impl UdpPacket {
         return message;
     }
 
-    fn to_vec(&self) -> Vec<u8> {
+    pub(super) fn to_vec(&self) -> Vec<u8> {
         use std::io::Write;
 
         let buff = Vec::with_capacity(UDP_MESSAGE_HEADER_SIZE + self.payload.len());
 
         let mut cursor = Cursor::new(buff);
-        cursor.write_u32::<BigEndian>(self.sequence_number).unwrap();
-        cursor.write_u32::<BigEndian>(self.ack_number).unwrap();
+        cursor
+            .write_u32::<BigEndian>(self.sequence_number.0)
+            .unwrap();
+        cursor.write_u32::<BigEndian>(self.ack_number.0).unwrap();
         cursor.write_u32::<BigEndian>(self.window).unwrap();
         cursor.write_u16::<BigEndian>(self.length).unwrap();
         cursor.write_u32::<BigEndian>(self.checksum).unwrap();
@@ -127,19 +119,19 @@ impl UdpPacket {
         cursor.into_inner()
     }
 
-    fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         UDP_MESSAGE_HEADER_SIZE + self.payload.len()
     }
 
-    fn is_checksum_valid(&self) -> bool {
+    pub(super) fn is_checksum_valid(&self) -> bool {
         self.checksum == self.calculate_checksum()
     }
 
-    fn calculate_checksum(&self) -> u32 {
+    pub(super) fn calculate_checksum(&self) -> u32 {
         let mut hasher = twox_hash::XxHash32::default();
 
-        hasher.write_u32(self.sequence_number);
-        hasher.write_u32(self.ack_number);
+        hasher.write_u32(self.sequence_number.0);
+        hasher.write_u32(self.ack_number.0);
         hasher.write_u32(self.window);
         hasher.write_u16(self.length);
         hasher.write(self.payload.as_slice());
@@ -147,13 +139,13 @@ impl UdpPacket {
         hasher.finish() as u32
     }
 
-    fn end_sequence_number(&self) -> u32 {
-        self.sequence_number.wrapping_add(self.length as u32)
+    pub(super) fn end_sequence_number(&self) -> SequenceNumber {
+        self.sequence_number + SequenceNumber(self.length as u32)
     }
 
-    fn overlaps(&self, other: &Self) -> bool {
-        self.sequence_number < other.end_sequence_number()
-            && other.sequence_number < self.end_sequence_number()
+    pub(super) fn overlaps(&self, other: &Self) -> bool {
+        self.sequence_number.0 < other.end_sequence_number().0
+            && other.sequence_number.0 < self.end_sequence_number().0
     }
 }
 
@@ -169,8 +161,8 @@ mod tests {
 
         let message = UdpPacket::parse(&raw_data).unwrap();
 
-        assert_eq!(message.sequence_number, 1);
-        assert_eq!(message.ack_number, 2);
+        assert_eq!(message.sequence_number, SequenceNumber(1));
+        assert_eq!(message.ack_number, SequenceNumber(2));
         assert_eq!(message.window, 3);
         assert_eq!(message.length, 4);
         assert_eq!(message.checksum, 5);
@@ -203,8 +195,8 @@ mod tests {
     #[test]
     fn test_udp_message_calculate_hash() {
         let message = UdpPacket {
-            sequence_number: 0,
-            ack_number: 1,
+            sequence_number: SequenceNumber(0),
+            ack_number: SequenceNumber(1),
             window: 2,
             length: 3,
             checksum: 0,
@@ -216,10 +208,15 @@ mod tests {
 
     #[test]
     fn test_udp_message_create() {
-        let message = UdpPacket::create(100, 200, 300, 100, &[1, 2, 3, 4, 5]);
+        let message = UdpPacket::create(
+            SequenceNumber(100),
+            SequenceNumber(200),
+            300,
+            &[1, 2, 3, 4, 5],
+        );
 
-        assert_eq!(message.sequence_number, 100);
-        assert_eq!(message.ack_number, 200);
+        assert_eq!(message.sequence_number, SequenceNumber(100));
+        assert_eq!(message.ack_number, SequenceNumber(200));
         assert_eq!(message.window, 300);
         assert_eq!(message.length, 5);
         assert!(message.is_checksum_valid());
@@ -229,8 +226,8 @@ mod tests {
     #[test]
     fn test_udp_message_to_vec() {
         let message = UdpPacket {
-            sequence_number: 0,
-            ack_number: 1,
+            sequence_number: SequenceNumber(0),
+            ack_number: SequenceNumber(1),
             window: 2,
             length: 3,
             checksum: 4,
@@ -248,8 +245,8 @@ mod tests {
     #[test]
     fn test_udp_message_to_vec_then_parse() {
         let message = UdpPacket {
-            sequence_number: 12345765,
-            ack_number: 46547747,
+            sequence_number: SequenceNumber(12345765),
+            ack_number: SequenceNumber(46547747),
             window: 67653435,
             length: 23,
             checksum: 44365478,
@@ -266,38 +263,38 @@ mod tests {
     #[test]
     fn test_udp_message_end_sequence_number() {
         let message = UdpPacket {
-            sequence_number: 100,
-            ack_number: 0,
+            sequence_number: SequenceNumber(100),
+            ack_number: SequenceNumber(0),
             window: 0,
             length: 10,
             checksum: 0,
             payload: vec![],
         };
 
-        assert_eq!(message.end_sequence_number(), 110);
+        assert_eq!(message.end_sequence_number(), SequenceNumber(110));
     }
 
     #[test]
     fn test_udp_message_overlap() {
         let message1 = UdpPacket {
-            sequence_number: 100,
-            ack_number: 0,
+            sequence_number: SequenceNumber(100),
+            ack_number: SequenceNumber(0),
             window: 0,
             length: 10,
             checksum: 0,
             payload: vec![],
         };
         let message2 = UdpPacket {
-            sequence_number: 110,
-            ack_number: 0,
+            sequence_number: SequenceNumber(110),
+            ack_number: SequenceNumber(0),
             window: 0,
             length: 10,
             checksum: 0,
             payload: vec![],
         };
         let message3 = UdpPacket {
-            sequence_number: 105,
-            ack_number: 0,
+            sequence_number: SequenceNumber(105),
+            ack_number: SequenceNumber(0),
             window: 0,
             length: 10,
             checksum: 0,
