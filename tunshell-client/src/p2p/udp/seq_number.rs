@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::{cmp, ops};
 
 /// Represents a wrapping u32 used for tracking the order of bytes
@@ -46,6 +47,12 @@ impl cmp::PartialOrd for SequenceNumber {
                 return Some(cmp::Ordering::Greater);
             }
         }
+    }
+}
+
+impl Display for SequenceNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Seq({})", self.0)
     }
 }
 

@@ -144,8 +144,8 @@ impl UdpPacket {
     }
 
     pub(super) fn overlaps(&self, other: &Self) -> bool {
-        self.sequence_number.0 < other.end_sequence_number().0
-            && other.sequence_number.0 < self.end_sequence_number().0
+        self.sequence_number.0 <= other.end_sequence_number().0
+            && other.sequence_number.0 <= self.end_sequence_number().0
     }
 }
 
@@ -285,7 +285,7 @@ mod tests {
             payload: vec![],
         };
         let message2 = UdpPacket {
-            sequence_number: SequenceNumber(110),
+            sequence_number: SequenceNumber(111),
             ack_number: SequenceNumber(0),
             window: 0,
             length: 10,
@@ -301,12 +301,12 @@ mod tests {
             payload: vec![],
         };
 
-        assert!(message1.overlaps(&message1));
-        assert!(!message1.overlaps(&message2));
-        assert!(!message2.overlaps(&message1));
-        assert!(message1.overlaps(&message3));
-        assert!(message3.overlaps(&message1));
-        assert!(message2.overlaps(&message3));
-        assert!(message3.overlaps(&message2));
+        assert_eq!(message1.overlaps(&message1), true);
+        assert_eq!(message1.overlaps(&message2), false);
+        assert_eq!(message2.overlaps(&message1), false);
+        assert_eq!(message1.overlaps(&message3), true);
+        assert_eq!(message3.overlaps(&message1), true);
+        assert_eq!(message2.overlaps(&message3), true);
+        assert_eq!(message3.overlaps(&message2), true);
     }
 }

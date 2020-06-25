@@ -32,9 +32,9 @@ pub(super) struct UdpConnectionVars {
     /// If this number falls near zero, packets will not be permitted to be sent outbound.
     pub(super) transit_window: u32,
 
-    /// Task wakers which are waiting for the window to grow
-    /// allowing for another packet to be sent.
-    pub(super) window_wakers: Vec<Waker>,
+    /// Task wakers which are waiting for the window to grow  allowing for another packet to be sent.
+    /// The u32 in the tuple represents the packet's length associated to the waker.
+    pub(super) window_wakers: Vec<(Waker, u32)>,
 
     /// The index of the next byte to be sent.
     /// This number will wrap back to 0 after exceeding u32::MAX
@@ -97,6 +97,10 @@ impl UdpConnectionVars {
 
     pub(super) fn state(&self) -> UdpConnectionState {
         self.state
+    }
+
+    pub(super) fn is_connected(&self) -> bool {
+        self.state == UdpConnectionState::Connected
     }
 
     pub(super) fn set_state_sent_hello(&mut self) {
