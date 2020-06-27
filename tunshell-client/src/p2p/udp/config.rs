@@ -1,3 +1,4 @@
+use super::MAX_PACKET_SIZE;
 use std::time::Duration;
 
 const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 15000; // ms
@@ -64,6 +65,7 @@ impl UdpConnectionConfig {
     }
 
     pub fn with_recv_window(mut self, value: u32) -> Self {
+        assert!(value >= MAX_PACKET_SIZE as u32);
         self.recv_window = value;
 
         self

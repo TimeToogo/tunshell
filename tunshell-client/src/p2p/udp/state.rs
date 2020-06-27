@@ -3,7 +3,7 @@ use log::*;
 use std::collections::HashMap;
 use std::task::Waker;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(super) enum UdpConnectionState {
@@ -51,6 +51,9 @@ pub(super) struct UdpConnectionVars {
     /// Storage for the reassembled byte stream.
     pub(super) reassembled_buffer: Vec<u8>,
 
+    /// Task wakers which a waiting on new received buffer becoming available
+    pub (super) recv_wakers: Vec<Waker>,
+
     /// The current estimated round trip time of the connection.
     pub(super) rtt_estimate: Duration,
 
@@ -66,7 +69,7 @@ pub(super) struct UdpConnectionVars {
     pub(super) sent_packets: HashMap<SequenceNumber, UdpPacket>,
 
     /// Channel for signaling that new packets should be sent or resent.
-    pub(super) event_sender: Option<Sender<SendEvent>>,
+    pub(super) event_sender: Option<UnboundedSender<SendEvent>>,
 }
 
 impl UdpConnectionVars {
@@ -83,6 +86,7 @@ impl UdpConnectionVars {
             ack_number: SequenceNumber(0),
             recv_packets: vec![],
             reassembled_buffer: vec![],
+            recv_wakers: vec![],
             rtt_estimate: Duration::from_millis(0),
             send_times: HashMap::new(),
             peer_ack_number: SequenceNumber(0),
@@ -131,7 +135,7 @@ impl UdpConnectionVars {
         self.state = UdpConnectionState::ConnectFailed;
     }
 
-    pub(super) fn set_state_connected(&mut self, event_sender: Sender<SendEvent>) {
+    pub(super) fn set_state_connected(&mut self, event_sender: UnboundedSender<SendEvent>) {
         assert!(
             self.state == UdpConnectionState::SentSync
                 || self.state == UdpConnectionState::WaitingForSync
@@ -147,7 +151,7 @@ impl UdpConnectionVars {
         self.state = UdpConnectionState::Disconnected;
     }
 
-    pub(super) fn event_sender(&self) -> Sender<SendEvent> {
+    pub(super) fn event_sender(&self) -> UnboundedSender<SendEvent> {
         self.event_sender.as_ref().unwrap().clone()
     }
 }
@@ -177,7 +181,7 @@ mod tests {
 
         assert_eq!(vars.state, UdpConnectionState::SentSync);
 
-        vars.set_state_connected(tokio::sync::mpsc::channel(1).0);
+        vars.set_state_connected(tokio::sync::mpsc::unbounded_channel().0);
 
         assert_eq!(vars.state, UdpConnectionState::Connected);
 
@@ -200,7 +204,7 @@ mod tests {
 
         assert_eq!(vars.state, UdpConnectionState::WaitingForSync);
 
-        vars.set_state_connected(tokio::sync::mpsc::channel(1).0);
+        vars.set_state_connected(tokio::sync::mpsc::unbounded_channel().0);
 
         assert_eq!(vars.state, UdpConnectionState::Connected);
 

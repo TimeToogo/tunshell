@@ -18,6 +18,18 @@ impl UdpConnectionVars {
             .retain(|sequence_number, _| *sequence_number > peer_ack_number);
         self.wake_pending_send_events();
     }
+
+    fn normalised_rtt_estimate(&self) -> Duration {
+        std::cmp::max(Duration::from_millis(100), self.rtt_estimate)
+    }
+
+    fn update_resending_packet(&self, packet: &mut UdpPacket) {
+        // Ensure that the packet contains the latest
+        // ack and window information before resending
+        packet.ack_number = self.ack_number;
+        packet.window = self.calculate_recv_window();
+        packet.checksum = packet.calculate_checksum();
+    }
 }
 
 pub(super) fn schedule_resend_if_dropped(
@@ -29,10 +41,8 @@ pub(super) fn schedule_resend_if_dropped(
     let rtt_estimate = {
         let mut con = con.lock().unwrap();
         con.sent_packets.insert(packet_key, sent_packet);
-        con.rtt_estimate
+        con.normalised_rtt_estimate()
     };
-
-    assert!(rtt_estimate > Duration::from_millis(0));
 
     tokio::spawn(async move {
         tokio::time::delay_for(rtt_estimate * 2).await;
@@ -40,7 +50,7 @@ pub(super) fn schedule_resend_if_dropped(
         // It's important we only scope the lock of the connection to this block.
         // Since we may need to send an event to the orchestration loop which could attempt
         // to lock the connection for other purposes, this avoids a potential deadlock.
-        let (packet, mut event_sender) = {
+        let (packet, event_sender) = {
             let mut con = con.lock().unwrap();
 
             if !con.is_connected() {
@@ -50,10 +60,16 @@ pub(super) fn schedule_resend_if_dropped(
             (con.sent_packets.remove(&packet_key), con.event_sender())
         };
 
-        if let Some(packet) = packet {
+        if let Some(mut packet) = packet {
             // Packet has still not been acknowledged after 2*RTT
             // likely that is was dropped so we resend it
-            let result = event_sender.send(SendEvent::Resend(packet)).await;
+
+            {
+                let con = con.lock().unwrap();
+                con.update_resending_packet(&mut packet);
+            }
+
+            let result = event_sender.send(SendEvent::Resend(packet));
 
             if result.is_err() {
                 error!("failed to resend packet: {:?}", result);
@@ -125,11 +141,35 @@ mod tests {
     }
 
     #[test]
+    fn test_normalised_rtt_estimate() {
+        let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
+        con.rtt_estimate = Duration::from_millis(200);
+
+        assert_eq!(con.normalised_rtt_estimate(), Duration::from_millis(200));
+
+        con.rtt_estimate = Duration::from_millis(50);
+
+        assert_eq!(con.normalised_rtt_estimate(), Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_update_resending_packet() {
+        let mut con = UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+        con.ack_number = SequenceNumber(100);
+
+        let mut packet = UdpPacket::create(SequenceNumber(0), SequenceNumber(0), 0, &[1]);
+
+        con.update_resending_packet(&mut packet);
+
+        assert_eq!(packet, UdpPacket::create(SequenceNumber(0), SequenceNumber(100), 1000, &[1]));
+    }
+
+    #[test]
     fn test_schedule_resend_does_not_resend_if_packet_is_acknowledged() {
         Runtime::new().unwrap().block_on(async {
             let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
             con.state = UdpConnectionState::Connected;
-            let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
             con.event_sender = Some(tx);
             con.rtt_estimate = Duration::from_millis(10);
@@ -168,16 +208,16 @@ mod tests {
     #[test]
     fn test_schedule_resend_does_resend_if_packet_is_not_acknowledged() {
         Runtime::new().unwrap().block_on(async {
-            let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let mut con = UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
             con.state = UdpConnectionState::Connected;
-            let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
             con.event_sender = Some(tx);
-            con.rtt_estimate = Duration::from_millis(10);
+            con.rtt_estimate = Duration::from_millis(100);
 
             let con = Arc::from(Mutex::from(con));
 
-            let sent_packet = UdpPacket::create(SequenceNumber(10), SequenceNumber(0), 0, &[]);
+            let sent_packet = UdpPacket::create(SequenceNumber(10), SequenceNumber(0), 1000, &[]);
 
             schedule_resend_if_dropped(Arc::clone(&con), sent_packet.clone());
 
@@ -191,8 +231,15 @@ mod tests {
                 );
             }
 
+            // Mock ack update to ensure that the packet is updated when reset
+            {
+                let mut con = con.lock().unwrap();
+
+                con.ack_number = SequenceNumber(50);
+            }
+
             // Wait for resend task to fire
-            tokio::time::delay_for(Duration::from_millis(150)).await;
+            tokio::time::delay_for(Duration::from_millis(250)).await;
 
             // Should remove packet from sent_packets map
             {
@@ -201,11 +248,13 @@ mod tests {
                 assert_eq!(con.sent_packets.get(&SequenceNumber(10)), None);
             }
 
-            // Should send resent event
+            // Should send resend event with updated packet
             let result = rx.try_recv();
+
+            let expected_packet = UdpPacket::create(SequenceNumber(10), SequenceNumber(50), 1000, &[]);
             assert_eq!(
                 result.expect("should have sent Resend event"),
-                SendEvent::Resend(sent_packet)
+                SendEvent::Resend(expected_packet)
             );
         });
     }
@@ -215,10 +264,10 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
             con.state = UdpConnectionState::Connected;
-            let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
             con.event_sender = Some(tx);
-            con.rtt_estimate = Duration::from_millis(10);
+            con.rtt_estimate = Duration::from_millis(100);
 
             let con = Arc::from(Mutex::from(con));
 
@@ -234,7 +283,7 @@ mod tests {
             }
 
             // Wait for resend task to fire
-            tokio::time::delay_for(Duration::from_millis(25)).await;
+            tokio::time::delay_for(Duration::from_millis(250)).await;
 
             // Should not remove packet from sent_packets map
             {
@@ -251,4 +300,5 @@ mod tests {
             assert_eq!(result.is_err(), true);
         });
     }
+    
 }
