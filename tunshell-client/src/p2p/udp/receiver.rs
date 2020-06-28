@@ -100,7 +100,7 @@ impl UdpConnectionVars {
             reassembled_packets += 1;
             self.ack_number = packet.end_sequence_number();
             advanced_sequence_numbers += 1 + packet.payload.len() as u32;
-            info!("successfully received {} bytes", packet.length);
+            debug!("successfully received {} bytes", packet.length);
         }
 
         self.recv_packets.drain(..reassembled_packets);
@@ -113,12 +113,15 @@ impl UdpConnectionVars {
             }
         }
 
-        // If we have acknowledged any new packets or bytes
-        // we trigger an ack-update event to send through an acknowledgement
-        // of the received packets
-        if advanced_sequence_numbers > 0 {
-            self.event_sender()
+        // If we have acknowledged any new bytes we trigger an ack-update 
+        // event to send through an acknowledgement of the received packets
+        if reassembled_bytes > 0 {
+            let result = self.event_sender()
                 .send(SendEvent::AckUpdate);
+
+            if let Err(err) = result {
+                error!("error while sending ack update event: {}", err);
+            }
         }
 
         advanced_sequence_numbers
@@ -186,7 +189,7 @@ mod tests {
             con.event_sender = Some(tx);
 
             let advanced = con
-                .recv_process_packet(UdpPacket::create(
+                .recv_process_packet(UdpPacket::data(
                     SequenceNumber(1),
                     SequenceNumber(0),
                     0,
@@ -210,7 +213,7 @@ mod tests {
             con.event_sender = Some(tx);
 
             let advanced = con
-                .recv_process_packet(UdpPacket::create(
+                .recv_process_packet(UdpPacket::data(
                     SequenceNumber(1),
                     SequenceNumber(0),
                     0,
@@ -234,7 +237,7 @@ mod tests {
             con.event_sender = Some(tx);
 
             con
-                .recv_process_packet(UdpPacket::create(
+                .recv_process_packet(UdpPacket::data(
                     SequenceNumber(1),
                     SequenceNumber(0),
                     0,
@@ -252,6 +255,30 @@ mod tests {
     }
 
     #[test]
+    fn test_recv_process_packet_with_no_data_does_not_emit_ack_update() {
+        Runtime::new().unwrap().block_on(async {
+            let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+            con.event_sender = Some(tx);
+
+            con
+                .recv_process_packet(UdpPacket::data(
+                    SequenceNumber(1),
+                    SequenceNumber(0),
+                    0,
+                    &[],
+                ))
+                .unwrap();
+
+            tokio::select! {
+                event = rx.recv() =>  panic!("should not receive event for processing empty packet, received: {:?}", event),
+                _ = tokio::time::delay_for(Duration::from_millis(10)) => {}
+            };
+        });
+    }
+
+    #[test]
     fn test_recv_process_packet_packet_before_window() {
         Runtime::new().unwrap().block_on(async {
             let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
@@ -262,7 +289,7 @@ mod tests {
 
             con.ack_number = SequenceNumber(10);
 
-            let result = con.recv_process_packet(UdpPacket::create(
+            let result = con.recv_process_packet(UdpPacket::data(
                 SequenceNumber(9),
                 SequenceNumber(0),
                 0,
@@ -271,7 +298,7 @@ mod tests {
 
             assert_eq!(result.is_err(), true);
 
-            let result = con.recv_process_packet(UdpPacket::create(
+            let result = con.recv_process_packet(UdpPacket::data(
                 SequenceNumber(10),
                 SequenceNumber(0),
                 0,
@@ -293,7 +320,7 @@ mod tests {
 
             con.ack_number = SequenceNumber(10);
 
-            let result = con.recv_process_packet(UdpPacket::create(
+            let result = con.recv_process_packet(UdpPacket::data(
                 SequenceNumber(5000000),
                 SequenceNumber(0),
                 0,
@@ -314,14 +341,14 @@ mod tests {
             let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 
             con.ack_number = SequenceNumber(10);
-            con.recv_packets.push(UdpPacket::create(
+            con.recv_packets.push(UdpPacket::data(
                 SequenceNumber(1),
                 SequenceNumber(0),
                 0,
                 &[1, 2, 3, 4, 5],
             ));
 
-            let result = con.recv_process_packet(UdpPacket::create(
+            let result = con.recv_process_packet(UdpPacket::data(
                 SequenceNumber(5),
                 SequenceNumber(0),
                 0,
@@ -341,7 +368,7 @@ mod tests {
             con.event_sender = Some(tx);
 
             let advanced = con
-                .recv_process_packet(UdpPacket::create(
+                .recv_process_packet(UdpPacket::data(
                     SequenceNumber(7),
                     SequenceNumber(0),
                     0,
@@ -352,7 +379,7 @@ mod tests {
             assert_eq!(advanced, 0);
             assert_eq!(
                 con.recv_packets,
-                vec![UdpPacket::create(
+                vec![UdpPacket::data(
                     SequenceNumber(7),
                     SequenceNumber(0),
                     0,
@@ -363,7 +390,7 @@ mod tests {
             assert_eq!(con.ack_number, SequenceNumber(0));
 
             let advanced = con
-                .recv_process_packet(UdpPacket::create(
+                .recv_process_packet(UdpPacket::data(
                     SequenceNumber(1),
                     SequenceNumber(0),
                     0,
@@ -417,7 +444,7 @@ mod tests {
             // Send buff
             {
                 let mut con = con.lock().unwrap();
-                con.recv_process_packet(UdpPacket::create(
+                con.recv_process_packet(UdpPacket::data(
                     SequenceNumber(1),
                     SequenceNumber(0),
                     0,
@@ -493,7 +520,7 @@ mod tests {
         assert_eq!(con.calculate_recv_window(), 1000);
 
         let recv_packet =
-            UdpPacket::create(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
+            UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
 
         con.recv_packets.push(recv_packet.clone());
 

@@ -51,7 +51,13 @@ pub(super) fn schedule_resend_if_dropped(
         // Since we may need to send an event to the orchestration loop which could attempt
         // to lock the connection for other purposes, this avoids a potential deadlock.
         let (packet, event_sender) = {
-            let mut con = con.lock().unwrap();
+            let mut con = match con.try_lock() {
+                Ok(con) => con,
+                Err(err) => {
+                    error!("error while trying to resend packet: {}", err);
+                    return;
+                }
+            };
 
             if !con.is_connected() {
                 return;
@@ -65,8 +71,9 @@ pub(super) fn schedule_resend_if_dropped(
             // likely that is was dropped so we resend it
 
             {
-                let con = con.lock().unwrap();
+                let mut con = con.lock().unwrap();
                 con.update_resending_packet(&mut packet);
+                con.decrease_transit_window_after_drop();
             }
 
             let result = event_sender.send(SendEvent::Resend(packet));
@@ -125,11 +132,11 @@ mod tests {
 
         con.sent_packets.insert(
             SequenceNumber(10),
-            UdpPacket::create(SequenceNumber(10), SequenceNumber(0), 0, &[]),
+            UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 0, &[]),
         );
         con.sent_packets.insert(
             SequenceNumber(30),
-            UdpPacket::create(SequenceNumber(30), SequenceNumber(0), 0, &[]),
+            UdpPacket::data(SequenceNumber(30), SequenceNumber(0), 0, &[]),
         );
         con.peer_ack_number = SequenceNumber(0);
 
@@ -157,11 +164,11 @@ mod tests {
         let mut con = UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
         con.ack_number = SequenceNumber(100);
 
-        let mut packet = UdpPacket::create(SequenceNumber(0), SequenceNumber(0), 0, &[1]);
+        let mut packet = UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[1]);
 
         con.update_resending_packet(&mut packet);
 
-        assert_eq!(packet, UdpPacket::create(SequenceNumber(0), SequenceNumber(100), 1000, &[1]));
+        assert_eq!(packet, UdpPacket::data(SequenceNumber(0), SequenceNumber(100), 1000, &[1]));
     }
 
     #[test]
@@ -176,7 +183,7 @@ mod tests {
 
             let con = Arc::from(Mutex::from(con));
 
-            let sent_packet = UdpPacket::create(SequenceNumber(10), SequenceNumber(0), 0, &[]);
+            let sent_packet = UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 0, &[]);
 
             schedule_resend_if_dropped(Arc::clone(&con), sent_packet.clone());
 
@@ -217,7 +224,7 @@ mod tests {
 
             let con = Arc::from(Mutex::from(con));
 
-            let sent_packet = UdpPacket::create(SequenceNumber(10), SequenceNumber(0), 1000, &[]);
+            let sent_packet = UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 1000, &[]);
 
             schedule_resend_if_dropped(Arc::clone(&con), sent_packet.clone());
 
@@ -251,7 +258,7 @@ mod tests {
             // Should send resend event with updated packet
             let result = rx.try_recv();
 
-            let expected_packet = UdpPacket::create(SequenceNumber(10), SequenceNumber(50), 1000, &[]);
+            let expected_packet = UdpPacket::data(SequenceNumber(10), SequenceNumber(50), 1000, &[]);
             assert_eq!(
                 result.expect("should have sent Resend event"),
                 SendEvent::Resend(expected_packet)
@@ -271,7 +278,7 @@ mod tests {
 
             let con = Arc::from(Mutex::from(con));
 
-            let sent_packet = UdpPacket::create(SequenceNumber(10), SequenceNumber(0), 0, &[]);
+            let sent_packet = UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 0, &[]);
 
             schedule_resend_if_dropped(Arc::clone(&con), sent_packet.clone());
 

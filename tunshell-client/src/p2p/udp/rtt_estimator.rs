@@ -41,7 +41,7 @@ mod tests {
     fn test_store_send_time_of_packet() {
         let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 
-        con.store_send_time_of_packet(&UdpPacket::create(
+        con.store_send_time_of_packet(&UdpPacket::data(
             SequenceNumber(50),
             SequenceNumber(0),
             0,
@@ -57,7 +57,7 @@ mod tests {
 
         con.rtt_estimate = Duration::from_millis(100);
 
-        con.adjust_rtt_estimate(&UdpPacket::create(
+        con.adjust_rtt_estimate(&UdpPacket::data(
             SequenceNumber(50),
             SequenceNumber(10),
             0,
@@ -78,7 +78,7 @@ mod tests {
             Instant::now() - Duration::from_millis(100),
         );
 
-        con.adjust_rtt_estimate(&UdpPacket::create(
+        con.adjust_rtt_estimate(&UdpPacket::data(
             SequenceNumber(50),
             SequenceNumber(100),
             0,
@@ -99,7 +99,7 @@ mod tests {
             Instant::now() - Duration::from_millis(100),
         );
 
-        con.adjust_rtt_estimate(&UdpPacket::create(
+        con.adjust_rtt_estimate(&UdpPacket::data(
             SequenceNumber(50),
             SequenceNumber(100),
             0,
@@ -119,7 +119,7 @@ mod tests {
         con.send_times.insert(SequenceNumber(100), Instant::now());
         con.send_times.insert(SequenceNumber(150), Instant::now());
 
-        con.adjust_rtt_estimate(&UdpPacket::create(
+        con.adjust_rtt_estimate(&UdpPacket::data(
             SequenceNumber(50),
             SequenceNumber(100),
             0,

@@ -9,6 +9,7 @@ impl UdpConnectionVars {
         if self.can_send(packet) {
             Poll::Ready(())
         } else {
+            debug!("connection is congested, waiting before sending packet {} ({} bytes permitted)", packet.sequence_number, self.bytes_permitted_to_be_sent());
             self.window_wakers
                 .push((cx.waker().clone(), packet.len() as u32));
             Poll::Pending
@@ -96,7 +97,7 @@ pub(super) async fn wait_until_can_send(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{SequenceNumber, UdpConnectionConfig, UDP_MESSAGE_HEADER_SIZE};
+    use super::super::{SequenceNumber, UdpConnectionConfig, UDP_PACKET_HEADER_SIZE};
     use super::*;
     use std::time::Duration;
     use tokio::runtime::Runtime;
@@ -116,7 +117,7 @@ mod tests {
         assert_eq!(con.bytes_permitted_to_be_sent(), 20);
 
         let sent_packet =
-            UdpPacket::create(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
+            UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
         con.sent_packets
             .insert(SequenceNumber(0), sent_packet.clone());
         con.peer_window = 50;
@@ -145,7 +146,7 @@ mod tests {
     fn test_can_send() {
         let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 
-        let packet = UdpPacket::create(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
+        let packet = UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
 
         con.transit_window = 10;
         con.peer_window = 10;
@@ -231,7 +232,7 @@ mod tests {
 
             let con = Arc::from(Mutex::from(con));
 
-            let packet = UdpPacket::create(SequenceNumber(0), SequenceNumber(0), 0, &[]);
+            let packet = UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[]);
             
             let packet = tokio::select! {
                 packet = wait_until_can_send(Arc::clone(&con), packet) => packet,
@@ -255,7 +256,7 @@ mod tests {
 
             let con = Arc::from(Mutex::from(con));
 
-            let packet = UdpPacket::create(SequenceNumber(0), SequenceNumber(0), 0, &[]);
+            let packet = UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[]);
             
             let wait_for_send = tokio::spawn(wait_until_can_send(Arc::clone(&con), packet.clone()));
 

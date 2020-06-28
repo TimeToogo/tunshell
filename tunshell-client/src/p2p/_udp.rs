@@ -24,7 +24,7 @@ const MAX_RECV_BUFF: u32 = 102400;
 const RECV_TIMEOUT: u16 = 10;
 const SEND_TIMEOUT: u16 = 10;
 const MAX_PACKET_SIZE: usize = 576;
-const UDP_MESSAGE_HEADER_SIZE: usize = 4 + 4 + 4 + 2 + 4;
+const UDP_PACKET_HEADER_SIZE: usize = 4 + 4 + 4 + 2 + 4;
 const DEFAULT_RTT_ESTIMATE: u16 = 3000;
 const KEEP_ALIVE_INTERVAL: u32 = 30000;
 
@@ -86,7 +86,7 @@ struct UdpMessage {
 
 impl UdpMessage {
     fn parse(data: Vec<u8>) -> (IoResult<UdpMessage>, Vec<u8>) {
-        if data.len() < UDP_MESSAGE_HEADER_SIZE {
+        if data.len() < UDP_PACKET_HEADER_SIZE {
             error!("received packet is too small: {}", data.len());
             return (
                 Err(std::io::Error::from(std::io::ErrorKind::InvalidData)),
@@ -139,7 +139,7 @@ impl UdpMessage {
         peer_window: u32,
         mut buff: Vec<u8>,
     ) -> (UdpMessage, Vec<u8>) {
-        let length = std::cmp::min(buff.len(), MAX_PACKET_SIZE - UDP_MESSAGE_HEADER_SIZE) as u16;
+        let length = std::cmp::min(buff.len(), MAX_PACKET_SIZE - UDP_PACKET_HEADER_SIZE) as u16;
         let length = std::cmp::min(length as u32, peer_window) as u16;
         let payload = buff.drain(..(length as usize)).collect::<Vec<u8>>();
 
@@ -160,7 +160,7 @@ impl UdpMessage {
     fn to_vec(&self) -> Vec<u8> {
         use std::io::Write;
 
-        let buff = Vec::with_capacity(UDP_MESSAGE_HEADER_SIZE + self.payload.len());
+        let buff = Vec::with_capacity(UDP_PACKET_HEADER_SIZE + self.payload.len());
 
         let mut cursor = Cursor::new(buff);
         cursor.write_u32::<BigEndian>(self.sequence_number).unwrap();
