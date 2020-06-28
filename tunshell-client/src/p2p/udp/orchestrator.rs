@@ -219,8 +219,10 @@ fn handle_recv_packet(con: Arc<Mutex<UdpConnectionVars>>, packet: &[u8]) -> Resu
 
     if !packet.is_checksum_valid() {
         error!(
-            "received packet with invalid sequence number ({}), discarding",
-            packet.sequence_number
+            "received packet {} with invalid checksum, expected {}, received {}, discarding",
+            packet.sequence_number,
+            packet.calculate_checksum(),
+            packet.checksum
         );
         return Ok(());
     }
@@ -386,7 +388,6 @@ mod tests {
 
     #[test]
     fn test_recv_single_packet() {
-        env_logger::init();
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default();
             let (mut orchestrator, con, _, mut socket) =
@@ -473,6 +474,7 @@ mod tests {
                 assert_eq!(con.recv_drain_bytes(10), Vec::<u8>::new());
                 assert_eq!(con.sequence_number, SequenceNumber(0));
                 assert_eq!(con.ack_number, SequenceNumber(0));
+                assert_eq!(con.recv_packets.len(), 1);
             }
 
             socket
@@ -493,6 +495,35 @@ mod tests {
             assert_eq!(con.recv_drain_bytes(10), vec![1, 2, 3, 4, 5, 6, 7, 8]);
             assert_eq!(con.sequence_number, SequenceNumber(1));
             assert_eq!(con.ack_number, SequenceNumber(10));
+            assert_eq!(con.recv_packets.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_recv_packet_with_invalid_checksum() {
+        Runtime::new().unwrap().block_on(async {
+            let config = UdpConnectionConfig::default();
+            let (mut orchestrator, con, _, mut socket) =
+                init_udp_orchestrator_and_raw_socket(config).await;
+
+            orchestrator.start_orchestration_loop();
+
+            let mut packet = UdpPacket::data(SequenceNumber(1), SequenceNumber(0), 1000, &[]);
+            packet.checksum = 0;
+
+            socket.send(packet.to_vec().as_slice()).await.unwrap();
+
+            // Wait for packet to send and process
+            tokio::time::delay_for(Duration::from_millis(50)).await;
+
+            // Should discard packet with invalid checksum
+            {
+                let con = con.lock().unwrap();
+
+                assert_eq!(con.sequence_number, SequenceNumber(0));
+                assert_eq!(con.ack_number, SequenceNumber(0));
+                assert_eq!(con.recv_packets.len(), 0);
+            }
         });
     }
 
@@ -614,5 +645,195 @@ mod tests {
         });
     }
 
-    // TODO: keep alive / recv timeout
+    #[test]
+    fn test_wait_until_peer_window_permits_new_packet() {
+        Runtime::new().unwrap().block_on(async {
+            let config = UdpConnectionConfig::default().with_recv_window(1000);
+            let (mut orchestrator, con, tx, mut socket) =
+                init_udp_orchestrator_and_raw_socket(config).await;
+
+            orchestrator.start_orchestration_loop();
+
+            // Send packet
+            {
+                let mut con = con.lock().unwrap();
+                con.peer_window = 0;
+                let sent_packet = con.create_data_packet(&[1, 2, 3, 4, 5]);
+                tx.send(SendEvent::Send(sent_packet.clone())).unwrap();
+
+                sent_packet
+            };
+
+            // Packet should not send due to zero window
+            tokio::time::delay_for(Duration::from_millis(50)).await;
+
+            {
+                let con = con.lock().unwrap();
+
+                assert_eq!(con.sent_packets.len(), 0);
+            }
+
+            // Send mock window update
+            socket
+                .send(
+                    UdpPacket::data(SequenceNumber(1), SequenceNumber(0), 1000, &[])
+                        .to_vec()
+                        .as_slice(),
+                )
+                .await
+                .unwrap();
+
+            // Wait for packet to send and process
+            tokio::time::delay_for(Duration::from_millis(50)).await;
+
+            {
+                let con = con.lock().unwrap();
+
+                assert_eq!(con.sent_packets.len(), 1);
+                assert_eq!(con.send_times.len(), 1);
+            }
+
+            let mut buff = [0u8; 1024];
+            let received = socket.recv(&mut buff).await.unwrap();
+            let received_packet = UdpPacket::parse(&buff[..received]).unwrap();
+
+            assert_eq!(
+                received_packet,
+                UdpPacket::data(SequenceNumber(1), SequenceNumber(0), 1000, &[1, 2, 3, 4, 5])
+            );
+        });
+    }
+
+    #[test]
+    fn test_resends_dropped_packet() {
+        Runtime::new().unwrap().block_on(async {
+            let config = UdpConnectionConfig::default().with_recv_window(1000);
+            let (mut orchestrator, con, tx, mut socket) =
+                init_udp_orchestrator_and_raw_socket(config).await;
+
+            orchestrator.start_orchestration_loop();
+
+            // Send packet
+            {
+                let mut con = con.lock().unwrap();
+                con.peer_window = 1000;
+                con.rtt_estimate = Duration::from_millis(100);
+                let sent_packet = con.create_data_packet(&[1, 2, 3, 4, 5]);
+                tx.send(SendEvent::Send(sent_packet.clone())).unwrap();
+
+                sent_packet
+            };
+
+            // Wait for packet to send
+            tokio::time::delay_for(Duration::from_millis(50)).await;
+
+            let mut buff = [0u8; 1024];
+            let received = socket.recv(&mut buff).await.unwrap();
+            let received_packet = UdpPacket::parse(&buff[..received]).unwrap();
+
+            assert_eq!(
+                received_packet,
+                UdpPacket::data(SequenceNumber(1), SequenceNumber(0), 1000, &[1, 2, 3, 4, 5])
+            );
+
+            {
+                let con = con.lock().unwrap();
+
+                assert_eq!(con.sent_packets.len(), 1);
+            }
+
+            // Wait for 2.5 RTT to force packet to reset
+            tokio::time::delay_for(Duration::from_millis(200)).await;
+
+            let mut buff = [0u8; 1024];
+            let received = socket.recv(&mut buff).await.unwrap();
+            let received_packet = UdpPacket::parse(&buff[..received]).unwrap();
+
+            assert_eq!(
+                received_packet,
+                UdpPacket::data(SequenceNumber(1), SequenceNumber(0), 1000, &[1, 2, 3, 4, 5])
+            );
+
+            {
+                let con = con.lock().unwrap();
+
+                assert_eq!(con.sent_packets.len(), 1);
+            }
+
+            // Send mock ack
+            socket
+                .send(
+                    UdpPacket::data(SequenceNumber(1), SequenceNumber(6), 1000, &[])
+                        .to_vec()
+                        .as_slice(),
+                )
+                .await
+                .unwrap();
+
+            // Wait for ack to be received and processed
+            tokio::time::delay_for(Duration::from_millis(50)).await;
+
+            {
+                let con = con.lock().unwrap();
+
+                assert_eq!(con.peer_ack_number, SequenceNumber(6));
+                assert_eq!(con.sent_packets.len(), 0);
+            }
+
+            // Wait for 2.5 RTT to verify acknowledged packet is not resent
+            tokio::time::delay_for(Duration::from_millis(200)).await;
+
+            tokio::select! {
+                _ = socket.recv(&mut buff) => panic!("packet should not be resent after being acknowledged by the peer"),
+                _ = delay_for(Duration::from_millis(10)) => {}
+            }
+        });
+    }
+
+    #[test]
+    fn test_recv_timeout() {
+        Runtime::new().unwrap().block_on(async {
+            let config =
+                UdpConnectionConfig::default().with_recv_timeout(Duration::from_millis(50));
+            let (mut orchestrator, con, _, _) = init_udp_orchestrator_and_raw_socket(config).await;
+
+            orchestrator.start_orchestration_loop();
+
+            // Wait for recv timeout
+            tokio::time::delay_for(Duration::from_millis(60)).await;
+
+            {
+                let con = con.lock().unwrap();
+
+                assert_eq!(con.state, UdpConnectionState::Disconnected);
+            }
+        });
+    }
+
+    #[test]
+    fn test_keep_alive_packet() {
+        Runtime::new().unwrap().block_on(async {
+            let config = UdpConnectionConfig::default()
+                .with_recv_window(1000)
+                .with_keep_alive_interval(Duration::from_millis(50));
+            let (mut orchestrator, _, _, mut socket) =
+                init_udp_orchestrator_and_raw_socket(config).await;
+
+            orchestrator.start_orchestration_loop();
+
+            for i in 1..=3 {
+                // Wait for keep alive interval
+                tokio::time::delay_for(Duration::from_millis(60)).await;
+
+                let mut buff = [0u8; 1024];
+                let received = socket.recv(&mut buff).await.unwrap();
+                let received_packet = UdpPacket::parse(&buff[..received]).unwrap();
+
+                assert_eq!(
+                    received_packet,
+                    UdpPacket::data(SequenceNumber(i), SequenceNumber(0), 1000, &[])
+                );
+            }
+        });
+    }
 }

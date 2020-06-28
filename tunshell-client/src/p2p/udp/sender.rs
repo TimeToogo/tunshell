@@ -71,6 +71,10 @@ impl UdpConnectionVars {
         packet
     }
 
+    pub(super) fn create_open_packet(&mut self) -> UdpPacket {
+        UdpPacket::open(self.sequence_number, self.ack_number, self.calculate_recv_window())
+    }
+
     pub(super) fn create_close_packet(&mut self) -> UdpPacket {
         let packet = UdpPacket::close(self.sequence_number + SequenceNumber(1), self.ack_number);
 
@@ -108,6 +112,25 @@ mod tests {
 
         assert_eq!(con.sequence_number, SequenceNumber(11));
     }
+
+    #[test]
+    fn test_create_open_packet() {
+        let mut con = UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+
+        con.sequence_number = SequenceNumber(10);
+        con.ack_number = SequenceNumber(20);
+
+        let packet = con.create_close_packet();
+
+        assert_eq!(packet.packet_type, UdpPacketType::Open);
+        assert_eq!(packet.sequence_number, SequenceNumber(10));
+        assert_eq!(packet.ack_number, SequenceNumber(20));
+        assert_eq!(packet.window, 1000);
+        assert_eq!(packet.payload, Vec::<u8>::new());
+
+        assert_eq!(con.sequence_number, SequenceNumber(10));
+    }
+
 
     #[test]
     fn test_create_close_packet() {
