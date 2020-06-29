@@ -120,7 +120,7 @@ mod tests {
         con.sequence_number = SequenceNumber(10);
         con.ack_number = SequenceNumber(20);
 
-        let packet = con.create_close_packet();
+        let packet = con.create_open_packet();
 
         assert_eq!(packet.packet_type, UdpPacketType::Open);
         assert_eq!(packet.sequence_number, SequenceNumber(10));

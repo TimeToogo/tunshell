@@ -1,12 +1,16 @@
 use super::MAX_PACKET_SIZE;
 use std::time::Duration;
 
+const DEFAULT_CONNECT_TIMEOUT: u64 = 3000; // ms
 const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 15000; // ms
 const DEFAULT_INITIAL_TRANSIT_WINDOW: u32 = 102400; // bytes
 const DEFAULT_RECV_WINDOW: u32 = 102400; // bytes
 
 #[derive(Debug, Clone)]
 pub struct UdpConnectionConfig {
+    /// How long to allow for the connection to be negotiated    
+    connect_timeout: Duration,
+
     /// How often to send a keep-alive packet    
     keep_alive_interval: Duration,
 
@@ -23,11 +27,22 @@ pub struct UdpConnectionConfig {
 impl UdpConnectionConfig {
     pub fn default() -> Self {
         Self {
+            connect_timeout: Duration::from_millis(DEFAULT_CONNECT_TIMEOUT),
             keep_alive_interval: Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL),
             recv_timeout: Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL * 2),
             initial_transit_window: DEFAULT_INITIAL_TRANSIT_WINDOW,
             recv_window: DEFAULT_RECV_WINDOW,
         }
+    }
+
+    pub fn connect_timeout(&self) -> Duration {
+        self.connect_timeout
+    }
+
+    pub fn with_connect_timeout(mut self, value: Duration) -> Self {
+        self.connect_timeout = value;
+
+        self
     }
 
     pub fn keep_alive_interval(&self) -> Duration {

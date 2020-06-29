@@ -23,6 +23,8 @@ async fn negotiate_connection(
 ) -> Result<SocketAddr> {
     assert!(con.state == UdpConnectionState::New);
 
+    let timeout = con.config().connect_timeout();
+
     // Send the first hello packet.
     // This may not be delivered if the peer is behind a NAT
     send_magic_hello(socket, Some(SocketAddr::from((peer_ip, suggested_port)))).await?;
@@ -31,7 +33,7 @@ async fn negotiate_connection(
     // Wait for a hello packet.
     // If one of the peers is not behind a NAT, this received the hello packet.
     // We then connect on the outbound port received from the hello packet.
-    let peer_addr = wait_for_magic_hello(socket, peer_ip).await?;
+    let peer_addr = wait_for_magic_hello(socket, peer_ip, timeout).await?;
     socket
         .connect(peer_addr)
         .await
@@ -43,17 +45,20 @@ async fn negotiate_connection(
 
     let start = Instant::now();
 
+    // If we are the master side we first send the sync packet and wait for the reply
+    // otherwise we wait for the sync and then send a reply
     if master_side {
         send_sync_packet(socket, con).await?;
         con.set_state_sent_sync();
 
-        wait_for_sync_packet(socket, con).await?;
+        wait_for_sync_packet(socket, con, timeout).await?;
 
         // Since we have completed a full round trip we set the initial RTT estimate
         con.rtt_estimate = Instant::now().duration_since(start);
     } else {
         con.set_state_waiting_for_sync();
-        wait_for_sync_packet(socket, con).await?;
+
+        wait_for_sync_packet(socket, con, timeout).await?;
         send_sync_packet(socket, con).await?;
 
         // Considering the non-master side only has to wait for the sync packet to arrive
@@ -81,7 +86,11 @@ async fn send_magic_hello(socket: &mut UdpSocket, dest: Option<SocketAddr>) -> R
 // This could come from potentially a different port on the peer
 // than provided as, due to potential NAT's, we do not know the
 // outbound port ahead of time.
-async fn wait_for_magic_hello(socket: &mut UdpSocket, peer_ip: IpAddr) -> Result<SocketAddr> {
+async fn wait_for_magic_hello(
+    socket: &mut UdpSocket,
+    peer_ip: IpAddr,
+    timeout: Duration,
+) -> Result<SocketAddr> {
     let mut buff = [0u8; MAGIC_HELLO.len()];
 
     let (read, from_addr) = tokio::select! {
@@ -89,7 +98,7 @@ async fn wait_for_magic_hello(socket: &mut UdpSocket, peer_ip: IpAddr) -> Result
             Ok((read, addr)) => (read, addr),
             Err(err) => return Err(Error::from(err)).context("failed to wait for magic hello packet"),
         },
-        _ = delay_for(Duration::from_millis(3000)) => return Err(Error::msg("timed out while waiting for magic hello"))
+        _ = delay_for(timeout) => return Err(Error::msg("timed out while waiting for magic hello"))
     };
     if &buff[..read] != MAGIC_HELLO {
         return Err(Error::msg(
@@ -109,10 +118,14 @@ async fn wait_for_magic_hello(socket: &mut UdpSocket, peer_ip: IpAddr) -> Result
 }
 
 async fn send_sync_packet(socket: &mut UdpSocket, con: &mut UdpConnectionVars) -> Result<()> {
-    // We initialise the connection state to a random sequence number
-    let mut rng = rand::thread_rng();
-    con.sequence_number = SequenceNumber(rng.gen());
-    debug!("initialised sequence number to {}", con.sequence_number);
+    // We need to keep the rng in a block so rust knows it is dropped before an await yield
+    // So this async function can be thread-safe (Send)
+    {
+        // We initialise the connection state to a random sequence number
+        let mut rng = rand::thread_rng();
+        con.sequence_number = SequenceNumber(rng.gen());
+        debug!("initialised sequence number to {}", con.sequence_number);
+    }
 
     match socket
         .send(con.create_open_packet().to_vec().as_slice())
@@ -123,7 +136,11 @@ async fn send_sync_packet(socket: &mut UdpSocket, con: &mut UdpConnectionVars) -
     }
 }
 
-async fn wait_for_sync_packet(socket: &mut UdpSocket, con: &mut UdpConnectionVars) -> Result<()> {
+async fn wait_for_sync_packet(
+    socket: &mut UdpSocket,
+    con: &mut UdpConnectionVars,
+    timeout: Duration,
+) -> Result<()> {
     let mut buff = [0u8; 256];
 
     let packet_buff = loop {
@@ -132,7 +149,7 @@ async fn wait_for_sync_packet(socket: &mut UdpSocket, con: &mut UdpConnectionVar
                 Ok(read) => read,
                 Err(err) => return Err(Error::from(err)).context("failed to wait for sync packet"),
             },
-            _ = delay_for(Duration::from_millis(3000)) => return Err(Error::msg("timed out while waiting for sync"))
+            _ = delay_for(timeout) => return Err(Error::msg("timed out while waiting for sync"))
         };
 
         // If neither of the peers are behind NAT's
@@ -159,6 +176,7 @@ async fn wait_for_sync_packet(socket: &mut UdpSocket, con: &mut UdpConnectionVar
         _ => return Err(Error::msg("invalid sync packet type")),
     }
 
+    con.peer_window = sync_packet.window;
     con.ack_number = sync_packet.sequence_number;
 
     Ok(())
@@ -203,8 +221,10 @@ mod tests {
             let addr1 = socket1.local_addr().unwrap();
             let addr2 = socket2.local_addr().unwrap();
 
-            let mut con1 = UdpConnectionVars::new(UdpConnectionConfig::default());
-            let mut con2 = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let config =
+                UdpConnectionConfig::default().with_connect_timeout(Duration::from_millis(50));
+            let mut con1 = UdpConnectionVars::new(config.clone());
+            let mut con2 = UdpConnectionVars::new(config.clone());
 
             let (result1, result2) = tokio::join!(
                 negotiate_connection(&mut con1, &mut socket1, addr2.ip(), addr2.port(), true),
@@ -224,12 +244,14 @@ mod tests {
             let addr1 = socket1.local_addr().unwrap();
             let addr2 = socket2.local_addr().unwrap();
 
-            let mut con1 = UdpConnectionVars::new(UdpConnectionConfig::default());
-            let mut con2 = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let config =
+                UdpConnectionConfig::default().with_connect_timeout(Duration::from_millis(50));
+            let mut con1 = UdpConnectionVars::new(config.clone());
+            let mut con2 = UdpConnectionVars::new(config.clone());
 
             // In the event of an NAT on one side of the connection
             // the suggested port will not be correct
-            // The connection should still be able to be made by listening for the 
+            // The connection should still be able to be made by listening for the
             // outbound port of the incoming hello packet.
             let (result1, result2) = tokio::join!(
                 negotiate_connection(&mut con1, &mut socket1, addr2.ip(), 20000, true),
@@ -249,8 +271,10 @@ mod tests {
             let addr1 = socket1.local_addr().unwrap();
             let addr2 = socket2.local_addr().unwrap();
 
-            let mut con1 = UdpConnectionVars::new(UdpConnectionConfig::default());
-            let mut con2 = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let config =
+                UdpConnectionConfig::default().with_connect_timeout(Duration::from_millis(50));
+            let mut con1 = UdpConnectionVars::new(config.clone());
+            let mut con2 = UdpConnectionVars::new(config.clone());
 
             // If both sides of the connections are behind port-mangling NAT's
             // the connection will not succeeded.
@@ -264,5 +288,120 @@ mod tests {
         });
     }
 
-    // TODO: add additional tests
+    #[test]
+    fn test_negotiate_connection_master_side() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut socket1, mut socket2) = init_udp_socket_pair().await;
+
+            let addr1 = socket1.local_addr().unwrap();
+            let addr2 = socket2.local_addr().unwrap();
+
+            let config = UdpConnectionConfig::default()
+                .with_recv_window(1000)
+                .with_connect_timeout(Duration::from_millis(500));
+            let mut con1 = UdpConnectionVars::new(config.clone());
+
+            let task = tokio::spawn(async move {
+                negotiate_connection(&mut con1, &mut socket1, addr2.ip(), addr2.port(), true)
+                    .await
+                    .unwrap();
+
+                con1
+            });
+
+            socket2.connect(addr1).await.unwrap();
+
+            let mut buff = [0u8; 1024];
+
+            // Should receive hello
+            let read = socket2.recv(&mut buff).await.unwrap();
+            assert_eq!(&buff[..read], MAGIC_HELLO);
+
+            // Mock response
+            socket2.send(MAGIC_HELLO).await.unwrap();
+
+            // Should receive second hello
+            let read = socket2.recv(&mut buff).await.unwrap();
+            assert_eq!(&buff[..read], MAGIC_HELLO);
+
+            // Should receive sync packet from master
+            let read = socket2.recv(&mut buff).await.unwrap();
+            let sync_packet = UdpPacket::parse(&buff[..read]).unwrap();
+            assert_eq!(sync_packet.packet_type, UdpPacketType::Open);
+            assert_eq!(sync_packet.window, 1000);
+
+            // Mock send reply packet
+            let reply_packet = UdpPacket::open(SequenceNumber(1), SequenceNumber(0), 5000);
+            socket2
+                .send(reply_packet.to_vec().as_slice())
+                .await
+                .unwrap();
+
+            // Connection should be complete
+            let con1 = task.await.unwrap();
+
+            assert_eq!(sync_packet.sequence_number, con1.sequence_number);
+            assert_eq!(con1.peer_window, 5000);
+            assert_eq!(con1.state, UdpConnectionState::SentSync);
+        });
+    }
+
+    #[test]
+    fn test_negotiate_connection_non_master_side() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut socket1, mut socket2) = init_udp_socket_pair().await;
+
+            let addr1 = socket1.local_addr().unwrap();
+            let addr2 = socket2.local_addr().unwrap();
+
+            let config = UdpConnectionConfig::default()
+                .with_recv_window(1000)
+                .with_connect_timeout(Duration::from_millis(500));
+            let mut con1 = UdpConnectionVars::new(config.clone());
+
+            let task = tokio::spawn(async move {
+                negotiate_connection(&mut con1, &mut socket1, addr2.ip(), addr2.port(), false)
+                    .await
+                    .unwrap();
+
+                con1
+            });
+
+            socket2.connect(addr1).await.unwrap();
+
+            let mut buff = [0u8; 1024];
+
+            // Should receive hello
+            let read = socket2.recv(&mut buff).await.unwrap();
+            assert_eq!(&buff[..read], MAGIC_HELLO);
+
+            // Mock response
+            socket2.send(MAGIC_HELLO).await.unwrap();
+
+            // Should receive second hello
+            let read = socket2.recv(&mut buff).await.unwrap();
+            assert_eq!(&buff[..read], MAGIC_HELLO);
+
+            // Mock send sync packet
+            let reply_packet = UdpPacket::open(SequenceNumber(100), SequenceNumber(0), 5000);
+            socket2
+                .send(reply_packet.to_vec().as_slice())
+                .await
+                .unwrap();
+
+            // Should receive reply packet from master
+            let read = socket2.recv(&mut buff).await.unwrap();
+            let reply_packet = UdpPacket::parse(&buff[..read]).unwrap();
+            assert_eq!(reply_packet.packet_type, UdpPacketType::Open);
+            assert_eq!(reply_packet.window, 1000);
+            assert_eq!(reply_packet.ack_number, SequenceNumber(100));
+
+            // Connection should be complete
+            let con1 = task.await.unwrap();
+
+            assert_eq!(reply_packet.sequence_number, con1.sequence_number);
+            assert_eq!(con1.peer_window, 5000);
+            assert_eq!(con1.state, UdpConnectionState::WaitingForSync);
+        });
+    }
 }
