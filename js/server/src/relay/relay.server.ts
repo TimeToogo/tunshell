@@ -34,7 +34,7 @@ export class TlsRelayServer {
       this.cleanUpIntervalId = setInterval(this.cleanUpOldConnections, this.config.cleanUpInterval);
     });
 
-    return new Promise((resolve) => (this.listenResolve = resolve));
+    return new Promise(resolve => (this.listenResolve = resolve));
   };
 
   public close = async () => {
@@ -49,7 +49,7 @@ export class TlsRelayServer {
       connection.close();
     }
 
-    await new Promise((resolve, reject) => this.server.close((err) => (err ? reject(err) : resolve())));
+    await new Promise((resolve, reject) => this.server.close(err => (err ? reject(err) : resolve())));
     this.server = null;
     this.listenResolve();
     this.listenResolve = null;
@@ -84,7 +84,7 @@ export class TlsRelayServer {
         return;
       }
 
-      const peer = [session.client, session.host].find((i) => i.key !== key);
+      const peer = [session.client, session.host].find(i => i.key !== key);
       const peerConnection =
         this.connections[peer.key] && !this.connections[peer.key].isDead() ? this.connections[peer.key] : null;
 
@@ -171,9 +171,12 @@ export class TlsRelayServer {
     const directConnectTime1 = Math.round(directConnectAttemptTime + estimate1.timeDiff);
     const directConnectTime2 = Math.round(directConnectAttemptTime + estimate2.timeDiff);
 
+    const port1 = _.random(20000, 40000);
+    const port2 = _.random(20000, 40000);
+
     const [success1, success2] = await Promise.all([
-      peer1.attemptDirectConnect(directConnectTime1),
-      peer2.attemptDirectConnect(directConnectTime2),
+      peer1.attemptDirectConnect(directConnectTime1, port1, port2),
+      peer2.attemptDirectConnect(directConnectTime2, port2, port1),
     ]);
 
     return success1 && success2;
@@ -190,7 +193,7 @@ export class TlsRelayServer {
       return false;
     }
 
-    const participant = [session.client, session.host].find((i) => i.key === key);
+    const participant = [session.client, session.host].find(i => i.key === key);
 
     if (!participant) {
       return false;
