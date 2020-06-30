@@ -17,9 +17,11 @@ impl UdpConnectionVars {
     }
 
     pub(super) fn can_send(&self, packet: &UdpPacket) -> bool {
-        let len = packet.len() as u32;
+        self.can_send_bytes(packet.len() as u32)
+    }
 
-        len <= self.bytes_permitted_to_be_sent()
+    pub(super) fn can_send_bytes(&self, amount: u32) -> bool {
+        amount <= self.bytes_permitted_to_be_sent()
     }
 
     fn bytes_permitted_to_be_sent(&self) -> u32 {
@@ -97,7 +99,7 @@ pub(super) async fn wait_until_can_send(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{SequenceNumber, UdpConnectionConfig, UDP_PACKET_HEADER_SIZE};
+    use super::super::{SequenceNumber, UdpConnectionConfig};
     use super::*;
     use std::time::Duration;
     use tokio::runtime::Runtime;

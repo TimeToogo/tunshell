@@ -14,7 +14,7 @@ const MAGIC_HELLO: &[u8] = "tunshell::udp::hello".as_bytes();
 
 /// Attempts to negotiate a connection over UDP between two peers.
 /// This should support a connection where at most one peer is behind a NAT.
-async fn negotiate_connection(
+pub(super) async fn negotiate_connection(
     con: &mut UdpConnectionVars,
     socket: &mut UdpSocket,
     peer_ip: IpAddr,
@@ -162,7 +162,7 @@ async fn wait_for_sync_packet(
         // I'm not certain this is possible but if the magic packet
         // is combined into the same buffer as the sync packet we
         // ignore this here
-        if read > MAGIC_HELLO.len() && &buff[..read] == MAGIC_HELLO {
+        if read > MAGIC_HELLO.len() && &buff[..MAGIC_HELLO.len()] == MAGIC_HELLO {
             break &buff[MAGIC_HELLO.len()..(read - MAGIC_HELLO.len())];
         }
 

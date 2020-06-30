@@ -1,4 +1,4 @@
-use super::{UdpConnectionVars, UdpPacket, SequenceNumber};
+use super::{UdpConnectionVars, UdpPacket};
 use std::time::{Duration, Instant};
 
 impl UdpConnectionVars {

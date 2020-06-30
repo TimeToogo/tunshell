@@ -1,7 +1,7 @@
-use super::{SequenceNumber, UdpConnectionVars, UdpPacket, UdpPacketType};
+use super::{SequenceNumber, UdpConnectionVars, UdpPacket};
+use log::*;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedReceiver;
-use log::*;
 
 #[derive(Debug, PartialEq)]
 pub(super) enum SendEvent {
@@ -30,17 +30,17 @@ impl SendEventReceiver {
             None => return None,
         };
 
-        for _ in 1..5 {
+        for _ in 1..100 {
             match event {
                 // In the case of ack or window update we yield to executor multiple times
                 // to avoid sending unnecessary empty packets if they are not required
-                SendEvent::AckUpdate | SendEvent::WindowUpdate => tokio::task::yield_now().await,
+                SendEvent::AckUpdate | SendEvent::WindowUpdate => {},
                 SendEvent::Send(packet) | SendEvent::Resend(packet) => return Some(packet),
                 SendEvent::Close => {
                     let mut con = con.lock().unwrap();
                     return Some(con.create_close_packet());
                 }
-            };
+            }
 
             event = match self.receiver.try_recv() {
                 Ok(event) => event,
@@ -52,27 +52,48 @@ impl SendEventReceiver {
         // to be sent, we send an empty packet
         let mut con = con.lock().unwrap();
 
-        debug!("sending window/ack update");
+        debug!(
+            "sending window/ack update [ack: {}, window: {}]",
+            con.ack_number,
+            con.calculate_recv_window()
+        );
         Some(con.create_data_packet(&[]))
     }
 }
 
 impl UdpConnectionVars {
     pub(super) fn create_data_packet(&mut self, payload: &[u8]) -> UdpPacket {
+        // Only increase the sequence number if the packet contains data
+        // This allows ACK/window updates not to incur recursive ACK's from the peer
+        let sequence_number = if payload.len() == 0 {
+            self.sequence_number
+        } else {
+            self.sequence_number + SequenceNumber(1)
+        };
+
         let packet = UdpPacket::data(
-            self.sequence_number + SequenceNumber(1),
+            sequence_number,
             self.ack_number,
             self.calculate_recv_window(),
             payload,
         );
 
+        debug!("created packet: [{}, {}]", packet.sequence_number, packet.end_sequence_number());
         self.update_sequence_number(&packet);
 
         packet
     }
 
     pub(super) fn create_open_packet(&mut self) -> UdpPacket {
-        UdpPacket::open(self.sequence_number, self.ack_number, self.calculate_recv_window())
+        let packet = UdpPacket::open(
+            self.sequence_number + SequenceNumber(1),
+            self.ack_number,
+            self.calculate_recv_window(),
+        );
+
+        self.update_sequence_number(&packet);
+
+        packet
     }
 
     pub(super) fn create_close_packet(&mut self) -> UdpPacket {
@@ -90,7 +111,7 @@ impl UdpConnectionVars {
 
 #[cfg(test)]
 mod tests {
-    use super::super::UdpConnectionConfig;
+    use super::super::{UdpConnectionConfig, UdpPacketType};
     use super::*;
     use tokio::runtime::Runtime;
     use tokio::sync::mpsc::unbounded_channel;
@@ -102,15 +123,33 @@ mod tests {
         con.sequence_number = SequenceNumber(10);
         con.ack_number = SequenceNumber(20);
 
-        let packet = con.create_data_packet(&[]);
+        let packet = con.create_data_packet(&[1]);
 
         assert_eq!(packet.packet_type, UdpPacketType::Data);
         assert_eq!(packet.sequence_number, SequenceNumber(11));
         assert_eq!(packet.ack_number, SequenceNumber(20));
         assert_eq!(packet.window, 1000);
+        assert_eq!(packet.payload, vec![1u8]);
+
+        assert_eq!(con.sequence_number, SequenceNumber(12));
+    }
+
+    #[test]
+    fn test_create_data_packet_empty() {
+        let mut con = UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+
+        con.sequence_number = SequenceNumber(10);
+        con.ack_number = SequenceNumber(20);
+
+        let packet = con.create_data_packet(&[]);
+
+        assert_eq!(packet.packet_type, UdpPacketType::Data);
+        assert_eq!(packet.sequence_number, SequenceNumber(10));
+        assert_eq!(packet.ack_number, SequenceNumber(20));
+        assert_eq!(packet.window, 1000);
         assert_eq!(packet.payload, Vec::<u8>::new());
 
-        assert_eq!(con.sequence_number, SequenceNumber(11));
+        assert_eq!(con.sequence_number, SequenceNumber(10));
     }
 
     #[test]
@@ -123,14 +162,13 @@ mod tests {
         let packet = con.create_open_packet();
 
         assert_eq!(packet.packet_type, UdpPacketType::Open);
-        assert_eq!(packet.sequence_number, SequenceNumber(10));
+        assert_eq!(packet.sequence_number, SequenceNumber(11));
         assert_eq!(packet.ack_number, SequenceNumber(20));
         assert_eq!(packet.window, 1000);
         assert_eq!(packet.payload, Vec::<u8>::new());
 
-        assert_eq!(con.sequence_number, SequenceNumber(10));
+        assert_eq!(con.sequence_number, SequenceNumber(11));
     }
-
 
     #[test]
     fn test_create_close_packet() {
@@ -265,7 +303,7 @@ mod tests {
 
             assert_eq!(
                 packet,
-                UdpPacket::data(SequenceNumber(11), SequenceNumber(0), 1000, &[])
+                UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 1000, &[])
             );
         });
     }
@@ -292,7 +330,7 @@ mod tests {
 
             assert_eq!(
                 packet,
-                UdpPacket::data(SequenceNumber(11), SequenceNumber(0), 1000, &[])
+                UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 1000, &[])
             );
         });
     }

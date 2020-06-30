@@ -15,10 +15,8 @@ use congestion::*;
 use negotiator::*;
 use orchestrator::*;
 use packet::*;
-use receiver::*;
 use sender::*;
 use resender::*;
-use rtt_estimator::*;
 use state::*;
 use seq_number::*;
 

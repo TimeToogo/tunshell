@@ -12,7 +12,7 @@ use futures::stream::StreamExt;
 use log::*;
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
 use tokio_util::compat::*;
@@ -40,13 +40,13 @@ impl<'a> Client<'a> {
         let key_type = self.send_key(&mut message_stream).await?;
 
         println!("Waiting for peer to join...");
-        let peer_info: PeerJoinedPayload = self.wait_for_peer_to_join(&mut message_stream).await?;
+        let mut peer_info = self.wait_for_peer_to_join(&mut message_stream).await?;
         println!("{} joined the session", peer_info.peer_ip_address);
 
         println!("Negotiating connection...");
         let message_stream = Arc::new(Mutex::new(message_stream));
         let peer_socket = self
-            .negotiate_peer_connect(&message_stream, &peer_info)
+            .negotiate_peer_connect(&message_stream, &mut peer_info, key_type.is_host())
             .await?;
 
         let exit_code = match key_type {
@@ -84,7 +84,7 @@ impl<'a> Client<'a> {
             .unwrap();
 
         let network_stream = TcpStream::connect(&relay_addr).await?;
-        network_stream.set_keepalive(Some(std::time::Duration::from_secs(30)))?;
+        network_stream.set_keepalive(Some(Duration::from_secs(30)))?;
         let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
 
         Ok(transport_stream)
@@ -124,7 +124,8 @@ impl<'a> Client<'a> {
     async fn negotiate_peer_connect(
         &mut self,
         message_stream: &Arc<Mutex<ClientMessageStream>>,
-        peer_info: &PeerJoinedPayload,
+        peer_info: &mut PeerJoinedPayload,
+        master_side: bool,
     ) -> Result<Box<dyn TunnelStream>> {
         loop {
             let mut message_stream = message_stream.lock().unwrap();
@@ -141,7 +142,12 @@ impl<'a> Client<'a> {
                 }
                 Some(Ok(ServerMessage::AttemptDirectConnect(payload))) => {
                     match self
-                        .attempt_direct_connection(&mut message_stream, &peer_info, &payload)
+                        .attempt_direct_connection(
+                            &mut message_stream,
+                            peer_info,
+                            &payload,
+                            master_side,
+                        )
                         .await?
                     {
                         Some(direct_stream) => {
@@ -174,32 +180,39 @@ impl<'a> Client<'a> {
     async fn attempt_direct_connection(
         &mut self,
         _message_stream: &mut ClientMessageStream,
-        peer_info: &PeerJoinedPayload,
+        peer_info: &mut PeerJoinedPayload,
         connection_info: &AttemptDirectConnectPayload,
+        master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
         println!(
             "Attempting direct connection to {}",
             peer_info.peer_ip_address
         );
-        let current_timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+
+        // Initialise and bind connections
+        let mut tcp = p2p::tcp::TcpConnection::new(peer_info.clone(), connection_info.clone());
+        let mut udp =
+            p2p::udp_adaptor::UdpConnectionAdaptor::new(peer_info.clone(), connection_info.clone());
+
+        tokio::try_join!(tcp.bind() /*, udp.bind() */)?;
+
+        let current_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
         let sleep_duration = std::cmp::max(0, connection_info.connect_at - current_timestamp);
-        std::thread::sleep(std::time::Duration::from_millis(sleep_duration));
 
-        let tcp_future = p2p::tcp::TcpConnection::connect(&peer_info, &connection_info);
-        // let udp_future = UdpConnection::connect(&peer_info, &connection_info);
+        std::thread::sleep(Duration::from_millis(sleep_duration));
 
         tokio::select! {
-            connection = tcp_future => match connection {
-                Ok(connection) => return Ok(Some(Box::new(connection))),
+            result = tcp.connect(master_side) => match result {
+                Ok(_) => return Ok(Some(Box::new(tcp))),
                 Err(err) => error!("Error while establishing TCP connection: {}", err)
             },
-            // connection = udp_future => match connection {
-            //     Ok(connection) => return Ok(Some(Box::new(connection))),
-            //     Err(err) => error!("Error while establishing UDP connection: {}", err)
-            // }
+            result = udp.connect(master_side) => match result {
+                Ok(_) => return Ok(Some(Box::new(udp))),
+                Err(err) => error!("Error while establishing UDP connection: {}", err)
+            }
         };
 
         Ok(None)

@@ -40,8 +40,13 @@ impl UdpConnectionVars {
                 packet.sequence_number,
                 packet.end_sequence_number(),
                 self.recv_window_start(),
-                self.recv_window_start(),
+                self.recv_window_end(),
             ));
+        }
+
+        // If the packet is a pure ACK/window update we can ignore it here
+        if packet.payload.len() == 0 {
+            return Ok(0);
         }
 
         if let Some(other) = self.recv_packets.iter().find(|i| packet.overlaps(i)) {
@@ -197,10 +202,10 @@ mod tests {
                 ))
                 .unwrap();
 
-            assert_eq!(advanced, 1);
+            assert_eq!(advanced, 0);
             assert_eq!(con.recv_packets, Vec::<UdpPacket>::new());
             assert_eq!(con.reassembled_buffer, Vec::<u8>::new());
-            assert_eq!(con.ack_number, SequenceNumber(1));
+            assert_eq!(con.ack_number, SequenceNumber(0));
         });
     }
 
@@ -291,15 +296,6 @@ mod tests {
 
             let result = con.recv_process_packet(UdpPacket::data(
                 SequenceNumber(9),
-                SequenceNumber(0),
-                0,
-                &[],
-            ));
-
-            assert_eq!(result.is_err(), true);
-
-            let result = con.recv_process_packet(UdpPacket::data(
-                SequenceNumber(10),
                 SequenceNumber(0),
                 0,
                 &[],

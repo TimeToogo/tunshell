@@ -70,6 +70,9 @@ pub(super) struct UdpConnectionVars {
 
     /// Channel for signaling that new packets should be sent or resent.
     pub(super) event_sender: Option<UnboundedSender<SendEvent>>,
+
+    /// Task wakers to be woken when the connection is closed.
+    pub(super) close_wakers: Vec<Waker>,
 }
 
 impl UdpConnectionVars {
@@ -92,15 +95,12 @@ impl UdpConnectionVars {
             peer_ack_number: SequenceNumber(0),
             sent_packets: HashMap::new(),
             event_sender: None,
+            close_wakers: vec![]
         }
     }
 
     pub(super) fn config(&self) -> &UdpConnectionConfig {
         &self.config
-    }
-
-    pub(super) fn state(&self) -> UdpConnectionState {
-        self.state
     }
 
     pub(super) fn is_connected(&self) -> bool {
@@ -145,10 +145,20 @@ impl UdpConnectionVars {
         self.event_sender.replace(event_sender);
     }
 
+    pub(super) fn try_set_state_disconnected(&mut self) {
+        if self.is_connected() {
+            self.set_state_disconnected();
+        }
+    }
+
     pub(super) fn set_state_disconnected(&mut self) {
         assert!(self.state == UdpConnectionState::Connected);
         debug!("connection state set to DISCONNECTED");
         self.state = UdpConnectionState::Disconnected;
+
+        for waker in self.close_wakers.drain(..) {
+            waker.wake();
+        }
     }
 
     pub(super) fn event_sender(&self) -> UnboundedSender<SendEvent> {
@@ -162,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_new_vars() {
-        let mut vars = UdpConnectionVars::new(UdpConnectionConfig::default());
+        let vars = UdpConnectionVars::new(UdpConnectionConfig::default());
 
         assert_eq!(vars.state, UdpConnectionState::New);
     }

@@ -1,4 +1,5 @@
 use super::MAX_PACKET_SIZE;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 const DEFAULT_CONNECT_TIMEOUT: u64 = 3000; // ms
@@ -8,8 +9,11 @@ const DEFAULT_RECV_WINDOW: u32 = 102400; // bytes
 
 #[derive(Debug, Clone)]
 pub struct UdpConnectionConfig {
-    /// How long to allow for the connection to be negotiated    
+    /// How long to allow for the connection to be negotiated
     connect_timeout: Duration,
+
+    /// The address on which to bind on
+    bind_addr: SocketAddr,
 
     /// How often to send a keep-alive packet    
     keep_alive_interval: Duration,
@@ -24,10 +28,12 @@ pub struct UdpConnectionConfig {
     recv_window: u32,
 }
 
+#[allow(dead_code)]
 impl UdpConnectionConfig {
     pub fn default() -> Self {
         Self {
             connect_timeout: Duration::from_millis(DEFAULT_CONNECT_TIMEOUT),
+            bind_addr: SocketAddr::from(([0, 0, 0, 0], 0)),
             keep_alive_interval: Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL),
             recv_timeout: Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL * 2),
             initial_transit_window: DEFAULT_INITIAL_TRANSIT_WINDOW,
@@ -41,6 +47,16 @@ impl UdpConnectionConfig {
 
     pub fn with_connect_timeout(mut self, value: Duration) -> Self {
         self.connect_timeout = value;
+
+        self
+    }
+
+    pub fn bind_addr(&self) -> SocketAddr {
+        self.bind_addr
+    }
+
+    pub fn with_bind_addr(mut self, value: SocketAddr) -> Self {
+        self.bind_addr = value;
 
         self
     }
@@ -95,6 +111,11 @@ mod tests {
     fn test_default_config() {
         let config = UdpConnectionConfig::default();
 
+        assert_eq!(
+            config.connect_timeout.as_millis() as u64,
+            DEFAULT_CONNECT_TIMEOUT
+        );
+        assert_eq!(config.bind_addr, SocketAddr::from(([0, 0, 0, 0], 0)));
         assert_eq!(
             config.keep_alive_interval.as_millis() as u64,
             DEFAULT_KEEP_ALIVE_INTERVAL

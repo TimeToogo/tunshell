@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RawMessage {
     type_id: u8,
     length: u16,
@@ -14,7 +14,7 @@ pub trait Message<T>: Unpin + Sync + Send + std::fmt::Debug {
     fn deserialise(raw_message: &RawMessage) -> Result<T>;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ServerMessage {
     Close,
     KeyAccepted(KeyAcceptedPayload),
@@ -27,7 +27,7 @@ pub enum ServerMessage {
     Relay(RelayPayload),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ClientMessage {
     Close,
     Key(KeyPayload),
@@ -37,7 +37,7 @@ pub enum ClientMessage {
     Relay(RelayPayload),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum KeyType {
     #[serde(rename = "client")]
     Client,
@@ -45,20 +45,20 @@ pub enum KeyType {
     Host,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyAcceptedPayload {
     pub key_type: KeyType,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerJoinedPayload {
     pub peer_key: String,
     pub peer_ip_address: String,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AttemptDirectConnectPayload {
     pub connect_at: u64,
@@ -66,20 +66,36 @@ pub struct AttemptDirectConnectPayload {
     pub self_listen_port: u16,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct KeyPayload {
     pub key: String,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TimePayload {
     pub client_time: u64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RelayPayload {
     pub data: Vec<u8>,
+}
+
+impl KeyType {
+    pub fn is_client(&self) -> bool {
+        match self {
+            Self::Client => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_host(&self) -> bool {
+        match self {
+            Self::Host => true,
+            _ => false,
+        }
+    }
 }
 
 impl RawMessage {
@@ -457,9 +473,7 @@ mod tests {
     fn test_server_deserialise_attempt_direct_connect() {
         let raw_message = RawMessage::new(
             6,
-            Vec::from(
-                r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#.as_bytes(),
-            ),
+            Vec::from(r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#.as_bytes()),
         );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();

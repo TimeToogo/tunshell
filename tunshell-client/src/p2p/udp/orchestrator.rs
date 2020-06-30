@@ -3,10 +3,8 @@ use super::{
     UdpConnectionVars, UdpPacket, UdpPacketType,
 };
 use anyhow::{Error, Result};
-use futures::{future, future::Either, FutureExt};
 use log::*;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -72,6 +70,7 @@ impl RecvLoop {
             }
         }
 
+        try_disconnect(&self.con);
         debug!("recv loop ended");
         self
     }
@@ -119,6 +118,7 @@ impl SendLoop {
             }
         }
 
+        try_disconnect(&self.con);
         debug!("send loop ended");
         self
     }
@@ -189,14 +189,7 @@ impl UdpConnectionOrchestrator {
 
 impl Drop for UdpConnectionOrchestrator {
     fn drop(&mut self) {
-        match self.con.try_lock() {
-            Ok(mut con) => {
-                if con.is_connected() {
-                    con.set_state_disconnected();
-                }
-            }
-            Err(err) => error!("failed to lock connection state: {}", err),
-        }
+        try_disconnect(&self.con);
 
         self.stop_loops();
     }
@@ -206,6 +199,13 @@ fn is_connected(con: &Arc<Mutex<UdpConnectionVars>>) -> bool {
     let con = con.lock().unwrap();
 
     con.is_connected()
+}
+
+fn try_disconnect(con: &Arc<Mutex<UdpConnectionVars>>) {
+    match con.try_lock() {
+        Ok(mut con) => con.try_set_state_disconnected(),
+        Err(err) => error!("failed to lock connection state: {}", err),
+    };
 }
 
 fn handle_recv_packet(con: Arc<Mutex<UdpConnectionVars>>, packet: &[u8]) -> Result<()> {
@@ -227,9 +227,20 @@ fn handle_recv_packet(con: Arc<Mutex<UdpConnectionVars>>, packet: &[u8]) -> Resu
         return Ok(());
     }
 
+    debug!(
+        "recv packet [{}, {}] (ack: {}, window: {})",
+        packet.sequence_number,
+        packet.end_sequence_number(),
+        packet.ack_number,
+        packet.window
+    );
+
     match packet.packet_type {
         UdpPacketType::Data => {}
-        UdpPacketType::Close => return Err(Error::msg("close packet received")),
+        UdpPacketType::Close => {
+            try_disconnect(&con);
+            return Err(Error::msg("close packet received"));
+        }
         _ => return Err(Error::msg("unexpected packet type received")),
     }
 
@@ -247,9 +258,7 @@ fn handle_recv_packet(con: Arc<Mutex<UdpConnectionVars>>, packet: &[u8]) -> Resu
 }
 
 fn handle_recv_timeout(con: Arc<Mutex<UdpConnectionVars>>) -> Result<()> {
-    let mut con = con.lock().unwrap();
-    con.set_state_disconnected();
-
+    try_disconnect(&con);
     Err(Error::msg(
         "connection timed out while waiting for next packet",
     ))
@@ -265,6 +274,7 @@ async fn wait_for_next_sendable_packet(
     };
 
     let packet = wait_until_can_send(con, packet).await;
+    debug!("ready to send packet: [{}, {}]", packet.sequence_number, packet.end_sequence_number());
 
     Some(packet)
 }
@@ -280,9 +290,11 @@ async fn handle_send_packet(
     }
 
     debug!(
-        "sent packet [{}, {}]",
+        "sent packet [{}, {}] (ack: {}, window: {})",
         packet.sequence_number,
-        packet.end_sequence_number()
+        packet.end_sequence_number(),
+        packet.ack_number,
+        packet.window
     );
 
     match packet.packet_type {
@@ -293,15 +305,15 @@ async fn handle_send_packet(
                 con.increase_transit_window_after_send();
             }
 
-            schedule_resend_if_dropped(con, packet);
+            if packet.payload.len() > 0 {
+                schedule_resend_if_dropped(con, packet);
+            }
 
             return Ok(());
         }
         UdpPacketType::Close => {
             info!("close packet sent");
-            let mut con = con.lock().unwrap();
-            con.set_state_disconnected();
-
+            try_disconnect(&con);
             return Ok(());
         }
         _ => panic!("unexpected send packet type"),
@@ -411,7 +423,7 @@ mod tests {
             let mut con = con.lock().unwrap();
 
             assert_eq!(con.recv_drain_bytes(10), vec![1, 2, 3, 4]);
-            assert_eq!(con.sequence_number, SequenceNumber(1));
+            assert_eq!(con.sequence_number, SequenceNumber(0));
             assert_eq!(con.ack_number, SequenceNumber(5));
         });
     }
@@ -427,7 +439,7 @@ mod tests {
 
             socket
                 .send(
-                    UdpPacket::data(SequenceNumber(1), SequenceNumber(50), 1000, &[])
+                    UdpPacket::data(SequenceNumber(0), SequenceNumber(50), 1000, &[])
                         .to_vec()
                         .as_slice(),
                 )
@@ -440,7 +452,7 @@ mod tests {
             // Should successfully receive packet
             let con = con.lock().unwrap();
 
-            assert_eq!(con.ack_number, SequenceNumber(1));
+            assert_eq!(con.ack_number, SequenceNumber(0));
             assert_eq!(con.peer_window, 1000);
             assert_eq!(con.peer_ack_number, SequenceNumber(50));
         });
@@ -493,7 +505,7 @@ mod tests {
             let mut con = con.lock().unwrap();
 
             assert_eq!(con.recv_drain_bytes(10), vec![1, 2, 3, 4, 5, 6, 7, 8]);
-            assert_eq!(con.sequence_number, SequenceNumber(1));
+            assert_eq!(con.sequence_number, SequenceNumber(0));
             assert_eq!(con.ack_number, SequenceNumber(10));
             assert_eq!(con.recv_packets.len(), 0);
         });
@@ -554,7 +566,7 @@ mod tests {
 
             assert_eq!(
                 received_packet,
-                UdpPacket::data(SequenceNumber(1), SequenceNumber(5), 1000 - 4, &[])
+                UdpPacket::data(SequenceNumber(0), SequenceNumber(5), 1000 - 4, &[])
             );
         });
     }
@@ -821,7 +833,7 @@ mod tests {
 
             orchestrator.start_orchestration_loop();
 
-            for i in 1..=3 {
+            for _ in 1..=3 {
                 // Wait for keep alive interval
                 tokio::time::delay_for(Duration::from_millis(60)).await;
 
@@ -831,7 +843,7 @@ mod tests {
 
                 assert_eq!(
                     received_packet,
-                    UdpPacket::data(SequenceNumber(i), SequenceNumber(0), 1000, &[])
+                    UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 1000, &[])
                 );
             }
         });

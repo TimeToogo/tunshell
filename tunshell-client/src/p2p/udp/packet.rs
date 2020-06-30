@@ -88,7 +88,7 @@ impl UdpPacket {
 
         let payload_start = cursor.position() as usize;
         let payload_end = payload_start + length as usize;
-        let mut data = cursor.into_inner();
+        let data = cursor.into_inner();
 
         if data.len() < payload_end {
             return Err(UdpPacketParseError::PayloadLengthMismatch(
@@ -415,7 +415,7 @@ mod tests {
             window: 0,
             length: 10,
             checksum: 0,
-            payload: vec![],
+            payload: vec![1],
         };
         let packet2 = UdpPacket {
             packet_type: UdpPacketType::Data,
@@ -424,7 +424,7 @@ mod tests {
             window: 0,
             length: 10,
             checksum: 0,
-            payload: vec![],
+            payload: vec![1],
         };
         let packet3 = UdpPacket {
             packet_type: UdpPacketType::Data,
@@ -433,7 +433,7 @@ mod tests {
             window: 0,
             length: 10,
             checksum: 0,
-            payload: vec![],
+            payload: vec![1],
         };
 
         assert_eq!(packet1.overlaps(&packet1), true);
