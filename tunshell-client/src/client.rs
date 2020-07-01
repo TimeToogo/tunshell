@@ -194,7 +194,7 @@ impl<'a> Client<'a> {
         let mut udp =
             p2p::udp_adaptor::UdpConnectionAdaptor::new(peer_info.clone(), connection_info.clone());
 
-        tokio::try_join!(tcp.bind() /*, udp.bind() */)?;
+        tokio::try_join!(tcp.bind(), udp.bind())?;
 
         let current_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)

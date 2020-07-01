@@ -24,7 +24,7 @@ impl UdpConnectionVars {
         amount <= self.bytes_permitted_to_be_sent()
     }
 
-    fn bytes_permitted_to_be_sent(&self) -> u32 {
+    pub(super) fn bytes_permitted_to_be_sent(&self) -> u32 {
         let bytes_in_transit = self.sent_packets.values().map(|i| i.len()).sum::<usize>() as u32;
 
         let bytes_left_in_transit = if bytes_in_transit < self.transit_window {

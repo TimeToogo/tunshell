@@ -65,7 +65,7 @@ impl RecvLoop {
             };
 
             if let Err(err) = result {
-                error!("error during recv loop: {}", err);
+                warn!("error during recv loop: {}", err);
                 break;
             }
         }
@@ -113,7 +113,7 @@ impl SendLoop {
             };
 
             if let Err(err) = result {
-                error!("error during send loop: {}", err);
+                warn!("error during send loop: {}", err);
                 break;
             }
         }
@@ -204,7 +204,7 @@ fn is_connected(con: &Arc<Mutex<UdpConnectionVars>>) -> bool {
 fn try_disconnect(con: &Arc<Mutex<UdpConnectionVars>>) {
     match con.try_lock() {
         Ok(mut con) => con.try_set_state_disconnected(),
-        Err(err) => error!("failed to lock connection state: {}", err),
+        Err(err) => warn!("failed to lock connection state: {}", err),
     };
 }
 
@@ -212,13 +212,13 @@ fn handle_recv_packet(con: Arc<Mutex<UdpConnectionVars>>, packet: &[u8]) -> Resu
     let packet = match UdpPacket::parse(packet) {
         Ok(packet) => packet,
         Err(err) => {
-            error!("could not parse packet from incoming datagram: {}", err);
+            warn!("could not parse packet from incoming datagram: {}", err);
             return Ok(());
         }
     };
 
     if !packet.is_checksum_valid() {
-        error!(
+        warn!(
             "received packet {} with invalid checksum, expected {}, received {}, discarding",
             packet.sequence_number,
             packet.calculate_checksum(),
@@ -246,12 +246,13 @@ fn handle_recv_packet(con: Arc<Mutex<UdpConnectionVars>>, packet: &[u8]) -> Resu
 
     let mut con = con.lock().unwrap();
 
-    con.update_peer_ack_number(packet.ack_number);
-    con.update_peer_window(packet.window);
-    con.adjust_rtt_estimate(&packet);
-
-    if let Err(err) = con.recv_process_packet(packet) {
-        error!("error while receiving packet: {}", err);
+    match con.recv_process_packet(packet.clone()) {
+        Ok(_) => {
+            con.update_peer_ack_number(packet.ack_number);
+            con.update_peer_window(packet.window);
+            con.adjust_rtt_estimate(&packet);
+        }
+        Err(err) => warn!("error while receiving packet: {}", err),
     }
 
     Ok(())
@@ -274,7 +275,6 @@ async fn wait_for_next_sendable_packet(
     };
 
     let packet = wait_until_can_send(con, packet).await;
-    debug!("ready to send packet: [{}, {}]", packet.sequence_number, packet.end_sequence_number());
 
     Some(packet)
 }
@@ -289,12 +289,17 @@ async fn handle_send_packet(
         Err(err) => return Err(Error::from(err)),
     }
 
+    let peer_window = {
+        let con = con.lock().unwrap();
+        con.bytes_permitted_to_be_sent()
+    };
     debug!(
-        "sent packet [{}, {}] (ack: {}, window: {})",
+        "sent packet [{}, {}] (ack: {}, window: {}, peer window: {})",
         packet.sequence_number,
         packet.end_sequence_number(),
         packet.ack_number,
-        packet.window
+        packet.window,
+        peer_window
     );
 
     match packet.packet_type {

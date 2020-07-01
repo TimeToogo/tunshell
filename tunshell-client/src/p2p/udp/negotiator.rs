@@ -122,8 +122,10 @@ async fn send_sync_packet(socket: &mut UdpSocket, con: &mut UdpConnectionVars) -
     // So this async function can be thread-safe (Send)
     {
         // We initialise the connection state to a random sequence number
+        // and ensure the peer ack number is also initialised to the initial sequence number
         let mut rng = rand::thread_rng();
         con.sequence_number = SequenceNumber(rng.gen());
+        con.peer_ack_number = con.sequence_number;
         debug!("initialised sequence number to {}", con.sequence_number);
     }
 
@@ -341,6 +343,7 @@ mod tests {
             let con1 = task.await.unwrap();
 
             assert_eq!(sync_packet.sequence_number, con1.sequence_number);
+            assert_eq!(sync_packet.sequence_number, con1.peer_ack_number + SequenceNumber(1));
             assert_eq!(con1.peer_window, 5000);
             assert_eq!(con1.state, UdpConnectionState::SentSync);
         });
@@ -400,6 +403,7 @@ mod tests {
             let con1 = task.await.unwrap();
 
             assert_eq!(reply_packet.sequence_number, con1.sequence_number);
+            assert_eq!(reply_packet.sequence_number, con1.peer_ack_number + SequenceNumber(1));
             assert_eq!(con1.peer_window, 5000);
             assert_eq!(con1.state, UdpConnectionState::WaitingForSync);
         });

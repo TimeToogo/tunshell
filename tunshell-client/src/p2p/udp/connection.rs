@@ -101,7 +101,7 @@ impl UdpConnection {
         match self.do_bind().await {
             Ok(_) => Ok(()),
             Err((config, err)) => {
-                error!("UDP bind failed: {}", err);
+                debug!("UDP bind failed: {}", err);
                 mem::replace(&mut self.state, State::New(config));
                 Err(err)
             }
@@ -139,7 +139,7 @@ impl UdpConnection {
         match self.do_connect(params).await {
             Ok(_) => Ok(()),
             Err((config, err)) => {
-                error!("UDP connection failed: {}", err);
+                debug!("UDP connection failed: {}", err);
                 mem::replace(&mut self.state, State::New(config));
                 Err(err)
             }
@@ -212,7 +212,7 @@ impl AsyncRead for UdpConnection {
         buff: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         if !self.is_connected() {
-            error!("attempted to poll connection which is not connected");
+            warn!("attempted to poll connection which is not connected");
             return Poll::Ready(Err(io::Error::from(io::ErrorKind::NotConnected)));
         }
 
@@ -243,7 +243,7 @@ impl AsyncWrite for UdpConnection {
         assert!(buff.len() > 0);
 
         if !self.is_connected() {
-            error!("attempted to poll connection which is not connected");
+            warn!("attempted to poll connection which is not connected");
             return Poll::Ready(Err(io::Error::from(io::ErrorKind::NotConnected)));
         }
 
@@ -278,7 +278,7 @@ impl AsyncWrite for UdpConnection {
         match result {
             Ok(_) => Poll::Ready(Ok(bytes_sent)),
             Err(err) => {
-                error!("failed to send event to orchestration sender: {}", err);
+                warn!("failed to send event to orchestration sender: {}", err);
                 Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)))
             }
         }
@@ -311,7 +311,7 @@ impl AsyncWrite for UdpConnection {
         match result {
             Ok(_) => {}
             Err(err) => {
-                error!("failed to send event to orchestration sender: {}", err);
+                warn!("failed to send event to orchestration sender: {}", err);
                 return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
             }
         };

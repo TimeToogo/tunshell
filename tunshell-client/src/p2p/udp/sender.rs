@@ -30,11 +30,11 @@ impl SendEventReceiver {
             None => return None,
         };
 
-        for _ in 1..100 {
+        // In the case of ack or window update attempt to drain the channel of all subsequent update events
+        // to avoid sending unnecessary empty packets if they are not required
+        loop {
             match event {
-                // In the case of ack or window update we yield to executor multiple times
-                // to avoid sending unnecessary empty packets if they are not required
-                SendEvent::AckUpdate | SendEvent::WindowUpdate => {},
+                SendEvent::AckUpdate | SendEvent::WindowUpdate => {}
                 SendEvent::Send(packet) | SendEvent::Resend(packet) => return Some(packet),
                 SendEvent::Close => {
                     let mut con = con.lock().unwrap();
@@ -44,7 +44,7 @@ impl SendEventReceiver {
 
             event = match self.receiver.try_recv() {
                 Ok(event) => event,
-                Err(_) => continue,
+                Err(_) => break,
             };
         }
 
@@ -78,7 +78,6 @@ impl UdpConnectionVars {
             payload,
         );
 
-        debug!("created packet: [{}, {}]", packet.sequence_number, packet.end_sequence_number());
         self.update_sequence_number(&packet);
 
         packet

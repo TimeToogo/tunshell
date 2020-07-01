@@ -52,7 +52,7 @@ pub(super) fn schedule_resend_if_dropped(
         // to lock the connection for other purposes, this avoids a potential deadlock.
         let (packet, event_sender) = {
             if con.is_poisoned() {
-                error!("cannot resend packet: lock poisoned");
+                warn!("cannot resend packet: lock poisoned");
                 return;
             }
 
@@ -92,7 +92,7 @@ pub(super) fn schedule_resend_if_dropped(
             let result = event_sender.send(SendEvent::Resend(packet));
 
             if result.is_err() {
-                error!("failed to resend packet: {:?}", result);
+                warn!("failed to resend packet: {:?}", result);
             }
         }
     });

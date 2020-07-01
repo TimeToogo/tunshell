@@ -33,6 +33,11 @@ impl UdpConnectionVars {
             return Err(UdpRecvError::OutOfBuffer(packet.sequence_number));
         }
 
+        // If the packet is a pure ACK/window update we can ignore it here
+        if packet.payload.len() == 0 {
+            return Ok(0);
+        }
+
         if packet.sequence_number <= self.recv_window_start()
             || packet.end_sequence_number() > self.recv_window_end()
         {
@@ -42,11 +47,6 @@ impl UdpConnectionVars {
                 self.recv_window_start(),
                 self.recv_window_end(),
             ));
-        }
-
-        // If the packet is a pure ACK/window update we can ignore it here
-        if packet.payload.len() == 0 {
-            return Ok(0);
         }
 
         if let Some(other) = self.recv_packets.iter().find(|i| packet.overlaps(i)) {
@@ -125,7 +125,7 @@ impl UdpConnectionVars {
                 .send(SendEvent::AckUpdate);
 
             if let Err(err) = result {
-                error!("error while sending ack update event: {}", err);
+                warn!("error while sending ack update event: {}", err);
             }
         }
 
@@ -152,7 +152,7 @@ impl UdpConnectionVars {
                 .send(SendEvent::WindowUpdate);
 
             if let Err(err) = result {
-                error!("failed to send window update event: {}", err);
+                warn!("failed to send window update event: {}", err);
             }
         }
 
@@ -298,7 +298,7 @@ mod tests {
                 SequenceNumber(9),
                 SequenceNumber(0),
                 0,
-                &[],
+                &[1],
             ));
 
             assert_eq!(result.is_err(), true);
@@ -320,7 +320,7 @@ mod tests {
                 SequenceNumber(5000000),
                 SequenceNumber(0),
                 0,
-                &[],
+                &[1],
             ));
 
             assert_eq!(result.is_err(), true);
@@ -348,7 +348,7 @@ mod tests {
                 SequenceNumber(5),
                 SequenceNumber(0),
                 0,
-                &[],
+                &[1],
             ));
 
             assert_eq!(result.is_err(), true);
