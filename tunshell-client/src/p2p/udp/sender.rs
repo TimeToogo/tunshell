@@ -48,8 +48,7 @@ impl SendEventReceiver {
             };
         }
 
-        // After yielding multiple times, if there are still no pending packets
-        // to be sent, we send an empty packet
+        // If there are still no pending packet to be sent, we send an empty packet
         let mut con = con.lock().unwrap();
 
         debug!(

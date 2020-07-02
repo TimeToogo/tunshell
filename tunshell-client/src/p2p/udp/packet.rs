@@ -40,6 +40,9 @@ pub(super) struct UdpPacket {
 
     // The payload of the packet
     pub(super) payload: Vec<u8>,
+
+    // The amount of times this packet has been resent
+    pub(super) resend_count: u8,
 }
 
 #[derive(Error, Debug)]
@@ -107,6 +110,7 @@ impl UdpPacket {
             length,
             checksum,
             payload,
+            resend_count: 0,
         })
     }
 
@@ -129,6 +133,7 @@ impl UdpPacket {
             length,
             checksum: 0,
             payload,
+            resend_count: 0,
         };
 
         packet.checksum = packet.calculate_checksum();
@@ -288,6 +293,7 @@ mod tests {
             length: 3,
             checksum: 0,
             payload: vec![1, 2, 3, 4],
+            resend_count: 0
         };
 
         assert_eq!(packet.calculate_checksum(), 2061921599);
@@ -362,6 +368,7 @@ mod tests {
             length: 3,
             checksum: 4,
             payload: vec![1, 2, 3],
+            resend_count: 0,
         };
 
         let result = packet.to_vec();
@@ -384,6 +391,7 @@ mod tests {
             payload: vec![
                 1, 2, 3, 54, 5, 6, 54, 65, 6, 5, 7, 65, 76, 87, 86, 7, 8, 7, 98, 7, 89, 79, 2,
             ],
+            resend_count: 0,
         };
 
         let parsed_packet = UdpPacket::parse(packet.to_vec().as_slice()).unwrap();
@@ -401,6 +409,7 @@ mod tests {
             length: 10,
             checksum: 0,
             payload: vec![],
+            resend_count: 0,
         };
 
         assert_eq!(packet.end_sequence_number(), SequenceNumber(110));
@@ -416,6 +425,7 @@ mod tests {
             length: 10,
             checksum: 0,
             payload: vec![1],
+            resend_count: 0,
         };
         let packet2 = UdpPacket {
             packet_type: UdpPacketType::Data,
@@ -425,6 +435,7 @@ mod tests {
             length: 10,
             checksum: 0,
             payload: vec![1],
+            resend_count: 0,
         };
         let packet3 = UdpPacket {
             packet_type: UdpPacketType::Data,
@@ -434,6 +445,7 @@ mod tests {
             length: 10,
             checksum: 0,
             payload: vec![1],
+            resend_count: 0,
         };
 
         assert_eq!(packet1.overlaps(&packet1), true);

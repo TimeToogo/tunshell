@@ -6,6 +6,7 @@ const DEFAULT_CONNECT_TIMEOUT: u64 = 3000; // ms
 const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 15000; // ms
 const DEFAULT_INITIAL_TRANSIT_WINDOW: u32 = 102400; // bytes
 const DEFAULT_RECV_WINDOW: u32 = 102400; // bytes
+const DEFAULT_PACKET_RESEND_LIMIT: u8 = 10;
 
 #[derive(Debug, Clone)]
 pub struct UdpConnectionConfig {
@@ -26,6 +27,9 @@ pub struct UdpConnectionConfig {
 
     /// The amount of bytes permitted in the reassembled byte buffer
     recv_window: u32,
+
+    /// The amount of resend the connection will tolerate for a single packet
+    packet_resend_limit: u8,
 }
 
 #[allow(dead_code)]
@@ -38,6 +42,7 @@ impl UdpConnectionConfig {
             recv_timeout: Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL * 2),
             initial_transit_window: DEFAULT_INITIAL_TRANSIT_WINDOW,
             recv_window: DEFAULT_RECV_WINDOW,
+            packet_resend_limit: DEFAULT_PACKET_RESEND_LIMIT,
         }
     }
 
@@ -101,6 +106,16 @@ impl UdpConnectionConfig {
 
         self
     }
+
+    pub fn packet_resend_limit(&self) -> u8 {
+        self.packet_resend_limit
+    }
+
+    pub fn with_packet_resend_limit(mut self, value: u8) -> Self {
+        self.packet_resend_limit = value;
+
+        self
+    }
 }
 
 #[cfg(test)]
@@ -129,5 +144,6 @@ mod tests {
             DEFAULT_INITIAL_TRANSIT_WINDOW
         );
         assert_eq!(config.recv_window, DEFAULT_RECV_WINDOW);
+        assert_eq!(config.packet_resend_limit, DEFAULT_PACKET_RESEND_LIMIT);
     }
 }
