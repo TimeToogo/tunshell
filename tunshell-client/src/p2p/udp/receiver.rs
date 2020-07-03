@@ -6,10 +6,6 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub(super) enum UdpRecvError {
     #[error(
-        "received packet sequence number {0} was dropped because the receiving buffers are full"
-    )]
-    OutOfBuffer(SequenceNumber),
-    #[error(
         "received packet sequence number [{0}, {1}] is outside of the current window [{2}, {3}]"
     )]
     OutOfWindow(
@@ -29,10 +25,6 @@ pub(super) enum UdpRecvError {
 
 impl UdpConnectionVars {
     pub(super) fn recv_process_packet(&mut self, packet: UdpPacket) -> Result<u32, UdpRecvError> {
-        if packet.len() as u32 > self.calculate_recv_window() {
-            return Err(UdpRecvError::OutOfBuffer(packet.sequence_number));
-        }
-
         // If the packet is a pure ACK/window update we can ignore it here
         if packet.payload.len() == 0 {
             return Ok(0);

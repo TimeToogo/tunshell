@@ -37,11 +37,12 @@ impl HostShellStdin {
         let (tx, rx) = mpsc::unbounded::<Vec<u8>>();
 
         let thread = thread::spawn(move || {
+            let stdin = std::io::stdin();
             let mut buff = [0u8; 1024];
 
             while !tx.is_closed() {
                 info!("reading from stdin");
-                let read = match std::io::stdin().lock().read(&mut buff) {
+                let read = match stdin.lock().read(&mut buff) {
                     Ok(0) => {
                         info!("stdin stream finished");
                         break;
@@ -98,9 +99,9 @@ impl HostShellStdout {
             let stdout = std::io::stdout();
 
             futures::executor::block_on(async move {
-                while let Some(data) = rx.next().await {
-                    let mut stdout = stdout.lock();
+                let mut stdout = stdout.lock();
 
+                while let Some(data) = rx.next().await {
                     match stdout.write_all(data.as_slice()) {
                         Ok(_) => debug!("wrote {} bytes to stdout", data.len()),
                         Err(err) => {
@@ -218,10 +219,8 @@ impl Drop for HostShell {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     // use super::*;
     // use tokio::runtime::Runtime;
-
 }

@@ -32,9 +32,9 @@ pub(super) struct UdpConnectionVars {
     /// If this number falls near zero, packets will not be permitted to be sent outbound.
     pub(super) transit_window: u32,
 
-    /// Task wakers which are waiting for the window to grow  allowing for another packet to be sent.
-    /// The u32 in the tuple represents the packet's length associated to the waker.
-    pub(super) window_wakers: Vec<(Waker, u32)>,
+    /// Task wakers which are waiting for the window to grow allowing for another packet to be sent.
+    /// The SequenceNumber in the tuple represents the packet's end sequence number
+    pub(super) window_wakers: Vec<(Waker, SequenceNumber)>,
 
     /// The index of the next byte to be sent.
     /// This number will wrap back to 0 after exceeding u32::MAX

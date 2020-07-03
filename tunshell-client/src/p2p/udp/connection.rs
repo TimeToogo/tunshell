@@ -1,6 +1,6 @@
 use super::{
     negotiate_connection, SendEvent, UdpConnectionConfig, UdpConnectionOrchestrator,
-    UdpConnectionState, UdpConnectionVars, UDP_PACKET_HEADER_SIZE, MAX_PACKET_SIZE
+    UdpConnectionState, UdpConnectionVars,
 };
 use anyhow::{Error, Result};
 use log::*;
@@ -256,16 +256,13 @@ impl AsyncWrite for UdpConnection {
         let packet = {
             let mut con = running.con.lock().unwrap();
 
-            // We first check if a payload of this size can be sent according
-            // to the peer's current window.
-            // If not we add the waker so this future is prompted again once the
-            // window grows to allow more data.
-            let bytes_to_send = std::cmp::min((UDP_PACKET_HEADER_SIZE + buff.len()) as u32, MAX_PACKET_SIZE as u32);
-            if !con.can_send_bytes(bytes_to_send) {
+            // We first check if the connection is currently congested
+            // and wait until the connection decongests if so
+            if con.is_congested() {
                 debug!(
                     "connection is congested, waiting until window grows before continuing sending"
                 );
-                con.window_wakers.push((cx.waker().clone(), bytes_to_send));
+                con.wait_until_decongested(cx.waker().clone());
                 return Poll::Pending;
             }
 

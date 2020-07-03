@@ -8,6 +8,8 @@ impl UdpConnectionVars {
         if ack_number > self.peer_ack_number {
             self.peer_ack_number = ack_number;
             self.clear_acknowledged_packets();
+
+            self.wake_pending_send_events();
         }
     }
 
@@ -16,7 +18,6 @@ impl UdpConnectionVars {
 
         self.sent_packets
             .retain(|sequence_number, _| *sequence_number > peer_ack_number);
-        self.wake_pending_send_events();
     }
 
     fn normalised_rtt_estimate(&self) -> Duration {
@@ -49,13 +50,13 @@ pub(super) fn schedule_resend_if_dropped(
     };
 
     tokio::spawn(async move {
-        let resend_delay = (rtt_estimate * 2 * (resend_count + 1) as u32) + position_delay;
-        tokio::time::delay_for(resend_delay).await;
-
         // It's important we only scope the lock of the connection to this block.
         // Since we may need to send an event to the orchestration loop which could attempt
         // to lock the connection for other purposes, this avoids a potential deadlock.
-        let (packet, event_sender) = {
+        let (packet, event_sender) = loop {
+            let resend_delay = (rtt_estimate * 2 * (resend_count + 1) as u32) + position_delay;
+            tokio::time::delay_for(resend_delay).await;
+
             if con.is_poisoned() {
                 warn!("cannot resend packet: lock poisoned");
                 return;
@@ -74,8 +75,16 @@ pub(super) fn schedule_resend_if_dropped(
                 return;
             }
 
-            let sent_packet = con.sent_packets.remove(&packet_key);
-            (sent_packet, con.event_sender())
+            if !con.sent_packets.contains_key(&packet_key) {
+                return;
+            }
+
+            let is_first_dropped = con.peer_ack_number + SequenceNumber(1) == packet_key;
+
+            if is_first_dropped {
+                let sent_packet = con.sent_packets.remove(&packet_key);
+                break (sent_packet, con.event_sender());
+            }
         };
 
         if let Some(mut packet) = packet {
@@ -263,7 +272,7 @@ mod tests {
 
             let con = Arc::from(Mutex::from(con));
 
-            let sent_packet = UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 1000, &[]);
+            let sent_packet = UdpPacket::data(SequenceNumber(1), SequenceNumber(0), 1000, &[]);
 
             schedule_resend_if_dropped(Arc::clone(&con), sent_packet.clone());
 
@@ -271,10 +280,7 @@ mod tests {
             {
                 let con = con.lock().unwrap();
 
-                assert_eq!(
-                    con.sent_packets.get(&SequenceNumber(10)),
-                    Some(&sent_packet)
-                );
+                assert_eq!(con.sent_packets.get(&SequenceNumber(1)), Some(&sent_packet));
             }
 
             // Mock ack update to ensure that the packet is updated when reset
@@ -291,14 +297,14 @@ mod tests {
             {
                 let con = con.lock().unwrap();
 
-                assert_eq!(con.sent_packets.get(&SequenceNumber(10)), None);
+                assert_eq!(con.sent_packets.get(&SequenceNumber(1)), None);
             }
 
             // Should send resend event with updated packet
             let result = rx.try_recv();
 
             let mut expected_packet =
-                UdpPacket::data(SequenceNumber(10), SequenceNumber(50), 1000, &[]);
+                UdpPacket::data(SequenceNumber(1), SequenceNumber(50), 1000, &[]);
             expected_packet.resend_count = 1;
 
             assert_eq!(
@@ -363,7 +369,7 @@ mod tests {
 
             let con = Arc::from(Mutex::from(con));
 
-            let mut sent_packet = UdpPacket::data(SequenceNumber(10), SequenceNumber(0), 0, &[]);
+            let mut sent_packet = UdpPacket::data(SequenceNumber(1), SequenceNumber(0), 0, &[]);
             sent_packet.resend_count = 3;
 
             schedule_resend_if_dropped(Arc::clone(&con), sent_packet.clone());
@@ -373,10 +379,9 @@ mod tests {
 
             // Should send close event
             let result = rx.try_recv();
-            
             match result {
-                Ok(SendEvent::Close) => {},
-                result @ _ => panic!("resend should have triggered close event, got {:?}", result)
+                Ok(SendEvent::Close) => {}
+                result @ _ => panic!("resend should have triggered close event, got {:?}", result),
             }
         });
     }

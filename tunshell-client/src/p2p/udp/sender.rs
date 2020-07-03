@@ -1,4 +1,5 @@
-use super::{SequenceNumber, UdpConnectionVars, UdpPacket};
+use super::{wait_until_can_send, SequenceNumber, UdpConnectionVars, UdpPacket};
+use futures::future::{self, BoxFuture, FutureExt};
 use log::*;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -14,18 +15,46 @@ pub(super) enum SendEvent {
 
 pub(super) struct SendEventReceiver {
     receiver: UnboundedReceiver<SendEvent>,
+    futures: Vec<BoxFuture<'static, UdpPacket>>,
 }
 
 impl SendEventReceiver {
     pub(super) fn new(receiver: UnboundedReceiver<SendEvent>) -> Self {
-        Self { receiver }
+        Self {
+            receiver,
+            futures: vec![future::pending().boxed()],
+        }
     }
 
-    pub(super) async fn wait_for_next_packet(
+    pub(super) async fn wait_for_next_sendable_packet(
         &mut self,
         con: Arc<Mutex<UdpConnectionVars>>,
     ) -> Option<UdpPacket> {
-        let mut event = match self.receiver.recv().await {
+        let mut recv_ended = false;
+
+        loop {
+            if self.futures.len() == 1 && recv_ended {
+                return None;
+            }
+
+            tokio::select! {
+                next = Self::wait_for_next_packet(&mut self.receiver, Arc::clone(&con)) => match next {
+                    Some(packet) => self.futures.push(wait_until_can_send(Arc::clone(&con), packet).boxed()),
+                    None => recv_ended = true,
+                },
+                (packet, idx, _) = future::select_all(&mut self.futures) => {
+                    self.futures.remove(idx);
+                    return Some(packet);
+                },
+            }
+        }
+    }
+
+    async fn wait_for_next_packet(
+        receiver: &mut UnboundedReceiver<SendEvent>,
+        con: Arc<Mutex<UdpConnectionVars>>,
+    ) -> Option<UdpPacket> {
+        let mut event = match receiver.recv().await {
             Some(event) => event,
             None => return None,
         };
@@ -42,7 +71,7 @@ impl SendEventReceiver {
                 }
             }
 
-            event = match self.receiver.try_recv() {
+            event = match receiver.try_recv() {
                 Ok(event) => event,
                 Err(_) => break,
             };
@@ -111,6 +140,8 @@ impl UdpConnectionVars {
 mod tests {
     use super::super::{UdpConnectionConfig, UdpPacketType};
     use super::*;
+    use futures::future::{self, Either};
+    use std::time::Duration;
     use tokio::runtime::Runtime;
     use tokio::sync::mpsc::unbounded_channel;
 
@@ -189,15 +220,19 @@ mod tests {
     #[test]
     fn test_wait_for_next_packet_send_event() {
         Runtime::new().unwrap().block_on(async {
-            let con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            con.peer_window = 1000;
             let con = Arc::new(Mutex::new(con));
 
             let (tx, rx) = unbounded_channel();
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             let sent_packet = UdpPacket::data(SequenceNumber(1), SequenceNumber(1), 0, &[]);
 
@@ -212,15 +247,19 @@ mod tests {
     #[test]
     fn test_wait_for_next_packet_resend_event() {
         Runtime::new().unwrap().block_on(async {
-            let con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            con.peer_window = 1000;
             let con = Arc::new(Mutex::new(con));
 
             let (tx, rx) = unbounded_channel();
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             let sent_packet = UdpPacket::data(SequenceNumber(1), SequenceNumber(1), 0, &[]);
 
@@ -237,6 +276,7 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut con =
                 UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+            con.peer_window = 1000;
             con.sequence_number = SequenceNumber(10);
 
             let con = Arc::new(Mutex::new(con));
@@ -245,8 +285,11 @@ mod tests {
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             tx.send(SendEvent::Close).unwrap();
 
@@ -270,8 +313,11 @@ mod tests {
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             let option = task.await.unwrap();
 
@@ -284,6 +330,7 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut con =
                 UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+            con.peer_window = 1000;
             con.sequence_number = SequenceNumber(10);
 
             let con = Arc::new(Mutex::new(con));
@@ -292,8 +339,11 @@ mod tests {
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             tx.send(SendEvent::AckUpdate).unwrap();
 
@@ -311,6 +361,7 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut con =
                 UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+            con.peer_window = 1000;
             con.sequence_number = SequenceNumber(10);
 
             let con = Arc::new(Mutex::new(con));
@@ -319,8 +370,11 @@ mod tests {
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             tx.send(SendEvent::WindowUpdate).unwrap();
 
@@ -336,15 +390,19 @@ mod tests {
     #[test]
     fn test_wait_for_next_packet_ack_window_updates_followed_by_send() {
         Runtime::new().unwrap().block_on(async {
-            let con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
+            con.peer_window = 1000;
             let con = Arc::new(Mutex::new(con));
 
             let (tx, rx) = unbounded_channel();
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             let sent_packet = UdpPacket::data(SequenceNumber(1), SequenceNumber(1), 0, &[]);
 
@@ -363,6 +421,7 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut con =
                 UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+            con.peer_window = 1000;
             con.sequence_number = SequenceNumber(10);
 
             let con = Arc::new(Mutex::new(con));
@@ -371,8 +430,11 @@ mod tests {
 
             let mut receiver = SendEventReceiver::new(rx);
 
-            let task =
-                tokio::spawn(async move { receiver.wait_for_next_packet(Arc::clone(&con)).await });
+            let task = tokio::spawn(async move {
+                receiver
+                    .wait_for_next_sendable_packet(Arc::clone(&con))
+                    .await
+            });
 
             tx.send(SendEvent::AckUpdate).unwrap();
             tx.send(SendEvent::WindowUpdate).unwrap();
@@ -384,6 +446,58 @@ mod tests {
                 packet,
                 UdpPacket::close(SequenceNumber(11), SequenceNumber(0))
             );
+        });
+    }
+
+    #[test]
+    fn test_wait_for_sendable_packet_waits_until_sendable() {
+        Runtime::new().unwrap().block_on(async {
+            let mut con =
+                UdpConnectionVars::new(UdpConnectionConfig::default().with_recv_window(1000));
+                con.peer_window = 1000;
+                con.sequence_number = SequenceNumber(10);
+
+            let con = Arc::new(Mutex::new(con));
+
+            let (tx, rx) = unbounded_channel();
+
+            let mut receiver = SendEventReceiver::new(rx);
+
+            let task = {
+                let con = Arc::clone(&con);
+                tokio::spawn(async move {
+                    receiver
+                        .wait_for_next_sendable_packet(con)
+                        .await
+                })
+            };
+
+            // Send out of window packet
+            let sent_packet = UdpPacket::data(SequenceNumber(2000), SequenceNumber(1), 0, &[]);
+
+            tx.send(SendEvent::Send(sent_packet)).unwrap();
+
+            // Reduce peer window so packet cannot be sent
+            {
+                let mut con = con.lock().unwrap();
+                con.update_peer_window(100);
+            }
+
+            let task = match future::select(task, tokio::time::delay_for(Duration::from_millis(10))).await {
+                Either::Left(_) => panic!("task should not complete as the packet can be sent"),
+                Either::Right((_, task)) => task
+            };
+
+            // Increase peer window to ensure packet can be sent
+            {
+                let mut con = con.lock().unwrap();
+                con.update_peer_window(5000);
+            }
+
+            tokio::select! {
+                _ = task => {}
+                _ = tokio::time::delay_for(Duration::from_millis(10)) => panic!("task should completed as the packet can be sent"),
+            }
         });
     }
 }

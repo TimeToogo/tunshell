@@ -1,45 +1,46 @@
-use super::{UdpConnectionVars, UdpPacket, MAX_PACKET_SIZE};
+use super::{UdpConnectionVars, UdpPacket, MAX_PACKET_SIZE, SequenceNumber, UdpPacketType};
 use log::*;
 use std::cmp;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 
 impl UdpConnectionVars {
     fn poll_can_send(&mut self, cx: &Context, packet: &UdpPacket) -> Poll<()> {
-        if self.can_send(packet) {
-            Poll::Ready(())
-        } else {
-            debug!("connection is congested, waiting before sending packet {} ({} bytes permitted)", packet.sequence_number, self.bytes_permitted_to_be_sent());
-            self.window_wakers
-                .push((cx.waker().clone(), packet.len() as u32));
-            Poll::Pending
+        if packet.packet_type == UdpPacketType::Close {
+            return Poll::Ready(());
         }
+
+        if !self.can_send_sequence_number(packet.end_sequence_number()) {
+            debug!(
+                "packet is outside of window, waiting before sending packet [{}, {}] (peer ack: {}, peer window: {})",
+                packet.sequence_number,
+                packet.end_sequence_number(),
+                self.peer_ack_number,
+                self.peer_window
+            );
+            
+            self.window_wakers
+                .push((cx.waker().clone(), packet.end_sequence_number()));
+            return Poll::Pending;
+        }
+
+        Poll::Ready(())
     }
 
-    pub(super) fn can_send(&self, packet: &UdpPacket) -> bool {
-        self.can_send_bytes(packet.len() as u32)
+    pub(super) fn can_send_sequence_number(&self, sequence_number: SequenceNumber) -> bool {
+        sequence_number < self.max_send_sequence_number()
     }
 
-    pub(super) fn can_send_bytes(&self, amount: u32) -> bool {
-        amount <= self.bytes_permitted_to_be_sent()
+    pub(super) fn max_send_sequence_number(&self ) -> SequenceNumber {
+        self.peer_ack_number + SequenceNumber(cmp::min(self.peer_window, self.transit_window))
     }
 
-    pub(super) fn bytes_permitted_to_be_sent(&self) -> u32 {
-        let bytes_in_transit = self.sent_packets.values().map(|i| i.len()).sum::<usize>() as u32;
+    pub(super) fn is_congested(&self) -> bool {
+        self.sequence_number >= self.max_send_sequence_number()
+    }
 
-        let bytes_left_in_transit = if bytes_in_transit < self.transit_window {
-            self.transit_window - bytes_in_transit
-        } else {
-            0
-        };
-
-        let bytes_left_in_peer_window = if bytes_in_transit < self.peer_window {
-            self.peer_window - bytes_in_transit
-        } else {
-            0
-        };
-
-        cmp::min(bytes_left_in_transit, bytes_left_in_peer_window)
+    pub(super) fn wait_until_decongested(&mut self, waker: Waker) {
+        self.window_wakers.push((waker, self.sequence_number + SequenceNumber(1)));
     }
 
     pub(super) fn increase_transit_window_after_send(&mut self) {
@@ -67,20 +68,18 @@ impl UdpConnectionVars {
     }
 
     pub(super) fn wake_pending_send_events(&mut self) {
-        let mut permitted_bytes = self.bytes_permitted_to_be_sent();
-        let mut to_wake = 0;
+        let max_sequence_number = self.max_send_sequence_number();
 
         // Determine the number of packets we can now send form those are waiting.
-        for (_, packet_len) in &self.window_wakers {
-            if *packet_len < permitted_bytes {
-                permitted_bytes -= *packet_len;
-                to_wake += 1;
-            }
-        }
+        let (ready_wakers, pending_wakers) = self.window_wakers
+            .drain(..)
+            .partition(|(_, end_sequence_number)| end_sequence_number < &max_sequence_number);
 
-        for (waker, _) in self.window_wakers.drain(..to_wake) {
+        for (waker, _) in ready_wakers as Vec<(Waker, SequenceNumber)> {
             waker.wake();
         }
+
+        self.window_wakers = pending_wakers;
     }
 }
 
@@ -105,60 +104,44 @@ mod tests {
     use tokio::runtime::Runtime;
 
     #[test]
-    fn test_bytes_permitted_to_be_sent() {
+    fn test_can_send_sequence_number() {
         let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 
+        con.peer_ack_number = SequenceNumber(100);
         con.peer_window = 10;
-        con.transit_window = 20;
 
-        assert_eq!(con.bytes_permitted_to_be_sent(), 10);
-
-        con.peer_window = 30;
-        con.transit_window = 20;
-
-        assert_eq!(con.bytes_permitted_to_be_sent(), 20);
-
-        let sent_packet =
-            UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
-        con.sent_packets
-            .insert(SequenceNumber(0), sent_packet.clone());
-        con.peer_window = 50;
-        con.transit_window = 100;
-
-        assert_eq!(
-            con.bytes_permitted_to_be_sent(),
-            50 - sent_packet.len() as u32
-        );
-
-        con.peer_window = 100;
-        con.transit_window = 50;
-
-        assert_eq!(
-            con.bytes_permitted_to_be_sent(),
-            50 - sent_packet.len() as u32
-        );
-
-        con.peer_window = 0;
-        con.transit_window = 0;
-
-        assert_eq!(con.bytes_permitted_to_be_sent(), 0);
+        assert_eq!(con.can_send_sequence_number(SequenceNumber(111)), false);
+        assert_eq!(con.can_send_sequence_number(SequenceNumber(109)), true);
+        assert_eq!(con.can_send_sequence_number(SequenceNumber(100)), true);
     }
 
     #[test]
-    fn test_can_send() {
+    fn test_can_send_sequence_number_transit_window() {
         let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 
-        let packet = UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[1, 2, 3, 4, 5]);
-
-        con.transit_window = 10;
+        con.peer_ack_number = SequenceNumber(100);
+        con.transit_window = 5;
         con.peer_window = 10;
 
-        assert_eq!(con.can_send(&packet), false);
+        assert_eq!(con.can_send_sequence_number(SequenceNumber(111)), false);
+        assert_eq!(con.can_send_sequence_number(SequenceNumber(109)), false);
+        assert_eq!(con.can_send_sequence_number(SequenceNumber(104)), true);
+        assert_eq!(con.can_send_sequence_number(SequenceNumber(100)), true);
+    }
 
-        con.transit_window = packet.len() as u32;
-        con.peer_window = packet.len() as u32;
+    #[test]
+    fn test_is_congested() {
+        let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 
-        assert_eq!(con.can_send(&packet), true);
+        con.sequence_number = SequenceNumber(100);
+        con.peer_ack_number = SequenceNumber(100);
+        con.peer_window = 10;
+
+        assert_eq!(con.is_congested(), false);
+
+        con.sequence_number = SequenceNumber(110);
+
+        assert_eq!(con.is_congested(), true);
     }
 
     #[test]
@@ -268,7 +251,7 @@ mod tests {
                 let con = con.lock().unwrap();
                 
                 assert_eq!(con.window_wakers.len(), 1);
-                assert_eq!(con.window_wakers[0].1, packet.len() as u32);
+                assert_eq!(con.window_wakers[0].1, packet.end_sequence_number());
             }
 
             // Updating the peer window should trigger the task wakers

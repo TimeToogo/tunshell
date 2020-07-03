@@ -1,5 +1,5 @@
 use super::{
-    schedule_resend_if_dropped, wait_until_can_send, SendEvent, SendEventReceiver,
+    schedule_resend_if_dropped, SendEvent, SendEventReceiver,
     UdpConnectionVars, UdpPacket, UdpPacketType,
 };
 use anyhow::{Error, Result};
@@ -101,9 +101,8 @@ impl SendLoop {
 
         while is_connected(&self.con) {
             let result = tokio::select! {
-                result =  wait_for_next_sendable_packet(
-                    &mut self.event_receiver,
-                    Arc::clone(&self.con),
+                result = self.event_receiver.wait_for_next_sendable_packet(
+                    Arc::clone(&self.con)
                 ) => match result {
                     Some(packet) => handle_send_packet(Arc::clone(&self.con), packet, &mut self.socket).await,
                     None => Err(Error::msg("send channel has been dropped"))
@@ -265,19 +264,29 @@ fn handle_recv_timeout(con: Arc<Mutex<UdpConnectionVars>>) -> Result<()> {
     ))
 }
 
-async fn wait_for_next_sendable_packet(
-    send_receiver: &mut SendEventReceiver,
-    con: Arc<Mutex<UdpConnectionVars>>,
-) -> Option<UdpPacket> {
-    let packet = match send_receiver.wait_for_next_packet(Arc::clone(&con)).await {
-        Some(packet) => packet,
-        None => return None,
-    };
+// async fn wait_for_next_sendable_packet(
+//     send_receiver: &mut SendEventReceiver,
+//     mut packet_futures: Vec<BoxFuture<'static, UdpPacket>>,
+//     con: Arc<Mutex<UdpConnectionVars>>,
+// ) -> (Option<UdpPacket>, Vec<BoxFuture<'static, UdpPacket>>) {
+//     let mut recv_ended = false;
+//     loop {
+//         if packet_futures.len() == 0 && recv_ended {
+//             return (None, vec![])
+//         }
 
-    let packet = wait_until_can_send(con, packet).await;
-
-    Some(packet)
-}
+//         tokio::select! {
+//             next = send_receiver.wait_for_next_packet(Arc::clone(&con)) => match next {
+//                 Some(packet) => packet_futures.push(wait_until_can_send(Arc::clone(&con), packet).boxed()),
+//                 None => recv_ended = true,
+//             },
+//             (packet, idx, rest) = futures::future::select_all::<Vec<BoxFuture<UdpPacket>>>(packet_futures) => {
+//                 packet_futures = rest;
+//                 return (Some(packet), packet_futures);
+//             },
+//         }
+//     }
+// }
 
 async fn handle_send_packet(
     con: Arc<Mutex<UdpConnectionVars>>,
@@ -291,7 +300,7 @@ async fn handle_send_packet(
 
     let peer_window = {
         let con = con.lock().unwrap();
-        con.bytes_permitted_to_be_sent()
+        con.peer_window
     };
     debug!(
         "sent packet [{}, {}] (ack: {}, window: {}, peer window: {})",
