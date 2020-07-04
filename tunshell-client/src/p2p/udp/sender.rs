@@ -61,20 +61,40 @@ impl SendEventReceiver {
 
         // In the case of ack or window update attempt to drain the channel of all subsequent update events
         // to avoid sending unnecessary empty packets if they are not required
-        loop {
-            match event {
-                SendEvent::AckUpdate | SendEvent::WindowUpdate => {}
-                SendEvent::Send(packet) | SendEvent::Resend(packet) => return Some(packet),
-                SendEvent::Close => {
-                    let mut con = con.lock().unwrap();
-                    return Some(con.create_close_packet());
+        for i in 1..=2 {
+            loop {
+                match event {
+                    SendEvent::AckUpdate | SendEvent::WindowUpdate => {}
+                    SendEvent::Send(packet) | SendEvent::Resend(packet) => return Some(packet),
+                    SendEvent::Close => {
+                        let mut con = con.lock().unwrap();
+                        return Some(con.create_close_packet());
+                    }
                 }
+
+                event = match receiver.try_recv() {
+                    Ok(event) => event,
+                    Err(_) => break,
+                };
             }
 
-            event = match receiver.try_recv() {
-                Ok(event) => event,
-                Err(_) => break,
-            };
+            // If we have exhausted the send queue and are only left an ack or window
+            // update we wait 10% of the rtt and then retry from the queue to avoid sending
+            // multiple empty packets
+            if i == 1 {
+                let rtt_estimate = {
+                    let con = con.lock().unwrap();
+                    con.rtt_estimate
+                };
+
+                tokio::select! {
+                    evt = receiver.recv() => event = match evt {
+                        Some(event) => event,
+                        None => return None,
+                    },
+                    _ = tokio::time::delay_for(rtt_estimate / 10) => {}
+                }
+            }
         }
 
         // If there are still no pending packet to be sent, we send an empty packet

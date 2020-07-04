@@ -68,6 +68,9 @@ impl RecvLoop {
                 warn!("error during recv loop: {}", err);
                 break;
             }
+
+            // Prevent the loop from blocking the executor
+            tokio::task::yield_now().await;
         }
 
         try_disconnect(&self.con);
@@ -115,6 +118,9 @@ impl SendLoop {
                 warn!("error during send loop: {}", err);
                 break;
             }
+
+            // Prevent the loop from blocking the executor
+            tokio::task::yield_now().await;
         }
 
         try_disconnect(&self.con);
