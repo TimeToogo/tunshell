@@ -1,10 +1,10 @@
 mod client;
 mod config;
 mod p2p;
-mod ssh;
+mod shell;
 mod stream;
 
 pub use client::*;
 pub use config::*;
-pub use ssh::*;
+pub use shell::*;
 pub use stream::*;

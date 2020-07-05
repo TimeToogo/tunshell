@@ -7,7 +7,6 @@ use std::pin::Pin;
 use std::result::Result as StdResult;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use thrussh::Tcp;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 pub struct RelayStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin> {
@@ -154,8 +153,6 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for 
         close_result
     }
 }
-
-impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> Tcp for RelayStream<S> {}
 
 impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> TunnelStream for RelayStream<S> {}
 

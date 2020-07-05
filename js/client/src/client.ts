@@ -193,7 +193,7 @@ export class DebugClient {
         socket: this.peerSocket,
         username: 'debug',
         password: this.config.clientKey,
-      }).setupSshServer();
+      }).setupShellServer();
     } else {
       console.log(COLOURS.info(`Connecting to host over SSH`));
       await new Ssh({

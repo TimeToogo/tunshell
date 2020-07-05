@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub struct MessageStream<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> {
+pub struct MessageStream<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> {
     inner: S,
     read_buff: Vec<u8>,
 
@@ -19,7 +19,7 @@ pub struct MessageStream<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite
     phantom_o: PhantomData<O>,
 }
 
-impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I, O, S> {
+impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I, O, S> {
     pub fn new(inner: S) -> Self {
         Self {
             inner,
@@ -71,7 +71,7 @@ impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStr
     }
 }
 
-impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> Stream
+impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream
     for MessageStream<I, O, S>
 {
     type Item = Result<O>;
@@ -139,7 +139,7 @@ impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> Stream
     }
 }
 
-impl<I: Message<I>, O: Message<O>, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I, O, S> {
+impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I, O, S> {
     pub fn poll_write(
         mut self: Pin<&mut Self>,
         mut cx: &mut Context<'_>,

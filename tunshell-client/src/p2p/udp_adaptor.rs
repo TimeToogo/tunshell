@@ -8,7 +8,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use thrussh::Tcp;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::delay_for;
 use tunshell_shared::{AttemptDirectConnectPayload, PeerJoinedPayload};
@@ -52,8 +51,6 @@ impl AsyncWrite for UdpConnectionAdaptor {
         Pin::new(&mut self.con).poll_shutdown(cx)
     }
 }
-
-impl Tcp for UdpConnectionAdaptor {}
 
 impl TunnelStream for UdpConnectionAdaptor {}
 

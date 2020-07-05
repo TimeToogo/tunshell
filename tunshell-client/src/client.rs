@@ -1,11 +1,7 @@
 use crate::{
+    establish_tls_connection,
     p2p::{self, P2PConnection},
-    Config,
-    RelayStream,
-    SshClient,
-    SshCredentials,
-    SshServer,
-    TunnelStream, //, UdpConnection,
+    Config, RelayStream, ShellClient, ShellKey, ShellServer, TunnelStream,
 };
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
@@ -50,19 +46,13 @@ impl<'a> Client<'a> {
             .await?;
 
         let exit_code = match key_type {
-            KeyType::Host => SshServer::new()?
-                .run(
-                    peer_socket,
-                    SshCredentials::new("tunshell", self.config.client_key()),
-                )
+            KeyType::Host => ShellServer::new()?
+                .run(peer_socket, ShellKey::new(self.config.client_key()))
                 .await
                 .and_then(|_| Ok(0))?,
             KeyType::Client => {
-                SshClient::new()?
-                    .connect(
-                        peer_socket,
-                        SshCredentials::new("tunshell", &peer_info.peer_key),
-                    )
+                ShellClient::new()?
+                    .connect(peer_socket, ShellKey::new(&peer_info.peer_key))
                     .await?
             }
         };
@@ -184,6 +174,7 @@ impl<'a> Client<'a> {
         connection_info: &AttemptDirectConnectPayload,
         master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
+        peer_info.peer_ip_address ="127.0.0.1".to_owned();
         println!(
             "Attempting direct connection to {}",
             peer_info.peer_ip_address
@@ -204,18 +195,27 @@ impl<'a> Client<'a> {
 
         std::thread::sleep(Duration::from_millis(sleep_duration));
 
-        tokio::select! {
+        let stream: Option<Box<dyn TunnelStream>> = tokio::select! {
             result = tcp.connect(master_side) => match result {
-                Ok(_) => return Ok(Some(Box::new(tcp))),
-                Err(err) => error!("Error while establishing TCP connection: {}", err)
+                Ok(_) => Some(Box::new(tcp)),
+                Err(err) => {
+                    error!("Error while establishing TCP connection: {}", err);
+                    None
+                }
             },
             result = udp.connect(master_side) => match result {
-                Ok(_) => return Ok(Some(Box::new(udp))),
-                Err(err) => error!("Error while establishing UDP connection: {}", err)
+                Ok(_) => Some(Box::new(udp)),
+                Err(err) => {error!("Error while establishing UDP connection: {}", err); None}
             }
         };
 
-        Ok(None)
+        if let None = stream {
+            return Ok(None);
+        }
+
+        let stream = establish_tls_connection(stream.unwrap(), master_side).await?;
+
+        Ok(Some(Box::new(stream)))
     }
 }
 

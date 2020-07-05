@@ -8,10 +8,13 @@ pub struct RawMessage {
     data: Vec<u8>,
 }
 
-pub trait Message<T>: Unpin + Sync + Send + std::fmt::Debug {
+pub trait Message: Unpin + Sync + Send + std::fmt::Debug
+where
+    Self: Sized,
+{
     fn type_id(&self) -> u8;
     fn serialise(&self) -> Result<RawMessage>;
-    fn deserialise(raw_message: &RawMessage) -> Result<T>;
+    fn deserialise(raw_message: &RawMessage) -> Result<Self>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -109,6 +112,14 @@ impl RawMessage {
         }
     }
 
+    pub fn type_id(&self) -> u8 {
+        self.type_id
+    }
+
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+
     pub fn to_vec(&self) -> Vec<u8> {
         let mut vec = Vec::with_capacity(3 + self.data.len());
         vec.push(self.type_id);
@@ -120,7 +131,7 @@ impl RawMessage {
     }
 }
 
-impl Message<ServerMessage> for ServerMessage {
+impl Message for ServerMessage {
     fn type_id(&self) -> u8 {
         match self {
             Self::Close => 0,
@@ -205,7 +216,7 @@ impl Message<ServerMessage> for ServerMessage {
     }
 }
 
-impl Message<ClientMessage> for ClientMessage {
+impl Message for ClientMessage {
     fn type_id(&self) -> u8 {
         match self {
             Self::Close => 0,

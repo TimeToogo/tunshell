@@ -16,7 +16,7 @@ export interface SshConfig {
 export class Ssh {
   constructor(private readonly config: SshConfig) {}
 
-  public setupSshServer = async () => {
+  public setupShellServer = async () => {
     return new Promise((resolve, reject) => {
       const server = new ssh2.Server(
         {

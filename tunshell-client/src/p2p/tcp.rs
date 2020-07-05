@@ -9,7 +9,6 @@ use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use thrussh::Tcp;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::delay_for;
@@ -55,8 +54,6 @@ impl AsyncWrite for TcpConnection {
         Pin::new(&mut self.socket.as_mut().unwrap()).poll_shutdown(cx)
     }
 }
-
-impl Tcp for TcpConnection {}
 
 impl TunnelStream for TcpConnection {}
 
