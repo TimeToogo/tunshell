@@ -1,7 +1,6 @@
 use crate::{
-    establish_tls_connection,
     p2p::{self, P2PConnection},
-    Config, RelayStream, ShellClient, ShellKey, ShellServer, TunnelStream,
+    AesStream, Config, RelayStream, ShellClient, ShellKey, ShellServer, TunnelStream,
 };
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
@@ -174,7 +173,7 @@ impl<'a> Client<'a> {
         connection_info: &AttemptDirectConnectPayload,
         master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
-        peer_info.peer_ip_address ="127.0.0.1".to_owned();
+        peer_info.peer_ip_address = "127.0.0.1".to_owned();
         println!(
             "Attempting direct connection to {}",
             peer_info.peer_ip_address
@@ -196,24 +195,25 @@ impl<'a> Client<'a> {
         std::thread::sleep(Duration::from_millis(sleep_duration));
 
         let stream: Option<Box<dyn TunnelStream>> = tokio::select! {
-            result = tcp.connect(master_side) => match result {
-                Ok(_) => Some(Box::new(tcp)),
-                Err(err) => {
-                    error!("Error while establishing TCP connection: {}", err);
-                    None
-                }
-            },
+            // result = tcp.connect(master_side) => match result {
+            //     Ok(_) => Some(Box::new(tcp)),
+            //     Err(err) => {
+            //         error!("Error while establishing TCP connection: {}", err);
+            //         None
+            //     }
+            // },
             result = udp.connect(master_side) => match result {
                 Ok(_) => Some(Box::new(udp)),
                 Err(err) => {error!("Error while establishing UDP connection: {}", err); None}
             }
         };
 
-        if let None = stream {
-            return Ok(None);
-        }
+        let stream = match stream {
+            Some(stream) => stream,
+            None => return Ok(None)
+        };
 
-        let stream = establish_tls_connection(stream.unwrap(), master_side).await?;
+        let stream = AesStream::new(stream.compat(), &[1], &[1]);
 
         Ok(Some(Box::new(stream)))
     }

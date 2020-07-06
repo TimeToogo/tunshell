@@ -270,30 +270,6 @@ fn handle_recv_timeout(con: Arc<Mutex<UdpConnectionVars>>) -> Result<()> {
     ))
 }
 
-// async fn wait_for_next_sendable_packet(
-//     send_receiver: &mut SendEventReceiver,
-//     mut packet_futures: Vec<BoxFuture<'static, UdpPacket>>,
-//     con: Arc<Mutex<UdpConnectionVars>>,
-// ) -> (Option<UdpPacket>, Vec<BoxFuture<'static, UdpPacket>>) {
-//     let mut recv_ended = false;
-//     loop {
-//         if packet_futures.len() == 0 && recv_ended {
-//             return (None, vec![])
-//         }
-
-//         tokio::select! {
-//             next = send_receiver.wait_for_next_packet(Arc::clone(&con)) => match next {
-//                 Some(packet) => packet_futures.push(wait_until_can_send(Arc::clone(&con), packet).boxed()),
-//                 None => recv_ended = true,
-//             },
-//             (packet, idx, rest) = futures::future::select_all::<Vec<BoxFuture<UdpPacket>>>(packet_futures) => {
-//                 packet_futures = rest;
-//                 return (Some(packet), packet_futures);
-//             },
-//         }
-//     }
-// }
-
 async fn handle_send_packet(
     con: Arc<Mutex<UdpConnectionVars>>,
     packet: UdpPacket,

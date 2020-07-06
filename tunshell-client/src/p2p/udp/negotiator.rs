@@ -134,7 +134,7 @@ async fn send_sync_packet(socket: &mut UdpSocket, con: &mut UdpConnectionVars) -
         .await
     {
         Ok(_) => Ok(()),
-        Err(err) => Err(Error::from(err)).context("failed to send magic hello packet"),
+        Err(err) => Err(Error::from(err)).context("failed to send sync packet"),
     }
 }
 
