@@ -36,10 +36,12 @@ impl ShellClient {
         let host_shell = HostShell::new().with_context(|| "Failed to configure host shell")?;
 
         debug!("requesting shell from server pty");
-        stream.write(&ShellClientMessage::StartShell(StartShellPayload {
-            term: host_shell.term()?,
-            size: WindowSize::from(host_shell.size()?),
-        })).await?;
+        stream
+            .write(&ShellClientMessage::StartShell(StartShellPayload {
+                term: host_shell.term()?,
+                size: WindowSize::from(host_shell.size()?),
+            }))
+            .await?;
 
         info!("shell requested");
         info!("starting shell stream");
@@ -126,5 +128,88 @@ impl ShellClient {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::io::Cursor;
+    use tokio::runtime::Runtime;
+    use tokio::time::timeout;
+    use tunshell_shared::Message;
+
+    #[test]
+    fn test_new_shell_client() {
+        ShellClient::new().unwrap();
+    }
+
+    #[test]
+    fn test_rejected_key() {
+        Runtime::new().unwrap().block_on(async {
+            let mut mock_data = Vec::<u8>::new();
+
+            mock_data.extend_from_slice(
+                ShellServerMessage::KeyRejected
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            let mock_stream = Cursor::new(mock_data).compat();
+
+            ShellClient::new()
+                .unwrap()
+                .connect(Box::new(mock_stream), ShellKey::new("MyKey"))
+                .await
+                .expect_err("client key should be rejected");
+        });
+    }
+
+    #[test]
+    fn test_key_timeout() {
+        Runtime::new().unwrap().block_on(async {
+            let mock_data = Vec::<u8>::new();
+
+            let mock_stream = Cursor::new(mock_data).compat();
+
+            timeout(
+                Duration::from_millis(5000),
+                ShellClient::new()
+                    .unwrap()
+                    .connect(Box::new(mock_stream), ShellKey::new("CorrectKey")),
+            )
+            .await
+            .unwrap()
+            .expect_err("should timeout");
+        });
+    }
+
+    #[test]
+    fn test_start_shell_timeout() {
+        Runtime::new().unwrap().block_on(async {
+            let mut mock_data = Vec::<u8>::new();
+
+            mock_data.extend_from_slice(
+                ShellServerMessage::KeyAccepted
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            let mock_stream = Cursor::new(mock_data).compat();
+
+            timeout(
+                Duration::from_millis(5000),
+                ShellClient::new()
+                    .unwrap()
+                    .connect(Box::new(mock_stream), ShellKey::new("CorrectKey")),
+            )
+            .await
+            .unwrap()
+            .expect_err("should timeout");
+        });
     }
 }

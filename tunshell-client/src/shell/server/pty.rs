@@ -79,7 +79,7 @@ impl ShellPty {
         mut pty_reader: Box<dyn std::io::Read + Send>,
         state: ShellState,
     ) -> (JoinHandle<()>, Receiver<Vec<u8>>) {
-        let (mut tx, rx) = channel(1);
+        let (mut tx, rx) = channel(10);
 
         let task = tokio::task::spawn_blocking(move || {
             let mut buff = [0u8; 1024];
@@ -117,7 +117,7 @@ impl ShellPty {
         mut pty_writer: Box<dyn std::io::Write + Send>,
         state: ShellState,
     ) -> (JoinHandle<()>, Sender<Option<Vec<u8>>>) {
-        let (tx, mut rx) = channel::<Option<Vec<u8>>>(1);
+        let (tx, mut rx) = channel::<Option<Vec<u8>>>(10);
 
         let task = tokio::task::spawn_blocking(move || {
             while let Ok(Some(data)) = recv_sync(&mut rx) {
@@ -162,6 +162,10 @@ impl ShellPty {
             self.recv_buff.extend_from_slice(stdout.as_slice());
         }
 
+        while let Ok(data) = self.reader_rx.try_recv() {
+            self.recv_buff.extend_from_slice(data.as_slice());
+        }
+
         let read = std::cmp::min(buff.len(), self.recv_buff.len());
         buff[..read].copy_from_slice(&self.recv_buff[..read]);
         self.recv_buff.drain(..read);
@@ -176,7 +180,7 @@ impl ShellPty {
     pub(super) fn exit_code(&self) -> Result<u8> {
         let status = self.state.exit_status.lock().unwrap();
 
-        let status = match status.clone() {
+        let status = match status.as_ref() {
             Some(status) => status,
             None => return Err(Error::msg("shell has not exited")),
         };
@@ -217,8 +221,7 @@ where
         Ok(value) => value,
         Err(err) => match err {
             TryRecvError::Closed => return Err(Error::msg("channel has closed")),
-            // When the channel is full we block until the we can send the value
-            // by creating a new executor
+            // When the channel is empty we block until the we can receive the next value
             TryRecvError::Empty => match Runtime::new().unwrap().block_on(rx.recv()) {
                 Some(value) => value,
                 None => return Err(Error::msg("channel has closed")),
@@ -267,10 +270,7 @@ impl ShellState {
     fn is_running(&self) -> bool {
         let exit_status = self.exit_status.lock().unwrap();
 
-        match *exit_status {
-            Some(_) => return false,
-            None => return true,
-        }
+        exit_status.is_none()
     }
 
     fn exit_shell(&self, wait_for_exit: bool) -> Result<()> {
@@ -296,6 +296,7 @@ impl ShellState {
             }
         };
 
+        debug!("status: {:?}", status);
         self.exit_status.lock().unwrap().replace(status);
         info!("shell exited");
 
@@ -312,6 +313,7 @@ impl Drop for ShellPty {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_new_shell_bash() {
@@ -348,63 +350,23 @@ mod tests {
         get_default_shell(None).unwrap();
     }
 
-    // #[test]
-    // fn test_shell_pty_calls_handler_with_output() {
-    //     let mut mock_handler = MockPtyHandler::new();
+    #[test]
+    fn test_shell_pty_exit_on_error() {
+        Runtime::new().unwrap().block_on(async {
+            let mut pty: ShellPty = ShellPty::new("", Some("/bin/bash"), PtySize::default())
+                .expect("Failed to initialise ShellPty");
 
-    //     tokio::runtime::Runtime::new().unwrap().block_on(async {
-    //         let mut pty: ShellPty = ShellPty::new(
-    //             "",
-    //             Some("/bin/bash"),
-    //             PtySize::default(),
-    //             mock_handler.clone(),
-    //         )
-    //         .expect("Failed to initialise ShellPty");
+            tokio::time::delay_for(Duration::from_millis(10)).await;
 
-    //         std::thread::sleep(std::time::Duration::from_millis(1000));
+            pty.write_all("exit 1\n\n".as_bytes())
+                .await
+                .expect("failed to write to shell");
 
-    //         pty.write("echo 'foobar'\n".as_bytes())
-    //             .expect("Failed to write to shell");
+            pty.exit_sync().unwrap();
 
-    //         pty.write("exit\n".as_bytes())
-    //             .expect("Failed to write to shell");
-
-    //         pty.wait_for_end_of_stream()
-    //             .await
-    //             .expect("Failed to exit shell");
-    //     });
-
-    //     assert!(String::from_utf8(mock_handler.output().to_vec())
-    //         .expect("Failed to parse stdout as utf8")
-    //         .replace("\r\n", "\n")
-    //         .contains("echo 'foobar'\nfoobar\n"));
-
-    //     assert_eq!(mock_handler.exit_code().unwrap(), 0);
-    // }
-
-    // #[test]
-    // fn test_shell_pty_exit_on_error() {
-    //     let mut mock_handler = MockPtyHandler::new();
-
-    //     tokio::runtime::Runtime::new().unwrap().block_on(async {
-    //         let mut pty: ShellPty = ShellPty::new(
-    //             "",
-    //             Some("/bin/bash"),
-    //             PtySize::default(),
-    //             mock_handler.clone(),
-    //         )
-    //         .expect("Failed to initialise ShellPty");
-
-    //         std::thread::sleep(std::time::Duration::from_millis(10));
-
-    //         pty.write("exit 1\n".as_bytes())
-    //             .expect("Failed to write to shell");
-
-    //         pty.wait_for_end_of_stream()
-    //             .await
-    //             .expect("Failed to exit shell");
-    //     });
-
-    //     assert_eq!(mock_handler.exit_code().unwrap(), 1);
-    // }
+            assert_eq!(pty.state.is_running(), false);
+            assert_eq!(pty.exit_code().unwrap(), 1);
+            assert_eq!(pty.exit_sync().unwrap(), ());
+        });
+    }
 }

@@ -211,6 +211,7 @@ fn encrypt(plaintext: &[u8], key: &LessSafeKey) -> EncryptedMessage {
     )
     .unwrap();
 
+    debug!("encrypted {} bytes", plaintext.len());
     EncryptedMessage {
         nonce: nonce.to_vec(),
         ciphertext,
@@ -230,6 +231,7 @@ fn decrypt(message: EncryptedMessage, key: &LessSafeKey) -> Result<Vec<u8>> {
         )
         .map_err(|_| Error::msg("failed to decrypt message"))?;
 
+    debug!("decrypted {} bytes", plaintext.len());
     Ok(plaintext.to_vec())
 }
 

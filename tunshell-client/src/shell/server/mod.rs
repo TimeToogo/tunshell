@@ -95,15 +95,15 @@ impl ShellServer {
                         info!("send exit code status");
                         break;
                     },
-                   Ok(read) => {
-                    info!("read {} bytes from stdout", read);
-                    stream.write(&ShellServerMessage::Stdout(buff[..read].to_vec())).await?;
-                    info!("sent {} bytes to client shell", read);
-                   },
-                   Err(err) => {
-                       error!("error while reading from stdout: {}", err);
-                       return Err(err);
-                   }
+                    Ok(read) => {
+                        info!("read {} bytes from stdout", read);
+                        stream.write(&ShellServerMessage::Stdout(buff[..read].to_vec())).await?;
+                        info!("sent {} bytes to client shell", read);
+                    },
+                    Err(err) => {
+                        error!("error while reading from stdout: {}", err);
+                        return Err(err);
+                    }
                 },
                 message = stream.next() => match message {
                     Some(Ok(ShellClientMessage::Stdin(payload))) => {
@@ -141,9 +141,182 @@ impl ShellServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shell::proto::{StartShellPayload, WindowSize};
+    use futures::io::Cursor;
+    use tokio::runtime::Runtime;
+    use tokio::time::timeout;
+    use tunshell_shared::Message;
 
     #[test]
-    fn test_new_ssh_server() {
+    fn test_new_shell_server() {
         ShellServer::new().unwrap();
+    }
+
+    #[test]
+    fn test_rejected_key() {
+        Runtime::new().unwrap().block_on(async {
+            let mut mock_data = Vec::<u8>::new();
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Key("Invalid".to_owned())
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            let mock_stream = Cursor::new(mock_data).compat();
+            ShellServer::new()
+                .unwrap()
+                .run(Box::new(mock_stream), ShellKey::new("MyKey"))
+                .await
+                .expect_err("client key should be rejected");
+        });
+    }
+
+    #[test]
+    fn test_key_timeout() {
+        Runtime::new().unwrap().block_on(async {
+            let mock_data = Vec::<u8>::new();
+
+            let mock_stream = Cursor::new(mock_data).compat();
+
+            timeout(
+                Duration::from_millis(5000),
+                ShellServer::new()
+                    .unwrap()
+                    .run(Box::new(mock_stream), ShellKey::new("CorrectKey")),
+            )
+            .await
+            .unwrap()
+            .expect_err("should timeout");
+        });
+    }
+
+    #[test]
+    fn test_start_shell_timeout() {
+        Runtime::new().unwrap().block_on(async {
+            let mut mock_data = Vec::<u8>::new();
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Key("CorrectKey".to_owned())
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            let mock_stream = Cursor::new(mock_data).compat();
+
+            timeout(
+                Duration::from_millis(5000),
+                ShellServer::new()
+                    .unwrap()
+                    .run(Box::new(mock_stream), ShellKey::new("CorrectKey")),
+            )
+            .await
+            .unwrap()
+            .expect_err("should timeout");
+        });
+    }
+
+    #[test]
+    fn test_start_connect_to_shell() {
+        Runtime::new().unwrap().block_on(async {
+            let mut mock_data = Vec::<u8>::new();
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Key("CorrectKey".to_owned())
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::StartShell(StartShellPayload {
+                    term: "TERM".to_owned(),
+                    size: WindowSize(50, 50),
+                })
+                .serialise()
+                .unwrap()
+                .to_vec()
+                .as_slice(),
+            );
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Stdin("echo \"hello\"\n".as_bytes().to_vec())
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Resize(WindowSize(100, 80))
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Stdin("exit\n".as_bytes().to_vec())
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            let mock_stream = Cursor::new(mock_data).compat();
+            let server = ShellServer::new().unwrap();
+
+            server
+                .run(Box::new(mock_stream), ShellKey::new("CorrectKey"))
+                .await
+                .unwrap();
+        });
+    }
+
+    #[test]
+    fn test_start_connect_to_shell_then_error() {
+        Runtime::new().unwrap().block_on(async {
+            let mut mock_data = Vec::<u8>::new();
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Key("CorrectKey".to_owned())
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::StartShell(StartShellPayload {
+                    term: "TERM".to_owned(),
+                    size: WindowSize(50, 50),
+                })
+                .serialise()
+                .unwrap()
+                .to_vec()
+                .as_slice(),
+            );
+
+            mock_data.extend_from_slice(
+                ShellClientMessage::Error("some error occurred".to_owned())
+                    .serialise()
+                    .unwrap()
+                    .to_vec()
+                    .as_slice(),
+            );
+
+            let mock_stream = Cursor::new(mock_data).compat();
+            let server = ShellServer::new().unwrap();
+
+            server
+                .run(Box::new(mock_stream), ShellKey::new("CorrectKey"))
+                .await
+                .expect_err("should return error");
+        });
     }
 }

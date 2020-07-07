@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(serialised, RawMessage::new(2, vec![]));
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
-
+        
         assert_eq!(message, deserialised);
     }
 

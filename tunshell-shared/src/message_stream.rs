@@ -39,6 +39,10 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
         &mut self.inner
     }
 
+    pub fn into_inner(self) -> S {
+        self.inner
+    }
+
     fn poll_read_inner_stream(
         self: &mut Pin<&mut Self>,
         mut cx: &mut Context<'_>,
@@ -71,9 +75,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
     }
 }
 
-impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream
-    for MessageStream<I, O, S>
-{
+impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream for MessageStream<I, O, S> {
     type Item = Result<O>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

@@ -173,7 +173,7 @@ impl<'a> Client<'a> {
         connection_info: &AttemptDirectConnectPayload,
         master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
-        peer_info.peer_ip_address = "127.0.0.1".to_owned();
+        // peer_info.peer_ip_address = "127.0.0.1".to_owned();
         println!(
             "Attempting direct connection to {}",
             peer_info.peer_ip_address
@@ -195,13 +195,13 @@ impl<'a> Client<'a> {
         std::thread::sleep(Duration::from_millis(sleep_duration));
 
         let stream: Option<Box<dyn TunnelStream>> = tokio::select! {
-            // result = tcp.connect(master_side) => match result {
-            //     Ok(_) => Some(Box::new(tcp)),
-            //     Err(err) => {
-            //         error!("Error while establishing TCP connection: {}", err);
-            //         None
-            //     }
-            // },
+            result = tcp.connect(master_side) => match result {
+                Ok(_) => Some(Box::new(tcp)),
+                Err(err) => {
+                    error!("Error while establishing TCP connection: {}", err);
+                    None
+                }
+            },
             result = udp.connect(master_side) => match result {
                 Ok(_) => Some(Box::new(udp)),
                 Err(err) => {error!("Error while establishing UDP connection: {}", err); None}
@@ -210,10 +210,20 @@ impl<'a> Client<'a> {
 
         let stream = match stream {
             Some(stream) => stream,
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
-        let stream = AesStream::new(stream.compat(), &[1], &[1]);
+        // TODO: replace with server generated salt
+        let salt = "TODO_CHANGE_ME";
+
+        // TODO: replace with server generated session key
+        let key = if master_side {
+            self.config.client_key()
+        } else {
+            &peer_info.peer_key
+        };
+
+        let stream = AesStream::new(stream.compat(), salt.as_bytes(), key.as_bytes());
 
         Ok(Some(Box::new(stream)))
     }
