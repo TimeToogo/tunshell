@@ -8,10 +8,7 @@ on:
 
 jobs:
   build_and_deploy:
-    strategy:
-      matrix:
-        platform: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.platform }}
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - run: ./install-deps.sh
@@ -19,7 +16,7 @@ jobs:
       shell: bash
       env:
         TEMPDIR: /tmp
-    - run: ./compile.sh "targets.$(echo "${{ matrix.platform }}" | cut -d'-' -f1).json"
+    - run: ./compile.sh
       working-directory: build
       shell: bash
       env:
