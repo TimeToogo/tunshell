@@ -232,8 +232,8 @@ where
     Ok(value)
 }
 
+#[cfg(not(target_os = "windows"))]
 fn get_default_shell(shell: Option<&str>) -> Result<CommandBuilder> {
-    // TODO: windows support
     // Copied from portable_pty
     let shell = shell
         .and_then(|i| Some(i.to_owned()))
@@ -263,6 +263,17 @@ fn get_default_shell(shell: Option<&str>) -> Result<CommandBuilder> {
         cmd.arg("--no-rcs");
     }
 
+    Ok(cmd)
+}
+
+#[cfg(target_os = "windows")]
+fn get_default_shell(shell: Option<&str>) -> Result<CommandBuilder> {
+    // Copied from portable_pty
+    let shell = shell
+        .and_then(|i| Some(i.to_owned()))
+        .unwrap_or(std::env::var("ComSpec").unwrap_or("cmd.exe".into()));
+
+    let cmd = CommandBuilder::new(shell);
     Ok(cmd)
 }
 
