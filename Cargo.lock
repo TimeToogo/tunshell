@@ -123,17 +123,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cryptovec"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4fce29571f219f262093c383cba9755a7a224e72e9432b818f5eceacb97f747"
-dependencies = [
- "kernel32-sys",
- "libc",
- "winapi 0.3.9",
-]
-
-[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -389,9 +378,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.71"
+version = "0.2.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9457b06509d27052635f90d6466700c65095fdf75409b3fbdd903e988b886f49"
+checksum = "a9f8082297d534141b30c8d39e9b1773713ab50fdbe4ff30f750d063b3bfd701"
 
 [[package]]
 name = "lock_api"
@@ -1088,7 +1077,6 @@ dependencies = [
  "async-trait",
  "byteorder",
  "crossterm",
- "cryptovec",
  "env_logger",
  "futures",
  "lazy_static",

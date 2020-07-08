@@ -15,6 +15,7 @@ echo "Installing compile toolchain..."
 case "$OSTYPE" in
   msys*)    
     choco install rust
+    rustup toolchain uninstall stable-x86_64-unknown-linux-gnu
     echo '##[add-path]%USERPROFILE%\.cargo\bin'
     ;;
   
