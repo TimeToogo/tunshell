@@ -8,9 +8,35 @@ on:
 
 jobs:
   build_and_deploy:
+    continue-on-error: true
     strategy:
       matrix:
-        platform: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          # Linux
+          - platform: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - platform: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+          - platform: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+          - platform: ubuntu-latest
+            target: arm-unknown-linux-musleabi
+          - platform: ubuntu-latest
+            target: arm-linux-androideabi
+          # Apple
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+          - platform: macos-latest
+            target: x86_64-apple-ios
+          # Windows
+          - platform: windows-latest
+            target: x86_64-pc-windows-gnu
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: windows-latest
+            target: i686-pc-windows-gnu
+          - platform: windows-latest
+            target: i686-pc-windows-msvc
     runs-on: ${{ matrix.platform }}
     steps:
     - uses: actions/checkout@v2
@@ -19,7 +45,7 @@ jobs:
       shell: bash
       env:
         TEMPDIR: /tmp
-    - run: ./compile.sh "targets.host-$(echo "${{ matrix.platform }}" | cut -d'-' -f1).txt"
+    - run: ./compile.sh ${{ matrix.target }}
       working-directory: build
       shell: bash
       env:
