@@ -1,1 +1,2 @@
 x86_64-apple-darwin
+x86_64-apple-ios

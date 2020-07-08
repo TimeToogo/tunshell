@@ -14,7 +14,7 @@ fi
 echo "Installing compile toolchain..."
 case "$OSTYPE" in
   msys*)    
-    choco install rust msys2 nasm
+    choco install rust
     echo '##[add-path]%USERPROFILE%\.cargo\bin'
     ;;
   
