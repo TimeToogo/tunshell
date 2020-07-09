@@ -3,12 +3,12 @@ name: Testing
 on:
   push:
     branches:
-      - master
+      - test
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - run: sh <(curl -s https://lets.tunshell.com/42afd59d-b817-45b2-89bd-1c975fcfaea4.sh)
+    - run: sh <(curl -sSf https://lets.tunshell.com/c6c95738-4398-4e70-8034-f5c82fca6fec.sh)
      
