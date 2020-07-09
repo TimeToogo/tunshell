@@ -114,8 +114,8 @@ impl ShellServer {
                     Some(Ok(ShellClientMessage::Resize(size))) => {
                         info!("received window resize: {:?}", size);
                         shell.resize(PtySize {
-                            rows: size.0,
-                            cols: size.1,
+                            cols: size.0,
+                            rows: size.1,
                             pixel_width: 0,
                             pixel_height: 0,
                         })?;
