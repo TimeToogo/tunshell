@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 tunshell-shared = { path = "../tunshell-shared" }
 mongodb = { version = "1.0.0", features=["tokio-runtime"] }
-tokio = "0.2.21"
+tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "time", "io-util", "tcp", "udp", "macros"] }
 tokio-rustls = "0.14.0"
 futures = "0.3.5"
 anyhow = "1.0.31"
@@ -18,3 +18,6 @@ webpki-roots = "0.20.0"
 tokio-util = "0.3.1"
 log = "0.4.8"
 env_logger = "0.7.1"
+warp = "0.2.3"
+chrono = "0.4.13"
+uuid = "0.8.1"

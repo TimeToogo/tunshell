@@ -1,3 +1,4 @@
+# Used for local development environment
 version: '3.3'
 services:
   relay:
@@ -15,11 +16,12 @@ services:
       - "3000:3000"
       - "3001:3001"
     environment:
-      MONGO_HOST: mongo
-      MONGO_USER: relay
-      MONGO_PASS: password
+      TUNSHELL_API_PORT: 3000
+      TUNSHELL_RELAY_PORT: 3001
+      MONGO_CONNECTION_STRING: mongodb://relay:password@mongo:27017/relay
       TLS_RELAY_PRIVATE_KEY: /app/certs/development.key
       TLS_RELAY_CERT: /app/certs/development.cert
+      RUST_LOG: tunshell_server=debug
   
   mongo:
     image: mongo
