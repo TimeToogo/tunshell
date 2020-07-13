@@ -19,3 +19,19 @@ pub(crate) async fn connect() -> Result<Client> {
         }
     }
 }
+
+#[cfg(all(test, integration))]
+mod tests {
+    use super::*;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn test_connect() {
+        Runtime::new().unwrap().block_on(async {
+            let client = connect().await.unwrap();
+            let names = client.list_database_names(None, None).await.unwrap();
+
+            assert_eq!(names, vec!["relay"]);
+        });
+    }
+}

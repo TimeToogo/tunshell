@@ -9,9 +9,10 @@ services:
     depends_on: 
       - mongo
     volumes:
-      - cargo:/usr/local/cargo
+      - cargo:/usr/local/cargo:delegated
       - .:/app/tunshell-server:delegated
       - ../tunshell-shared:/app/tunshell-shared:delegated
+      - target:/app/target:delegated
     ports:
       - "3000:3000"
       - "3001:3001"
@@ -21,7 +22,10 @@ services:
       MONGO_CONNECTION_STRING: mongodb://relay:password@mongo:27017/relay
       TLS_RELAY_PRIVATE_KEY: /app/certs/development.key
       TLS_RELAY_CERT: /app/certs/development.cert
+      STATIC_DIR: /app/tunshell-server/static
       RUST_LOG: tunshell_server=debug
+      RUSTFLAGS: "--cfg integration"
+      CARGO_TARGET_DIR: /app/target
   
   mongo:
     image: mongo
@@ -40,3 +44,4 @@ services:
 volumes:
   mongodb:
   cargo:
+  target:
