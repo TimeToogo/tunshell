@@ -6,6 +6,7 @@ use mongodb::{
     Client,
 };
 use std::{convert::TryFrom, net::IpAddr, str::FromStr};
+use tunshell_shared::KeyType;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct Participant {
@@ -45,6 +46,30 @@ impl Participant {
             key,
             state: ParticipantState::Joined(ip),
         }
+    }
+
+    pub(crate) fn is_waiting(&self) -> bool {
+        if let ParticipantState::Waiting = self.state {
+            return true;
+        }
+
+        return false;
+    }
+
+    pub(crate) fn is_joined(&self) -> bool {
+        if let ParticipantState::Joined(_) = self.state {
+            return true;
+        }
+
+        return false;
+    }
+
+    pub(crate) fn set_joined(&mut self, addr: IpAddr) {
+        self.state = ParticipantState::Joined(addr);
+    }
+
+    pub(crate) fn set_waiting(&mut self) {
+        self.state = ParticipantState::Waiting;
     }
 }
 
@@ -127,6 +152,42 @@ impl Session {
             client,
             created_at: Utc::now(),
         }
+    }
+
+    pub(crate) fn participant(&self, key: &str) -> Option<&Participant> {
+        if self.host.key == key {
+            return Some(&self.host);
+        }
+
+        if self.client.key == key {
+            return Some(&self.client);
+        }
+
+        None
+    }
+
+    pub(crate) fn participant_mut(&mut self, key: &str) -> Option<&mut Participant> {
+        if self.host.key == key {
+            return Some(&mut self.host);
+        }
+
+        if self.client.key == key {
+            return Some(&mut self.client);
+        }
+
+        None
+    }
+
+    pub(crate) fn key_type(&self, key: &str) -> Option<KeyType> {
+        if self.host.key == key {
+            return Some(KeyType::Host);
+        }
+
+        if self.client.key == key {
+            return Some(KeyType::Client);
+        }
+
+        None
     }
 }
 

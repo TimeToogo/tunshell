@@ -1869,6 +1869,7 @@ checksum = "be8242891f2b6cbef26a2d7e8605133c2c554cd35b3e4948ea892d6d68436499"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "log 0.4.8",
  "pin-project-lite",
@@ -1954,8 +1955,10 @@ dependencies = [
  "chrono",
  "env_logger",
  "futures",
+ "lazy_static",
  "log 0.4.8",
  "mongodb",
+ "rustls 0.18.0",
  "serde",
  "serde_json",
  "tokio",

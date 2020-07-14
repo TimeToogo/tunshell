@@ -20,10 +20,10 @@ services:
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_PORT: 3001
       MONGO_CONNECTION_STRING: mongodb://relay:password@mongo:27017/relay
-      TLS_RELAY_PRIVATE_KEY: /app/certs/development.key
-      TLS_RELAY_CERT: /app/certs/development.cert
+      TLS_RELAY_PRIVATE_KEY: /app/tunshell-server/certs/development.key
+      TLS_RELAY_CERT: /app/tunshell-server/certs/development.crt
       STATIC_DIR: /app/tunshell-server/static
-      RUST_LOG: tunshell_server=debug
+      RUST_LOG: tunshell_server=debug,server=debug
       RUSTFLAGS: "--cfg integration"
       CARGO_TARGET_DIR: /app/target
   

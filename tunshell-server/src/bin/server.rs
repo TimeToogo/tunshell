@@ -1,7 +1,7 @@
+use env_logger;
 use log::*;
 use tokio;
 use tunshell_server::{api, relay};
-use env_logger;
 
 #[tokio::main]
 async fn main() {
