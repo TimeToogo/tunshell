@@ -21,6 +21,7 @@ use tokio_rustls::{server::TlsStream, TlsAcceptor};
 use tunshell_shared::{KeyAcceptedPayload, ServerMessage};
 
 const CLIENT_KEY_TIMEOUT_MS: u64 = 3000;
+const CLEAN_EXPIRED_CONNECTION_INTERVAL_MS: u64 = 60000;
 
 pub(super) struct Server {
     config: Config,
@@ -119,10 +120,14 @@ impl Server {
             }
         };
 
+        let clean_interval = Duration::from_millis(CLEAN_EXPIRED_CONNECTION_INTERVAL_MS);
+        let mut next_clean_at = tokio::time::Instant::now() + clean_interval;
+
         loop {
             tokio::select! {
                 stream = tls_listener.accept() => { self.handle_new_connection(stream); },
                 accepted = &mut self.connections.new => { self.handle_accepted_connection(accepted); },
+                _ = tokio::time::delay_until(next_clean_at) => { self.clean_expired_connections(); next_clean_at += clean_interval; }
                 _ = terminate_rx.recv() => break
             }
         }
@@ -146,6 +151,7 @@ impl Server {
         &self,
         stream: TlsStream<TcpStream>,
     ) -> JoinHandle<Result<AcceptedConnection>> {
+        debug!("negotiating key");
         let mut sessions = self.sessions.clone();
 
         tokio::spawn(async move {
@@ -235,6 +241,14 @@ impl Server {
     }
 
     fn pair_connections(&mut self, con1: Connection, con2: Connection) {
+        debug!("pairing connections");
+        //  let c = con1.stream.inner();
+        //  c.get_ref().0.peer_addr()
+        todo!()
+    }
+
+    fn clean_expired_connections(&mut self) {
+        debug!("cleaning expired connections");
         todo!()
     }
 }
@@ -370,9 +384,11 @@ mod tests {
     }
 
     #[test]
-    fn test_connect_to_server() {
+    fn test_connect_to_server_test() {
         Runtime::new().unwrap().block_on(async {
-            let (_, server) = init_client_server_pair().await;
+            let (_client, server) = init_client_server_pair().await;
+
+            delay_for(Duration::from_millis(100)).await;
 
             let server = server.stop().await.unwrap();
 
@@ -394,6 +410,8 @@ mod tests {
 
             assert_eq!(message, ServerMessage::Close);
 
+            delay_for(Duration::from_millis(10)).await;
+            
             let server = server.stop().await.unwrap();
 
             assert_eq!(server.connections.new.0.len(), 0);
@@ -507,6 +525,8 @@ mod tests {
             let response = client.next().await.unwrap().unwrap();
 
             assert_eq!(response, ServerMessage::KeyRejected);
+
+            delay_for(Duration::from_millis(10)).await;
 
             let server = server.stop().await.unwrap();
 

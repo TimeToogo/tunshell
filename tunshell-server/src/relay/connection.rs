@@ -23,6 +23,10 @@ impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> Connection<IO> 
         }
     }
 
+    pub(super) fn inner(&self) -> &IO {
+        &self.stream
+    }
+
     pub(super) async fn next(&mut self) -> Result<ClientMessage> {
         match self.stream.next().await {
             Some(result) => result,
