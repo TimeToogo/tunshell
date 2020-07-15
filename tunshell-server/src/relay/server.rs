@@ -2,24 +2,25 @@ use super::{config::Config, connection::Connection as ClientConnection};
 use crate::db::{Session, SessionStore};
 use anyhow::{Error, Result};
 use chrono::Utc;
-use futures::Future;
+use futures::{Future, FutureExt};
 use log::*;
 use std::net::Ipv4Addr;
 use std::{
     collections::HashMap,
     pin::Pin,
-    sync::{Arc, Mutex},
-    task::Poll,
-    time::Duration,
+    sync::Arc,
+    task::{Context, Poll},
+    time::{Duration, Instant},
 };
+use tokio::sync::mpsc;
 use tokio::{
     net::{TcpListener, TcpStream},
     task::JoinHandle,
 };
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
-use tunshell_shared::ServerMessage;
+use tunshell_shared::{KeyAcceptedPayload, ServerMessage};
 
-type Connection = ClientConnection<TlsStream<TcpStream>>;
+const CLIENT_KEY_TIMEOUT_MS: u64 = 3000;
 
 pub(super) struct Server {
     config: Config,
@@ -27,11 +28,28 @@ pub(super) struct Server {
     connections: Connections,
 }
 
-struct Connections {
-    pending: Vec<JoinHandle<Result<Connection>>>,
-    waiting: HashMap<String, Connection>,
-    paired: Vec<JoinHandle<(Connection, Connection)>>,
+type ConnectionStream = ClientConnection<TlsStream<TcpStream>>;
+
+struct Connection {
+    stream: ConnectionStream,
+    connected_at: Instant,
 }
+
+struct AcceptedConnection {
+    con: Connection,
+    session: Session,
+    key: String,
+}
+
+struct Connections {
+    new: NewConnections,
+    waiting: WaitingConnections,
+    paired: PairedConnections,
+}
+
+struct NewConnections(Vec<JoinHandle<Result<AcceptedConnection>>>);
+struct WaitingConnections(HashMap<String, Connection>);
+struct PairedConnections(Vec<JoinHandle<(Connection, Connection)>>);
 
 struct TlsListener {
     tcp: TcpListener,
@@ -41,25 +59,27 @@ struct TlsListener {
 impl Connections {
     fn new() -> Self {
         Self {
-            pending: vec![],
-            waiting: HashMap::new(),
-            paired: vec![],
+            new: NewConnections(vec![]),
+            waiting: WaitingConnections(HashMap::new()),
+            paired: PairedConnections(vec![]),
         }
     }
+}
 
-    async fn next_waiting(&mut self) -> Result<Connection> {
-        futures::future::poll_fn(|cx| {
-            for pending in &mut self.pending {
-                let poll = Pin::new(pending).poll(cx);
+impl Future for NewConnections {
+    type Output = Result<AcceptedConnection>;
 
-                if let Poll::Ready(result) = poll {
-                    return Poll::Ready(result.unwrap_or_else(|err| Err(Error::from(err))));
-                }
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        for i in 0..self.0.len() {
+            let poll = self.0[i].poll_unpin(cx);
+
+            if let Poll::Ready(result) = poll {
+                self.0.swap_remove(i);
+                return Poll::Ready(result.unwrap_or_else(|err| Err(Error::from(err))));
             }
+        }
 
-            Poll::Pending
-        })
-        .await
+        Poll::Pending
     }
 }
 
@@ -88,15 +108,26 @@ impl Server {
         }
     }
 
-    pub(super) async fn start(&mut self) -> Result<()> {
+    pub(super) async fn start(&mut self, terminate_rx: Option<mpsc::Receiver<()>>) -> Result<()> {
         let mut tls_listener = TlsListener::bind(&self.config).await?;
+
+        let (_, mut terminate_rx) = match terminate_rx {
+            Some(rx) => (None, rx),
+            None => {
+                let (tx, rx) = mpsc::channel(0);
+                (Some(tx), rx)
+            }
+        };
 
         loop {
             tokio::select! {
-                stream = tls_listener.accept() => self.handle_new_connection(stream),
-                next = self.connections.next_waiting() => {}
+                stream = tls_listener.accept() => { self.handle_new_connection(stream); },
+                accepted = &mut self.connections.new => { self.handle_accepted_connection(accepted); },
+                _ = terminate_rx.recv() => break
             }
         }
+
+        Ok(())
     }
 
     fn handle_new_connection(&mut self, stream: Result<TlsStream<TcpStream>>) {
@@ -106,25 +137,36 @@ impl Server {
         }
 
         self.connections
-            .pending
+            .new
+            .0
             .push(self.negotiate_key(stream.unwrap()));
     }
 
-    fn negotiate_key(&self, stream: TlsStream<TcpStream>) -> JoinHandle<Result<Connection>> {
+    fn negotiate_key(
+        &self,
+        stream: TlsStream<TcpStream>,
+    ) -> JoinHandle<Result<AcceptedConnection>> {
         let mut sessions = self.sessions.clone();
 
         tokio::spawn(async move {
             let peer_addr = stream.get_ref().0.peer_addr()?;
-            let mut connection = Connection::new(stream);
+            let mut connection = ConnectionStream::new(stream);
 
             let key = connection
-                .wait_for_key(Duration::from_millis(3000))
-                .await?
-                .key;
+                .wait_for_key(Duration::from_millis(CLIENT_KEY_TIMEOUT_MS))
+                .await;
 
+            if let Err(err) = key {
+                warn!("error while receiving key: {}", err);
+                connection.try_send_close();
+                return Err(err);
+            }
+
+            let key = key.unwrap().key;
             let session = sessions.find_by_key(key.as_ref()).await?;
 
             if let None = session {
+                debug!("key rejected, could not find session");
                 connection.write(ServerMessage::KeyRejected).await?;
                 return Err(Error::msg("client did not supply valid key"));
             }
@@ -132,6 +174,7 @@ impl Server {
             let mut session = session.unwrap();
 
             if !is_session_valid_to_join(&session, key.as_ref()) {
+                debug!("key rejected, session is not valid to join");
                 connection.write(ServerMessage::KeyRejected).await?;
                 return Err(Error::msg("session is not valid to join"));
             }
@@ -140,8 +183,59 @@ impl Server {
             participant.set_joined(peer_addr.ip());
             sessions.save(&session).await?;
 
-            Ok(connection)
+            connection
+                .write(ServerMessage::KeyAccepted(KeyAcceptedPayload {
+                    key_type: session.key_type(key.as_ref()).unwrap(),
+                }))
+                .await?;
+
+            debug!("key accepted");
+            let connection = Connection {
+                stream: connection,
+                connected_at: Instant::now(),
+            };
+
+            Ok(AcceptedConnection {
+                con: connection,
+                session,
+                key,
+            })
         })
+    }
+
+    fn handle_accepted_connection(&mut self, accepted: Result<AcceptedConnection>) {
+        let accepted = match accepted {
+            Ok(accepted) => accepted,
+            Err(err) => {
+                error!("error while accepting connection: {}", err);
+                return;
+            }
+        };
+
+        // Ensure no race condition where connection can be joined twice
+        if self.connections.waiting.0.contains_key(&accepted.key) {
+            accepted.con.stream.try_send_close();
+            warn!("connection was joined twice");
+            return;
+        }
+
+        let peer = accepted.session.other_participant(&accepted.key).unwrap();
+
+        if self.connections.waiting.0.contains_key(&peer.key) {
+            // Peer is waiting, we can pair the connections
+            let peer = self.connections.waiting.0.remove(&peer.key).unwrap();
+            self.pair_connections(accepted.con, peer);
+        } else {
+            // Put connection into hash map, waiting for peer to join
+            self.connections
+                .waiting
+                .0
+                .insert(accepted.key, accepted.con);
+        }
+    }
+
+    fn pair_connections(&mut self, con1: Connection, con2: Connection) {
+        todo!()
     }
 }
 
@@ -167,17 +261,20 @@ fn is_session_valid_to_join(session: &Session, key: &str) -> bool {
     return true;
 }
 
+// #[cfg(all(test, integration))]
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db;
+    use db::Participant;
+    use futures::StreamExt;
     use lazy_static::lazy_static;
     use rustls::ClientConfig;
-    use std::net::SocketAddr;
-    use tokio::runtime::Runtime;
+    use std::{net::SocketAddr, sync::Mutex};
+    use tokio::{runtime::Runtime, time::delay_for};
     use tokio_rustls::{client::TlsStream, TlsConnector};
     use tokio_util::compat::*;
-    use tunshell_shared::{ClientMessage, MessageStream};
+    use tunshell_shared::{ClientMessage, KeyAcceptedPayload, KeyPayload, KeyType, MessageStream};
 
     lazy_static! {
         static ref TCP_PORT_NUMBER: Mutex<u16> = Mutex::from(25555);
@@ -194,7 +291,19 @@ mod tests {
         *port - 1
     }
 
-    async fn init_client_server_pair() -> ClientConnection {
+    struct TerminableServer {
+        running: JoinHandle<Server>,
+        terminate: mpsc::Sender<()>,
+    }
+
+    impl TerminableServer {
+        async fn stop(mut self) -> Result<Server> {
+            self.terminate.send(()).await?;
+            self.running.await.map_err(Error::from)
+        }
+    }
+
+    async fn init_client_server_pair() -> (ClientConnection, TerminableServer) {
         let port = init_port_number();
 
         let mut server_config = Config::from_env().unwrap();
@@ -203,11 +312,15 @@ mod tests {
         let sessions = SessionStore::new(db::connect().await.unwrap());
 
         let mut server = Server::new(server_config.clone(), sessions);
+        let (tx, rx) = mpsc::channel(1);
 
-        tokio::spawn(async move { server.start().await });
+        let running = tokio::spawn(async move {
+            server.start(Some(rx)).await.unwrap();
+            server
+        });
 
         // Give server time to bind
-        tokio::time::delay_for(Duration::from_millis(10)).await;
+        tokio::time::delay_for(Duration::from_millis(100)).await;
 
         let client = TcpStream::connect(SocketAddr::from((Ipv4Addr::new(127, 0, 0, 1), port)))
             .await
@@ -222,8 +335,6 @@ mod tests {
             )
             .unwrap();
 
-        let ca_file = std::fs::File::open(std::env::var("TLS_CA_CERT").unwrap()).unwrap();
-        let mut ca_file = std::io::BufReader::new(ca_file);
         client_config
             .dangerous()
             .set_certificate_verifier(Arc::new(NullCertVerifier {}));
@@ -236,9 +347,14 @@ mod tests {
             .await
             .unwrap();
 
-        ClientConnection::new(client.compat())
+        (
+            ClientConnection::new(client.compat()),
+            TerminableServer {
+                running,
+                terminate: tx,
+            },
+        )
     }
-
     struct NullCertVerifier {}
 
     impl rustls::ServerCertVerifier for NullCertVerifier {
@@ -254,9 +370,149 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_key() {
+    fn test_connect_to_server() {
         Runtime::new().unwrap().block_on(async {
-            let mut client = init_client_server_pair().await;
+            let (_, server) = init_client_server_pair().await;
+
+            let server = server.stop().await.unwrap();
+
+            assert_eq!(server.connections.new.0.len(), 1);
+            assert_eq!(server.connections.waiting.0.len(), 0);
+            assert_eq!(server.connections.paired.0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_connect_to_server_without_sending_key_timeout() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut client, server) = init_client_server_pair().await;
+
+            // Wait for timeout
+            delay_for(Duration::from_millis(CLIENT_KEY_TIMEOUT_MS + 100)).await;
+
+            let message = client.next().await.unwrap().unwrap();
+
+            assert_eq!(message, ServerMessage::Close);
+
+            let server = server.stop().await.unwrap();
+
+            assert_eq!(server.connections.new.0.len(), 0);
+            assert_eq!(server.connections.waiting.0.len(), 0);
+            assert_eq!(server.connections.paired.0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_connect_with_valid_host_key() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut client, server) = init_client_server_pair().await;
+
+            let mock_session = Session::new(
+                Participant::waiting(uuid::Uuid::new_v4().to_string()),
+                Participant::waiting(uuid::Uuid::new_v4().to_string()),
+            );
+
+            let db = db::connect().await.unwrap();
+            SessionStore::new(db).save(&mock_session).await.unwrap();
+
+            client
+                .write(&ClientMessage::Key(KeyPayload {
+                    key: mock_session.host.key.clone(),
+                }))
+                .await
+                .unwrap();
+
+            let response = client.next().await.unwrap().unwrap();
+
+            assert_eq!(
+                response,
+                ServerMessage::KeyAccepted(KeyAcceptedPayload {
+                    key_type: KeyType::Host
+                })
+            );
+
+            let server = server.stop().await.unwrap();
+
+            assert_eq!(server.connections.new.0.len(), 0);
+            assert_eq!(server.connections.waiting.0.len(), 1);
+            assert_eq!(
+                server
+                    .connections
+                    .waiting
+                    .0
+                    .contains_key(&mock_session.host.key),
+                true
+            );
+            assert_eq!(server.connections.paired.0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_connect_with_valid_client_key() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut client, server) = init_client_server_pair().await;
+
+            let mock_session = Session::new(
+                Participant::waiting(uuid::Uuid::new_v4().to_string()),
+                Participant::waiting(uuid::Uuid::new_v4().to_string()),
+            );
+
+            let db = db::connect().await.unwrap();
+            SessionStore::new(db).save(&mock_session).await.unwrap();
+
+            client
+                .write(&ClientMessage::Key(KeyPayload {
+                    key: mock_session.client.key.clone(),
+                }))
+                .await
+                .unwrap();
+
+            let response = client.next().await.unwrap().unwrap();
+
+            assert_eq!(
+                response,
+                ServerMessage::KeyAccepted(KeyAcceptedPayload {
+                    key_type: KeyType::Client
+                })
+            );
+
+            let server = server.stop().await.unwrap();
+
+            assert_eq!(server.connections.new.0.len(), 0);
+            assert_eq!(server.connections.waiting.0.len(), 1);
+            assert_eq!(
+                server
+                    .connections
+                    .waiting
+                    .0
+                    .contains_key(&mock_session.client.key),
+                true
+            );
+            assert_eq!(server.connections.paired.0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_connect_with_invalid_key() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut client, server) = init_client_server_pair().await;
+
+            client
+                .write(&ClientMessage::Key(KeyPayload {
+                    key: "some-invalid-key".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+            let response = client.next().await.unwrap().unwrap();
+
+            assert_eq!(response, ServerMessage::KeyRejected);
+
+            let server = server.stop().await.unwrap();
+
+            assert_eq!(server.connections.new.0.len(), 0);
+            assert_eq!(server.connections.waiting.0.len(), 0);
+            assert_eq!(server.connections.paired.0.len(), 0);
         });
     }
 }

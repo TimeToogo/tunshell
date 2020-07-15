@@ -1,5 +1,5 @@
-use anyhow::{Error, Result};
-use mongodb::{options::ClientOptions, Client};
+use anyhow::Result;
+use mongodb::options::ClientOptions;
 use std::env;
 
 pub(crate) struct Config {

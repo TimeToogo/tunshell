@@ -4,6 +4,7 @@ use log::*;
 use std::time::Duration;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
+    task::JoinHandle,
     time::timeout,
 };
 use tokio_util::compat::*;
@@ -11,11 +12,11 @@ use tunshell_shared::{ClientMessage, KeyPayload, MessageStream, ServerMessage};
 
 type ClientMessageStream<IO> = MessageStream<ServerMessage, ClientMessage, IO>;
 
-pub(super) struct Connection<IO: AsyncRead + AsyncWrite + Unpin> {
+pub(super) struct Connection<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> {
     stream: ClientMessageStream<Compat<IO>>,
 }
 
-impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
+impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> Connection<IO> {
     pub(super) fn new(stream: IO) -> Self {
         Self {
             stream: ClientMessageStream::new(stream.compat()),
@@ -43,5 +44,15 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
 
     pub(super) async fn write(&mut self, message: ServerMessage) -> Result<()> {
         self.stream.write(&message).await
+    }
+
+    pub(super) fn try_send_close(mut self) -> JoinHandle<()> {
+        tokio::task::spawn(async move {
+            debug!("sending close");
+            self.stream
+                .write(&ServerMessage::Close)
+                .await
+                .unwrap_or_else(|err| warn!("error while sending close: {}", err));
+        })
     }
 }

@@ -178,6 +178,18 @@ impl Session {
         None
     }
 
+    pub(crate) fn other_participant(&self, key: &str) -> Option<&Participant> {
+        if self.host.key == key {
+            return Some(&self.client);
+        }
+
+        if self.client.key == key {
+            return Some(&self.host);
+        }
+
+        None
+    }
+
     pub(crate) fn key_type(&self, key: &str) -> Option<KeyType> {
         if self.host.key == key {
             return Some(KeyType::Host);

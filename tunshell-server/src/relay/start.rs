@@ -10,5 +10,5 @@ pub async fn start() -> Result<()> {
 
     info!("starting relay server on port {}", config.port);
 
-    Server::new(config, sessions).start().await
+    Server::new(config, sessions).start(None).await
 }

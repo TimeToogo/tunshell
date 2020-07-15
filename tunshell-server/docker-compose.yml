@@ -21,7 +21,7 @@ services:
       TUNSHELL_RELAY_PORT: 3001
       MONGO_CONNECTION_STRING: mongodb://relay:password@mongo:27017/relay
       TLS_RELAY_PRIVATE_KEY: /app/tunshell-server/certs/development.key
-      TLS_RELAY_CERT: /app/tunshell-server/certs/development.crt
+      TLS_RELAY_CERT: /app/tunshell-server/certs/development.cert
       STATIC_DIR: /app/tunshell-server/static
       RUST_LOG: tunshell_server=debug,server=debug
       RUSTFLAGS: "--cfg integration"
