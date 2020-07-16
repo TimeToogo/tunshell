@@ -10,9 +10,9 @@ use std::task::{Context, Poll};
 pub struct MessageStream<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> {
     inner: S,
     read_buff: Vec<u8>,
-
     write_buff: Vec<u8>,
-    stream_error: bool,
+
+    closed: bool,
 
     // For unused type param I, O
     phantom_i: PhantomData<I>,
@@ -25,7 +25,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
             inner,
             read_buff: vec![],
             write_buff: vec![],
-            stream_error: false,
+            closed: false,
             phantom_i: PhantomData,
             phantom_o: PhantomData,
         }
@@ -41,6 +41,18 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
 
     pub fn into_inner(self) -> S {
         self.inner
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.closed
+    }
+
+    fn err_if_closed(&self) -> Result<()> {
+        if self.closed {
+            Err(Error::msg("stream is closed"))
+        } else {
+            Ok(())
+        }
     }
 
     fn poll_read_inner_stream(
@@ -79,63 +91,62 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream for Messa
     type Item = Result<O>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.stream_error {
+        if self.err_if_closed().is_err() {
             return Poll::Ready(None);
         }
 
-        loop {
-            let (mut type_id, mut message_length, mut bytes_available) = self.parse_buffer();
+        let (mut type_id, mut message_length, mut bytes_available) = self.parse_buffer();
 
-            while self.read_buff.len() < 3 || bytes_available < message_length {
-                match self.poll_read_inner_stream(cx) {
-                    Poll::Ready(Ok(0)) => {
-                        // If the stream ends on the end of a message boundary, return success
-                        if self.read_buff.len() == 0 {
-                            return Poll::Ready(None);
-                        }
+        while self.read_buff.len() < 3 || bytes_available < message_length {
+            match self.poll_read_inner_stream(cx) {
+                Poll::Ready(Ok(0)) => {
+                    self.closed = true;
 
-                        // Else the stream ended with a partial message, return error
-                        self.stream_error = true;
-                        return Poll::Ready(Some(Err(Error::msg(
-                            "Inner stream failed to return complete message",
-                        ))));
+                    // If the stream ends on the end of a message boundary, return success
+                    if self.read_buff.is_empty() {
+                        return Poll::Ready(None);
                     }
-                    Poll::Ready(Ok(_read)) => (),
-                    Poll::Ready(Err(err)) => {
-                        self.stream_error = true;
 
-                        return Poll::Ready(Some(Err(Error::new(err))));
-                    }
-                    Poll::Pending => return Poll::Pending,
+                    // Else the stream ended with a partial message, return error
+                    return Poll::Ready(Some(Err(Error::msg(
+                        "Inner stream failed to return complete message",
+                    ))));
                 }
+                Poll::Ready(Ok(_read)) => {},
+                Poll::Ready(Err(err)) => {
+                    self.closed = true;
 
-                let parsed_buff = self.parse_buffer();
-                type_id = parsed_buff.0;
-                message_length = parsed_buff.1;
-                bytes_available = parsed_buff.2;
+                    return Poll::Ready(Some(Err(Error::new(err))));
+                }
+                Poll::Pending => return Poll::Pending,
             }
 
-            let raw_message = RawMessage::new(
-                type_id,
-                self.read_buff
-                    .iter()
-                    .cloned()
-                    .skip(3)
-                    .take(message_length)
-                    .collect(),
-            );
+            let parsed_buff = self.parse_buffer();
+            type_id = parsed_buff.0;
+            message_length = parsed_buff.1;
+            bytes_available = parsed_buff.2;
+        }
 
-            self.read_buff.drain(..3 + message_length);
+        let raw_message = RawMessage::new(
+            type_id,
+            self.read_buff
+                .iter()
+                .cloned()
+                .skip(3)
+                .take(message_length)
+                .collect(),
+        );
 
-            match O::deserialise(&raw_message) {
-                Ok(message) => {
-                    debug!("Received message {:?}", message);
-                    return Poll::Ready(Some(Ok(message)));
-                }
-                Err(err) => {
-                    debug!("Error while deserialised received message {:?}", err);
-                    return Poll::Ready(Some(Err(err)));
-                }
+        self.read_buff.drain(..3 + message_length);
+
+        match O::deserialise(&raw_message) {
+            Ok(message) => {
+                debug!("Received message {:?}", message);
+                return Poll::Ready(Some(Ok(message)));
+            }
+            Err(err) => {
+                debug!("Error while deserialised received message {:?}", err);
+                return Poll::Ready(Some(Err(err)));
             }
         }
     }
@@ -147,10 +158,8 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
         mut cx: &mut Context<'_>,
         message: &I,
     ) -> Poll<Result<()>> {
-        if self.stream_error {
-            return Poll::Ready(Err(Error::msg(
-                "Stream called after underlying stream error",
-            )));
+        if let Err(err) = self.err_if_closed() {
+            return Poll::Ready(Err(err));
         }
 
         debug!("Sending message: {:?}", message);
@@ -166,7 +175,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
             match write_result {
                 Poll::Ready(Ok(wrote)) => written += wrote,
                 Poll::Ready(Err(err)) => {
-                    self.stream_error = true;
+                    self.closed = true;
 
                     return Poll::Ready(Err(Error::new(err)));
                 }
@@ -184,6 +193,8 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
     }
 
     pub async fn write(&mut self, message: &I) -> Result<()> {
+        self.err_if_closed()?;
+
         let serialised = message.serialise()?.to_vec();
         let mut written = 0;
 
@@ -194,7 +205,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
             }
         }
 
-        debug!("Sent message: {:?}", message);
+        debug!("sent message: {:?}", message);
 
         Ok(())
     }
@@ -384,5 +395,19 @@ mod tests {
 
         assert!(result.is_ready());
         assert_eq!(stream.inner.into_inner(), vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn test_stream_closed() {
+        let mock_stream = Cursor::new(vec![]);
+        let mut stream =
+            MessageStream::<ClientMessage, ServerMessage, Cursor<Vec<u8>>>::new(mock_stream);
+
+        assert_eq!(stream.closed, false);
+
+        let result = executor::block_on(async { stream.next().await });
+
+        assert_eq!(result.is_none(), true);
+        assert_eq!(stream.closed, true);
     }
 }

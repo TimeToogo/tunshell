@@ -1,16 +1,17 @@
 use super::{config::Config, connection::Connection as ClientConnection};
 use crate::db::{Session, SessionStore};
-use anyhow::{Error, Result};
+use anyhow::{Context as AnyhowContext, Error, Result};
 use chrono::Utc;
 use futures::{Future, FutureExt};
 use log::*;
-use std::net::Ipv4Addr;
+use rand::Rng;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::{
     collections::HashMap,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::{Duration, Instant},
+    time::Instant,
 };
 use tokio::sync::mpsc;
 use tokio::{
@@ -18,10 +19,10 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
-use tunshell_shared::{KeyAcceptedPayload, ServerMessage};
-
-const CLIENT_KEY_TIMEOUT_MS: u64 = 3000;
-const CLEAN_EXPIRED_CONNECTION_INTERVAL_MS: u64 = 60000;
+use tunshell_shared::{
+    AttemptDirectConnectPayload, ClientMessage, KeyAcceptedPayload, PeerJoinedPayload,
+    ServerMessage,
+};
 
 pub(super) struct Server {
     config: Config,
@@ -33,13 +34,19 @@ type ConnectionStream = ClientConnection<TlsStream<TcpStream>>;
 
 struct Connection {
     stream: ConnectionStream,
+    key: String,
     connected_at: Instant,
+    remote_addr: SocketAddr,
 }
 
 struct AcceptedConnection {
     con: Connection,
     session: Session,
-    key: String,
+}
+
+struct PairedConnection {
+    task: JoinHandle<Result<(Connection, Connection)>>,
+    paired_at: Instant,
 }
 
 struct Connections {
@@ -50,7 +57,7 @@ struct Connections {
 
 struct NewConnections(Vec<JoinHandle<Result<AcceptedConnection>>>);
 struct WaitingConnections(HashMap<String, Connection>);
-struct PairedConnections(Vec<JoinHandle<(Connection, Connection)>>);
+struct PairedConnections(Vec<PairedConnection>);
 
 struct TlsListener {
     tcp: TcpListener,
@@ -112,22 +119,27 @@ impl Server {
     pub(super) async fn start(&mut self, terminate_rx: Option<mpsc::Receiver<()>>) -> Result<()> {
         let mut tls_listener = TlsListener::bind(&self.config).await?;
 
-        let (_, mut terminate_rx) = match terminate_rx {
+        // If the terminate channel is not supplied we create a default channel
+        // that is never invoked
+        let (_tx, mut terminate_rx) = match terminate_rx {
             Some(rx) => (None, rx),
             None => {
-                let (tx, rx) = mpsc::channel(0);
+                let (tx, rx) = mpsc::channel(1);
                 (Some(tx), rx)
             }
         };
 
-        let clean_interval = Duration::from_millis(CLEAN_EXPIRED_CONNECTION_INTERVAL_MS);
-        let mut next_clean_at = tokio::time::Instant::now() + clean_interval;
+        let mut next_clean_at =
+            tokio::time::Instant::now() + self.config.expired_connection_clean_interval;
 
         loop {
             tokio::select! {
                 stream = tls_listener.accept() => { self.handle_new_connection(stream); },
                 accepted = &mut self.connections.new => { self.handle_accepted_connection(accepted); },
-                _ = tokio::time::delay_until(next_clean_at) => { self.clean_expired_connections(); next_clean_at += clean_interval; }
+                _ = tokio::time::delay_until(next_clean_at) => {
+                    self.clean_expired_connections();
+                    next_clean_at += self.config.expired_connection_clean_interval;
+                }
                 _ = terminate_rx.recv() => break
             }
         }
@@ -153,18 +165,16 @@ impl Server {
     ) -> JoinHandle<Result<AcceptedConnection>> {
         debug!("negotiating key");
         let mut sessions = self.sessions.clone();
+        let key_timeout = self.config.client_key_timeout;
 
         tokio::spawn(async move {
-            let peer_addr = stream.get_ref().0.peer_addr()?;
+            let remote_addr = stream.get_ref().0.peer_addr()?;
             let mut connection = ConnectionStream::new(stream);
 
-            let key = connection
-                .wait_for_key(Duration::from_millis(CLIENT_KEY_TIMEOUT_MS))
-                .await;
+            let key = connection.wait_for_key(key_timeout).await;
 
             if let Err(err) = key {
                 warn!("error while receiving key: {}", err);
-                connection.try_send_close();
                 return Err(err);
             }
 
@@ -177,7 +187,7 @@ impl Server {
                 return Err(Error::msg("client did not supply valid key"));
             }
 
-            let mut session = session.unwrap();
+            let session = session.unwrap();
 
             if !is_session_valid_to_join(&session, key.as_ref()) {
                 debug!("key rejected, session is not valid to join");
@@ -185,9 +195,9 @@ impl Server {
                 return Err(Error::msg("session is not valid to join"));
             }
 
-            let participant = session.participant_mut(key.as_ref()).unwrap();
-            participant.set_joined(peer_addr.ip());
-            sessions.save(&session).await?;
+            // let participant = session.participant_mut(key.as_ref()).unwrap();
+            // participant.set_joined(remote_addr.ip());
+            // sessions.save(&session).await?;
 
             connection
                 .write(ServerMessage::KeyAccepted(KeyAcceptedPayload {
@@ -198,13 +208,14 @@ impl Server {
             debug!("key accepted");
             let connection = Connection {
                 stream: connection,
+                key,
                 connected_at: Instant::now(),
+                remote_addr,
             };
 
             Ok(AcceptedConnection {
                 con: connection,
                 session,
-                key,
             })
         })
     }
@@ -219,37 +230,46 @@ impl Server {
         };
 
         // Ensure no race condition where connection can be joined twice
-        if self.connections.waiting.0.contains_key(&accepted.key) {
-            accepted.con.stream.try_send_close();
+        if self.connections.waiting.0.contains_key(&accepted.con.key) {
             warn!("connection was joined twice");
             return;
         }
 
-        let peer = accepted.session.other_participant(&accepted.key).unwrap();
+        let peer = accepted
+            .session
+            .other_participant(&accepted.con.key)
+            .unwrap();
 
         if self.connections.waiting.0.contains_key(&peer.key) {
             // Peer is waiting, we can pair the connections
             let peer = self.connections.waiting.0.remove(&peer.key).unwrap();
-            self.pair_connections(accepted.con, peer);
+            self.connections
+                .paired
+                .0
+                .push(pair_connections(accepted.con, peer));
         } else {
             // Put connection into hash map, waiting for peer to join
             self.connections
                 .waiting
                 .0
-                .insert(accepted.key, accepted.con);
+                .insert(accepted.con.key.clone(), accepted.con);
         }
-    }
-
-    fn pair_connections(&mut self, con1: Connection, con2: Connection) {
-        debug!("pairing connections");
-        //  let c = con1.stream.inner();
-        //  c.get_ref().0.peer_addr()
-        todo!()
     }
 
     fn clean_expired_connections(&mut self) {
         debug!("cleaning expired connections");
-        todo!()
+
+        let expiry = self.config.waiting_connection_expiry;
+        self.connections
+            .waiting
+            .0
+            .retain(|_, con| Instant::now() - con.connected_at < expiry);
+
+        let expiry = self.config.paired_connection_expiry;
+        self.connections
+            .paired
+            .0
+            .retain(|con| Instant::now() - con.paired_at < expiry);
     }
 }
 
@@ -275,6 +295,165 @@ fn is_session_valid_to_join(session: &Session, key: &str) -> bool {
     return true;
 }
 
+fn pair_connections(mut con1: Connection, mut con2: Connection) -> PairedConnection {
+    debug!("pairing connections");
+
+    let task = tokio::spawn(async move {
+        tokio::try_join!(
+            con1.stream
+                .write(ServerMessage::PeerJoined(PeerJoinedPayload {
+                    peer_ip_address: con2.remote_addr.ip().to_string(),
+                    peer_key: con2.key.clone(),
+                })),
+            con2.stream
+                .write(ServerMessage::PeerJoined(PeerJoinedPayload {
+                    peer_ip_address: con1.remote_addr.ip().to_string(),
+                    peer_key: con1.key.clone(),
+                })),
+        )
+        .context("sending peer joined message")?;
+
+        let direct_connection = attempt_direct_connection(&mut con1, &mut con2).await;
+
+        if let Err(err) = direct_connection {
+            return Err(err.context("establishing direct connection"));
+        }
+
+        if direct_connection.unwrap() {
+            // In the case of a direct connection between the peers the
+            // relay server does not have to do much, since the clients
+            // will stream between themselves.
+            // The next message must indicate the connection is over so
+            // wait until a message is received.
+            debug!("direct connection established");
+
+            let message: Result<ClientMessage> = tokio::select! {
+                message = con1.stream.next() => message,
+                message = con2.stream.next() => message
+            };
+
+            match message {
+                Ok(ClientMessage::Close) => {}
+                Ok(message) => {
+                    return Err(Error::msg(format!(
+                        "received unexpected message from client during direct connection {:?}",
+                        message
+                    )))
+                }
+                Err(err) => {
+                    return Err(Error::msg(format!(
+                        "error received from client stream {}",
+                        err
+                    )))
+                }
+            }
+        } else {
+            // If the direct connection fails the relay server becomes responsible
+            // for proxying data between the two peers
+            debug!("starting relay");
+            tokio::try_join!(
+                con1.stream.write(ServerMessage::StartRelayMode),
+                con2.stream.write(ServerMessage::StartRelayMode)
+            )
+            .context("sending relay mode message")?;
+
+            relay_loop(&mut con1, &mut con2).await?;
+        }
+
+        Ok((con1, con2))
+    });
+
+    PairedConnection {
+        task,
+        paired_at: Instant::now(),
+    }
+}
+
+async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection) -> Result<bool> {
+    // TODO: Improve port selection
+    let (port1, port2) = {
+        let mut rng = rand::thread_rng();
+        (rng.gen_range(20000, 40000), rng.gen_range(20000, 40000))
+    };
+
+    tokio::try_join!(
+        con1.stream.write(ServerMessage::AttemptDirectConnect(
+            AttemptDirectConnectPayload {
+                connect_at: 0,
+                self_listen_port: port1,
+                peer_listen_port: port2
+            }
+        )),
+        con2.stream.write(ServerMessage::AttemptDirectConnect(
+            AttemptDirectConnectPayload {
+                connect_at: 0,
+                self_listen_port: port2,
+                peer_listen_port: port1
+            }
+        ))
+    )
+    .context("sending direct connection command")?;
+
+    let (result1, result2) = tokio::try_join!(con1.stream.next(), con2.stream.next())
+        .context("waiting for direct connection response")?;
+
+    let result = match (result1, result2) {
+        (ClientMessage::DirectConnectSucceeded, ClientMessage::DirectConnectSucceeded) => true,
+        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectFailed) => true,
+        msgs @ _ => {
+            return Err(Error::msg(format!(
+                "unexpected message while attempting direct connection: {:?}",
+                msgs
+            )))
+        }
+    };
+
+    Ok(result)
+}
+
+async fn relay_loop(con1: &mut Connection, con2: &mut Connection) -> Result<()> {
+    enum ProxyResult {
+        Continue,
+        Closed,
+    }
+
+    async fn proxy_payload(
+        message: Result<ClientMessage>,
+        dest: &mut Connection,
+    ) -> Result<ProxyResult> {
+        let payload = match message {
+            Ok(ClientMessage::Relay(payload)) => payload,
+            Ok(ClientMessage::Close) => return Ok(ProxyResult::Closed),
+            Ok(msg) => {
+                return Err(Error::msg(format!(
+                    "received unexpected message from client during relay: {:?}",
+                    msg
+                )))
+            }
+            Err(err) => return Err(err),
+        };
+
+        dest.stream.write(ServerMessage::Relay(payload)).await?;
+        Ok(ProxyResult::Continue)
+    }
+
+    loop {
+        let result = tokio::select! {
+            message = con1.stream.next() => proxy_payload(message, con2).await?,
+            message = con2.stream.next() => proxy_payload(message, con1).await?,
+        };
+
+        if let ProxyResult::Closed = result {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+// TODO: add additional tests
+// TODO: refactor into multiple files
+
 // #[cfg(all(test, integration))]
 #[cfg(test)]
 mod tests {
@@ -284,11 +463,11 @@ mod tests {
     use futures::StreamExt;
     use lazy_static::lazy_static;
     use rustls::ClientConfig;
-    use std::{net::SocketAddr, sync::Mutex};
+    use std::{net::SocketAddr, sync::Mutex, time::Duration};
     use tokio::{runtime::Runtime, time::delay_for};
     use tokio_rustls::{client::TlsStream, TlsConnector};
     use tokio_util::compat::*;
-    use tunshell_shared::{ClientMessage, KeyAcceptedPayload, KeyPayload, KeyType, MessageStream};
+    use tunshell_shared::{KeyAcceptedPayload, KeyPayload, KeyType, MessageStream};
 
     lazy_static! {
         static ref TCP_PORT_NUMBER: Mutex<u16> = Mutex::from(25555);
@@ -317,10 +496,11 @@ mod tests {
         }
     }
 
-    async fn init_client_server_pair() -> (ClientConnection, TerminableServer) {
+    async fn init_client_server_pair(
+        mut server_config: Config,
+    ) -> (ClientConnection, TerminableServer) {
         let port = init_port_number();
 
-        let mut server_config = Config::from_env().unwrap();
         server_config.port = port;
 
         let sessions = SessionStore::new(db::connect().await.unwrap());
@@ -386,7 +566,7 @@ mod tests {
     #[test]
     fn test_connect_to_server_test() {
         Runtime::new().unwrap().block_on(async {
-            let (_client, server) = init_client_server_pair().await;
+            let (_client, server) = init_client_server_pair(Config::from_env().unwrap()).await;
 
             delay_for(Duration::from_millis(100)).await;
 
@@ -401,17 +581,19 @@ mod tests {
     #[test]
     fn test_connect_to_server_without_sending_key_timeout() {
         Runtime::new().unwrap().block_on(async {
-            let (mut client, server) = init_client_server_pair().await;
+            let mut config = Config::from_env().unwrap();
+            config.client_key_timeout = Duration::from_millis(100);
+            let (mut client, server) = init_client_server_pair(config).await;
 
             // Wait for timeout
-            delay_for(Duration::from_millis(CLIENT_KEY_TIMEOUT_MS + 100)).await;
+            delay_for(Duration::from_millis(200)).await;
 
             let message = client.next().await.unwrap().unwrap();
 
             assert_eq!(message, ServerMessage::Close);
 
             delay_for(Duration::from_millis(10)).await;
-            
+
             let server = server.stop().await.unwrap();
 
             assert_eq!(server.connections.new.0.len(), 0);
@@ -423,7 +605,7 @@ mod tests {
     #[test]
     fn test_connect_with_valid_host_key() {
         Runtime::new().unwrap().block_on(async {
-            let (mut client, server) = init_client_server_pair().await;
+            let (mut client, server) = init_client_server_pair(Config::from_env().unwrap()).await;
 
             let mock_session = Session::new(
                 Participant::waiting(uuid::Uuid::new_v4().to_string()),
@@ -468,7 +650,7 @@ mod tests {
     #[test]
     fn test_connect_with_valid_client_key() {
         Runtime::new().unwrap().block_on(async {
-            let (mut client, server) = init_client_server_pair().await;
+            let (mut client, server) = init_client_server_pair(Config::from_env().unwrap()).await;
 
             let mock_session = Session::new(
                 Participant::waiting(uuid::Uuid::new_v4().to_string()),
@@ -513,7 +695,7 @@ mod tests {
     #[test]
     fn test_connect_with_invalid_key() {
         Runtime::new().unwrap().block_on(async {
-            let (mut client, server) = init_client_server_pair().await;
+            let (mut client, server) = init_client_server_pair(Config::from_env().unwrap()).await;
 
             client
                 .write(&ClientMessage::Key(KeyPayload {
@@ -533,6 +715,55 @@ mod tests {
             assert_eq!(server.connections.new.0.len(), 0);
             assert_eq!(server.connections.waiting.0.len(), 0);
             assert_eq!(server.connections.paired.0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_clean_expired_waiting_connections() {
+        Runtime::new().unwrap().block_on(async {
+            let mut config = Config::from_env().unwrap();
+            config.expired_connection_clean_interval = Duration::from_millis(500);
+            config.waiting_connection_expiry = Duration::from_millis(450);
+            let (mut client, server) = init_client_server_pair(config).await;
+
+            let mock_session = Session::new(
+                Participant::waiting(uuid::Uuid::new_v4().to_string()),
+                Participant::waiting(uuid::Uuid::new_v4().to_string()),
+            );
+
+            let db = db::connect().await.unwrap();
+            SessionStore::new(db).save(&mock_session).await.unwrap();
+
+            client
+                .write(&ClientMessage::Key(KeyPayload {
+                    key: mock_session.client.key.clone(),
+                }))
+                .await
+                .unwrap();
+
+            let response = client.next().await.unwrap().unwrap();
+
+            assert_eq!(
+                response,
+                ServerMessage::KeyAccepted(KeyAcceptedPayload {
+                    key_type: KeyType::Client
+                })
+            );
+
+            // Wait for connection to be cleaned up by gc timeout
+            delay_for(Duration::from_millis(600)).await;
+
+            let server = server.stop().await.unwrap();
+
+            assert_eq!(server.connections.new.0.len(), 0);
+            assert_eq!(server.connections.waiting.0.len(), 0);
+            assert_eq!(server.connections.paired.0.len(), 0);
+
+            let response = client.next().await.unwrap().unwrap();
+
+            assert_eq!(response, ServerMessage::Close);
+
+            assert!(client.next().await.is_none());
         });
     }
 }

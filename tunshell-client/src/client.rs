@@ -190,7 +190,11 @@ impl<'a> Client<'a> {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        let sleep_duration = std::cmp::max(0, connection_info.connect_at - current_timestamp);
+        let sleep_duration = if connection_info.connect_at < current_timestamp {
+            0
+        } else {
+            connection_info.connect_at - current_timestamp
+        };
 
         std::thread::sleep(Duration::from_millis(sleep_duration));
 
