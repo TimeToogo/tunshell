@@ -10,20 +10,8 @@ jobs:
   build_test_deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-node@v1
-      with:
-        node-version: 12
-    - run: npm ci
-      working-directory: js/shared
-    - run: npm run test
-      working-directory: js/shared
-    - run: npm run build
-      working-directory: js/shared
-    - run: npm ci
-      working-directory: js/server
-    - run: npm run test -- --forceExit
-      working-directory: js/server
+    - name: Build Docker Image
+      run: ls -al && docker build -t timetoogo/tunshell-relay --file=tunshell-server/docker/prod.Dockerfile .
     - name: Publish to Docker Hub
       uses: elgohr/Publish-Docker-Github-Action@master
       with:

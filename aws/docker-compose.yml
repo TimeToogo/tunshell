@@ -24,9 +24,9 @@ services:
     volumes:
       - ./config/etc/letsencrypt/:/le-ssl
     environment:
-      MONGO_HOST: mongo
-      MONGO_USER: relay
-      MONGO_PASS: ${MONGO_PASSWORD}
+      MONGO_CONNECTION_STRING: mongodb://relay:${MONGO_PASSWORD}@mongo:27017/relay
+      TUNSHELL_API_PORT: 443
+      TUNSHELL_RELAY_PORT: 5000
       TLS_RELAY_PRIVATE_KEY: /le-ssl/live/relay.tunshell.com/privkey.pem
       TLS_RELAY_CERT: /le-ssl/live/relay.tunshell.com/fullchain.pem
 
