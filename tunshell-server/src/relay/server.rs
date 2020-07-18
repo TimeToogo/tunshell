@@ -2,7 +2,7 @@ use super::{config::Config, connection::Connection as ClientConnection};
 use crate::db::{Session, SessionStore};
 use anyhow::{Context as AnyhowContext, Error, Result};
 use chrono::Utc;
-use futures::{Future, FutureExt};
+use futures::{Future, FutureExt, StreamExt};
 use log::*;
 use rand::Rng;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -103,6 +103,37 @@ impl Future for PairedConnections {
     }
 }
 
+/// If a connection received a message or closed while it is waiting
+/// we remove this connection from the pool
+impl Future for WaitingConnections {
+    type Output = (Connection, Result<ClientMessage>);
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut received = None;
+
+        for (key, con) in &mut self.0 {
+            let result = con.stream.stream_mut().poll_next_unpin(cx);
+
+            if let Poll::Ready(message) = result {
+                received = Some((key.to_owned(), message));
+                break;
+            }
+        }
+
+        if let None = received {
+            return Poll::Pending;
+        }
+
+        let (key, message) = received.unwrap();
+        let con = self.0.remove(&key).unwrap();
+
+        Poll::Ready((
+            con,
+            message.unwrap_or_else(|| Err(Error::msg("connection closed by client"))),
+        ))
+    }
+}
+
 fn poll_all_remove_ready<'a, T>(
     futures: impl Iterator<Item = &'a mut JoinHandle<Result<T>>>,
     cx: &mut Context<'_>,
@@ -169,6 +200,7 @@ impl Server {
             tokio::select! {
                 stream = tls_listener.accept() => { self.handle_new_connection(stream); },
                 accepted = &mut self.connections.new => { self.handle_accepted_connection(accepted); },
+                closed = &mut self.connections.waiting => { self.handle_closed_waiting_connection(closed); },
                 finished = &mut self.connections.paired => { self.handle_finished_connection(finished); }
                 _ = tokio::time::delay_until(next_clean_at) => {
                     self.clean_expired_connections();
@@ -292,9 +324,22 @@ impl Server {
         }
     }
 
+    fn handle_closed_waiting_connection(&self, closed: (Connection, Result<ClientMessage>)) {
+        match closed {
+            (_, Ok(msg)) => error!(
+                "received unexpected message from client while waiting for peer: {:?}",
+                msg
+            ),
+            (_, Err(err)) => error!(
+                "connection error from client while waiting for peer: {:?}",
+                err
+            ),
+        }
+    }
+
     fn handle_finished_connection(&self, paired: Result<(Connection, Connection)>) {
         if let Err(err) = paired {
-            warn!("error occurred during paired connection: {}", err);
+            error!("error occurred during paired connection: {}", err);
         }
     }
 
@@ -565,8 +610,11 @@ mod tests {
 
         // Give server time to bind
         loop {
-            let socket =
-                TcpStream::connect(SocketAddr::from((Ipv4Addr::new(127, 0, 0, 1), server_config.port))).await;
+            let socket = TcpStream::connect(SocketAddr::from((
+                Ipv4Addr::new(127, 0, 0, 1),
+                server_config.port,
+            )))
+            .await;
 
             if let Ok(_) = socket {
                 break;
@@ -718,6 +766,33 @@ mod tests {
                     .contains_key(&mock_session.host.key),
                 true
             );
+            assert_eq!(server.connections.paired.0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_close_connection_while_waiting_for_peer() {
+        Runtime::new().unwrap().block_on(async {
+            let server = init_server(Config::from_env().unwrap()).await;
+            {
+                let mut con = create_client_connection_to_server(&server).await;
+
+                let mock_session = create_mock_session().await;
+
+                send_key_to_server(&mut con, &mock_session.host.key).await;
+
+                assert_next_message_is_key_accepted(&mut con, KeyType::Host).await;
+
+                // Connection should drop here
+            }
+
+            delay_for(Duration::from_millis(100)).await;
+
+            let server = server.stop().await.unwrap();
+
+            assert_eq!(server.connections.new.0.len(), 0);
+            // Connection should be removed from waiting hash map after being closed
+            assert_eq!(server.connections.waiting.0.len(), 0);
             assert_eq!(server.connections.paired.0.len(), 0);
         });
     }
