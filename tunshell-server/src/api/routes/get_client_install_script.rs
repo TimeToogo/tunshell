@@ -21,7 +21,7 @@ impl ScriptType {
 pub(crate) async fn get_client_install_script(
     file_name: String,
 ) -> Result<Box<dyn Reply>, Rejection> {
-    if !file_name.contains(".") {
+    if !file_name.contains('.') {
         return Ok(bad_file_name());
     }
 
@@ -29,7 +29,7 @@ pub(crate) async fn get_client_install_script(
     let key = parts.next().unwrap();
     let script_type = ScriptType::from_ext(parts.next().unwrap());
 
-    if let None = script_type {
+    if script_type.is_none() {
         return Ok(bad_file_name());
     }
 

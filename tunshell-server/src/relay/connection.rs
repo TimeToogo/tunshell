@@ -13,12 +13,14 @@ type ClientMessageStream<IO> = MessageStream<ServerMessage, ClientMessage, IO>;
 
 pub(super) struct Connection<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> {
     stream: Option<ClientMessageStream<Compat<IO>>>,
+    closed: bool,
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> Connection<IO> {
     pub(super) fn new(stream: IO) -> Self {
         Self {
             stream: Some(ClientMessageStream::new(stream.compat())),
+            closed: false,
         }
     }
 
@@ -36,6 +38,10 @@ impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> Connection<IO> 
 
     pub(super) async fn next(&mut self) -> Result<ClientMessage> {
         match self.stream_mut().next().await {
+            Some(result @ Ok(ClientMessage::Close)) => {
+                self.closed = true;
+                result
+            }
             Some(result) => result,
             None => Err(Error::msg("no messages are left in stream")),
         }
@@ -60,8 +66,12 @@ impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> Connection<IO> 
 
 impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> Drop for Connection<IO> {
     fn drop(&mut self) {
-        // Always attempt to send a close message to the client
-        // when the connection is being closed
+        if self.closed {
+            return;
+        }
+
+        // Attempt to send a close message to the client
+        // when the connection is being dropped without being closed
         let stream = self.stream.take().unwrap();
         try_send_close(stream);
     }

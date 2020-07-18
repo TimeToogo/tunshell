@@ -112,7 +112,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream for Messa
                         "Inner stream failed to return complete message",
                     ))));
                 }
-                Poll::Ready(Ok(_read)) => {},
+                Poll::Ready(Ok(_read)) => {}
                 Poll::Ready(Err(err)) => {
                     self.closed = true;
 
@@ -139,16 +139,18 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream for Messa
 
         self.read_buff.drain(..3 + message_length);
 
-        match O::deserialise(&raw_message) {
+        let result = match O::deserialise(&raw_message) {
             Ok(message) => {
                 debug!("Received message {:?}", message);
-                return Poll::Ready(Some(Ok(message)));
+                Ok(message)
             }
             Err(err) => {
                 debug!("Error while deserialised received message {:?}", err);
-                return Poll::Ready(Some(Err(err)));
+                Err(err)
             }
-        }
+        };
+
+        Poll::Ready(Some(result))
     }
 }
 
