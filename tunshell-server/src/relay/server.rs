@@ -523,7 +523,7 @@ mod tests {
     use tunshell_shared::{KeyAcceptedPayload, KeyPayload, KeyType, MessageStream, RelayPayload};
 
     lazy_static! {
-        static ref TCP_PORT_NUMBER: Mutex<u16> = Mutex::from(25555);
+        static ref TCP_PORT_NUMBER: Mutex<u16> = Mutex::from(35555);
     }
 
     type ClientConnection =
@@ -564,7 +564,16 @@ mod tests {
         });
 
         // Give server time to bind
-        tokio::time::delay_for(Duration::from_millis(100)).await;
+        loop {
+            let socket =
+                TcpStream::connect(SocketAddr::from((Ipv4Addr::new(127, 0, 0, 1), server_config.port))).await;
+
+            if let Ok(_) = socket {
+                break;
+            }
+
+            tokio::time::delay_for(Duration::from_millis(100)).await;
+        }
 
         TerminableServer {
             port: server_config.port,
@@ -1104,8 +1113,8 @@ mod tests {
                 .await
                 .unwrap();
 
-                // Wait for connection to expire
-                delay_for(Duration::from_millis(500)).await;
+            // Wait for connection to expire
+            delay_for(Duration::from_millis(500)).await;
 
             assert_eq!(
                 con_host.next().await.unwrap().unwrap(),

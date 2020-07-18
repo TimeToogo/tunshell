@@ -93,7 +93,6 @@ mod tests {
 
             let response = String::from_utf8(body).unwrap();
 
-            println!("response: {:?}", response);
             assert!(response.contains("=== TUNSHELL SHELL SCRIPT ==="));
             assert!(response.contains("test-key"));
         });
@@ -118,7 +117,6 @@ mod tests {
 
             let response = String::from_utf8(body).unwrap();
 
-            println!("response: {:?}", response);
             assert!(response.contains("=== TUNSHELL CMD SCRIPT ==="));
             assert!(response.contains("test-key"));
         });

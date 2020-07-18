@@ -1,4 +1,4 @@
-use super::{config::Config, routes};
+use super::{config::Config, cors::cors, routes};
 use crate::db;
 use anyhow::Result;
 use log::*;
@@ -13,6 +13,16 @@ pub async fn start() -> Result<()> {
 
     let router = warp::any()
         .and({
+            warp::header::exact("host", "lets.tunshell.com").and(
+                // GET lets.tunshell.com/{file_name}
+                warp::path::param()
+                    .and(warp::get())
+                    .and_then(move |file_name: String| {
+                        routes::get_client_install_script(file_name)
+                    }),
+            )
+        })
+        .or({
             warp::path("api").and(
                 // POST /api/sessions
                 warp::path("sessions")
@@ -20,14 +30,7 @@ pub async fn start() -> Result<()> {
                     .and_then(move || routes::create_session(db_client.as_ref().clone())),
             )
         })
-        .or({
-            warp::header::exact("host", "lets.tunshell.com").and(
-                // GET lets.tunshell.com/{file_name}
-                warp::path::param()
-                    .and(warp::get())
-                    .and_then(move |file_name: String| routes::get_client_install_script(file_name)),
-            )
-        });
+        .with(cors());
 
     warp::serve(router).run(([0, 0, 0, 0], config.port)).await;
 

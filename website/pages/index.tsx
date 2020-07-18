@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import Head from 'next/head';
+import React, { useState } from "react";
+import Head from "next/head";
 
 interface SessionKeys {
   hostKey: string;
@@ -15,9 +15,14 @@ export default function Home() {
     setSessionKeys(undefined);
 
     try {
-      const response = await fetch('https://relay.tunshell.com/sessions', { method: 'POST' });
+      const response = await fetch("https://relay.tunshell.com/api/sessions", {
+        method: "POST",
+      }).then((i) => i.json());
 
-      setSessionKeys(await response.json());
+      setSessionKeys({
+        hostKey: response.host_key,
+        clientKey: response.client_key
+      });
     } finally {
       setCreatingSession(false);
     }
@@ -44,12 +49,18 @@ export default function Home() {
             <>
               <li>
                 Run this command on the <strong>target host</strong>:
-                <pre>sh &lt;(curl -sSf https://lets.tunshell.com/{sessionKeys.hostKey}.sh)</pre>
+                <pre>
+                  sh &lt;(curl -sSf https://lets.tunshell.com/
+                  {sessionKeys.hostKey}.sh)
+                </pre>
               </li>
 
               <li>
                 Run this command on your <strong>local host</strong>:
-                <pre>sh &lt;(curl -sSf https://lets.tunshell.com/{sessionKeys.clientKey}.sh)</pre>
+                <pre>
+                  sh &lt;(curl -sSf https://lets.tunshell.com/
+                  {sessionKeys.clientKey}.sh)
+                </pre>
               </li>
             </>
           )}
@@ -89,8 +100,9 @@ export default function Home() {
         body {
           padding: 0;
           margin: 0;
-          font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans,
-            Droid Sans, Helvetica Neue, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
+            Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
+            sans-serif;
         }
 
         * {
