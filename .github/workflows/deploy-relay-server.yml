@@ -10,12 +10,12 @@ jobs:
   build_test_deploy:
     runs-on: ubuntu-latest
     steps:
-    - name: Build Docker Image
-      run: ls -al && docker build -t timetoogo/tunshell-relay --file=tunshell-server/docker/prod.Dockerfile .
+    - uses: actions/checkout@v2
     - name: Publish to Docker Hub
       uses: elgohr/Publish-Docker-Github-Action@master
       with:
         name: timetoogo/tunshell-relay
+        dockerfile: tunshell-server/docker/prod.Dockerfile
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         tags: "latest"
