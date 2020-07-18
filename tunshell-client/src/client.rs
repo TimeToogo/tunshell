@@ -98,10 +98,7 @@ impl<'a> Client<'a> {
             .next()
             .unwrap();
 
-        let network_stream = TcpStream::connect(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-            3001,
-        ))
+        let network_stream = TcpStream::connect(relay_addr)
         .await?;
         network_stream.set_keepalive(Some(Duration::from_secs(30)))?;
         let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
