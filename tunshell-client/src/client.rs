@@ -174,7 +174,9 @@ impl<'a> Client<'a> {
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => break,
                 Some(Ok(ServerMessage::AlreadyJoined)) => {
-                    return Err(Error::msg("Connection has already been joined by another host"))
+                    return Err(Error::msg(
+                        "Connection has already been joined by another host",
+                    ))
                 }
                 Some(Ok(message)) => {
                     return Err(Error::msg(format!(
@@ -204,7 +206,7 @@ impl<'a> Client<'a> {
             peer_info.peer_ip_address
         );
 
-        // Initialise and bind connections
+        // Initialise and bind sockets
         let mut tcp = p2p::tcp::TcpConnection::new(peer_info.clone(), connection_info.clone());
         let mut udp =
             p2p::udp_adaptor::UdpConnectionAdaptor::new(peer_info.clone(), connection_info.clone());
@@ -242,17 +244,11 @@ impl<'a> Client<'a> {
             None => return Ok(None),
         };
 
-        // TODO: replace with server generated salt
-        let salt = "TODO_CHANGE_ME";
-
-        // TODO: replace with server generated session key
-        let key = if master_side {
-            self.config.client_key()
-        } else {
-            &peer_info.peer_key
-        };
-
-        let stream = AesStream::new(stream.compat(), salt.as_bytes(), key.as_bytes());
+        let stream = AesStream::new(
+            stream.compat(),
+            connection_info.session_salt.as_slice(),
+            connection_info.session_key.as_slice(),
+        );
 
         Ok(Some(Box::new(stream)))
     }
