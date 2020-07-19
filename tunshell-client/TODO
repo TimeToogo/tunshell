@@ -1,9 +1,0 @@
-tunshell todo:
-
- - clean up code / tests
- - finalise implementation for reliable-UDP protocol
- - replace thrussh with custom protocol over TLS
- - fix up "early eof" error on client by fixing the handling server-side
- - re-write server in Rust <===
- - documentation
- - windows support?

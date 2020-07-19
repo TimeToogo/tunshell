@@ -25,8 +25,8 @@ curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/mongo_init.
 curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/nginx.conf > nginx.conf
 
 mkdir -p config/nginx/site-confs/
-mv nginx.conf config/nginx/site-confs/default
-
+mv nginx.conf config/nginx/site-cnfs/default
+o
 sed -i "s/{{password}}/$MONGO_PASSWORD/g" mongo_init.js
 
 sudo service docker start

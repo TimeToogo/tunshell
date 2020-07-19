@@ -15,8 +15,8 @@ pub(crate) async fn create_session(db: mongodb::Client) -> Result<Box<dyn Reply>
 
     debug!("creating new session");
     let session = Session::new(
-        Participant::waiting(Uuid::new_v4().to_string()),
-        Participant::waiting(Uuid::new_v4().to_string()),
+        Participant::new(Uuid::new_v4().to_string()),
+        Participant::new(Uuid::new_v4().to_string()),
     );
 
     let result = store.save(&session).await;

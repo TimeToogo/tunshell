@@ -5,19 +5,12 @@ use mongodb::{
     options::{FindOneOptions, UpdateOptions},
     Client,
 };
-use std::{convert::TryFrom, net::IpAddr, str::FromStr};
+use std::convert::TryFrom;
 use tunshell_shared::KeyType;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct Participant {
     pub(crate) key: String,
-    pub(crate) state: ParticipantState,
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub(crate) enum ParticipantState {
-    Waiting,
-    Joined(IpAddr),
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -34,61 +27,15 @@ pub(crate) struct SessionStore {
 }
 
 impl Participant {
-    pub(crate) fn waiting(key: String) -> Participant {
-        Participant {
-            key,
-            state: ParticipantState::Waiting,
-        }
-    }
-
-    pub(crate) fn joined(key: String, ip: IpAddr) -> Participant {
-        Participant {
-            key,
-            state: ParticipantState::Joined(ip),
-        }
-    }
-
-    pub(crate) fn is_waiting(&self) -> bool {
-        if let ParticipantState::Waiting = self.state {
-            return true;
-        }
-
-        return false;
-    }
-
-    pub(crate) fn is_joined(&self) -> bool {
-        if let ParticipantState::Joined(_) = self.state {
-            return true;
-        }
-
-        return false;
-    }
-
-    pub(crate) fn set_joined(&mut self, addr: IpAddr) {
-        self.state = ParticipantState::Joined(addr);
-    }
-
-    pub(crate) fn set_waiting(&mut self) {
-        self.state = ParticipantState::Waiting;
+    pub(crate) fn new(key: String) -> Participant {
+        Participant { key }
     }
 }
 
 impl Into<bson::Document> for Participant {
     fn into(self) -> bson::Document {
-        let joined_address = match self.state {
-            ParticipantState::Waiting => None,
-            ParticipantState::Joined(addr) => Some(addr),
-        };
-
-        let joined_address_bson = match joined_address {
-            None => bson::Bson::Null,
-            Some(addr) => bson::Bson::String(addr.to_string()),
-        };
-
         doc! {
             "key": self.key,
-            "joined": joined_address.is_some(),
-            "ip_address": joined_address_bson
         }
     }
 }
@@ -98,20 +45,7 @@ impl TryFrom<bson::Document> for Participant {
 
     fn try_from(value: bson::Document) -> Result<Self, Self::Error> {
         let key = value.get_str("key")?.to_owned();
-        let joined = value.get_bool("joined")?;
-        let ip_address = if value.contains_key("ip_address") && !value.is_null("ip_address") {
-            Some(IpAddr::from_str(value.get_str("ip_address")?)?)
-        } else {
-            None
-        };
-
-        let state = if joined && ip_address.is_some() {
-            ParticipantState::Joined(ip_address.unwrap())
-        } else {
-            ParticipantState::Waiting
-        };
-
-        Ok(Self { key, state })
+        Ok(Self { key })
     }
 }
 
@@ -166,6 +100,7 @@ impl Session {
         None
     }
 
+    #[allow(dead_code)]
     pub(crate) fn participant_mut(&mut self, key: &str) -> Option<&mut Participant> {
         if self.host.key == key {
             return Some(&mut self.host);
@@ -255,11 +190,10 @@ impl SessionStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
 
     #[test]
-    fn test_participant_waiting_into_bson() {
-        let participant = Participant::waiting("test-key".to_owned());
+    fn test_participant_into_bson() {
+        let participant = Participant::new("test-key".to_owned());
 
         let document: bson::Document = participant.into();
 
@@ -267,71 +201,26 @@ mod tests {
             document,
             doc! {
                 "key": "test-key",
-                "joined": false,
-                "ip_address": bson::Bson::Null
             }
         );
     }
 
     #[test]
-    fn test_participant_waiting_from_bson() {
+    fn test_participant_from_bson() {
         let document = doc! {
             "key": "test-key",
-            "joined": false,
-            "ip_address": bson::Bson::Null
         };
 
         let participant = Participant::try_from(document).unwrap();
 
-        assert_eq!(participant, Participant::waiting("test-key".to_owned()));
-    }
-
-    #[test]
-    fn test_participant_joined_into_bson() {
-        let participant = Participant::joined(
-            "test-key".to_owned(),
-            IpAddr::V4(Ipv4Addr::new(123, 123, 123, 123)),
-        );
-
-        let document: bson::Document = participant.into();
-
-        assert_eq!(
-            document,
-            doc! {
-                "key": "test-key",
-                "joined": true,
-                "ip_address": "123.123.123.123"
-            }
-        );
-    }
-
-    #[test]
-    fn test_participant_joined_from_bson() {
-        let document = doc! {
-            "key": "test-key",
-            "joined": true,
-            "ip_address": "123.123.123.123"
-        };
-
-        let participant = Participant::try_from(document).unwrap();
-
-        assert_eq!(
-            participant,
-            Participant::joined(
-                "test-key".to_owned(),
-                IpAddr::V4(Ipv4Addr::new(123, 123, 123, 123)),
-            )
-        );
+        assert_eq!(participant, Participant::new("test-key".to_owned()));
     }
 
     #[test]
     fn test_session_into_bson() {
         let session = Session::new(
-            Participant::joined(
-                "host-key".to_owned(),
-                IpAddr::V4(Ipv4Addr::new(123, 123, 123, 123)),
-            ),
-            Participant::waiting("client-key".into()),
+            Participant::new("host-key".to_owned()),
+            Participant::new("client-key".to_owned()),
         );
 
         let document: bson::Document = session.clone().into();
@@ -342,13 +231,9 @@ mod tests {
                 "_id": session.id,
                 "host": {
                     "key": "host-key",
-                    "joined": true,
-                    "ip_address": "123.123.123.123"
                 },
                 "client": {
                     "key": "client-key",
-                    "joined": false,
-                    "ip_address": bson::Bson::Null
                 },
                 "created_at": session.created_at
             }
@@ -364,13 +249,9 @@ mod tests {
             "_id": id.clone(),
             "host": {
                 "key": "host-key",
-                "joined": true,
-                "ip_address": "123.123.123.123"
             },
             "client": {
                 "key": "client-key",
-                "joined": false,
-                "ip_address": bson::Bson::Null
             },
             "created_at": created_at.clone()
         };
@@ -378,11 +259,8 @@ mod tests {
         let session = Session::try_from(document).unwrap();
 
         let mut expected = Session::new(
-            Participant::joined(
-                "host-key".to_owned(),
-                IpAddr::V4(Ipv4Addr::new(123, 123, 123, 123)),
-            ),
-            Participant::waiting("client-key".into()),
+            Participant::new("host-key".to_owned()),
+            Participant::new("client-key".to_owned()),
         );
 
         expected.id = id;
