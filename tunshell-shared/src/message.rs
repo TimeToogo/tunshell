@@ -22,6 +22,7 @@ pub enum ServerMessage {
     Close,
     KeyAccepted(KeyAcceptedPayload),
     KeyRejected,
+    AlreadyJoined,
     PeerJoined(PeerJoinedPayload),
     PeerLeft,
     TimePlease,
@@ -137,12 +138,13 @@ impl Message for ServerMessage {
             Self::Close => 0,
             Self::KeyAccepted(_) => 1,
             Self::KeyRejected => 2,
-            Self::PeerJoined(_) => 3,
-            Self::PeerLeft => 4,
-            Self::TimePlease => 5,
-            Self::AttemptDirectConnect(_) => 6,
-            Self::StartRelayMode => 7,
-            Self::Relay(_) => 8,
+            Self::AlreadyJoined => 3,
+            Self::PeerJoined(_) => 4,
+            Self::PeerLeft => 5,
+            Self::TimePlease => 6,
+            Self::AttemptDirectConnect(_) => 7,
+            Self::StartRelayMode => 8,
+            Self::Relay(_) => 9,
         }
     }
 
@@ -153,6 +155,7 @@ impl Message for ServerMessage {
             Self::Close => vec![],
             Self::KeyAccepted(payload) => serde_json::to_vec(&payload)?,
             Self::KeyRejected => vec![],
+            Self::AlreadyJoined => vec![],
             Self::PeerJoined(payload) => serde_json::to_vec(&payload)?,
             Self::PeerLeft => vec![],
             Self::TimePlease => vec![],
@@ -183,31 +186,36 @@ impl Message for ServerMessage {
             } => Ok(Self::KeyRejected),
             RawMessage {
                 type_id: 3,
+                length: 0,
+                data: _,
+            } => Ok(Self::AlreadyJoined),
+            RawMessage {
+                type_id: 4,
                 length: _,
                 data,
             } => Ok(Self::PeerJoined(serde_json::from_slice(data)?)),
             RawMessage {
-                type_id: 4,
+                type_id: 5,
                 length: 0,
                 data: _,
             } => Ok(Self::PeerLeft),
             RawMessage {
-                type_id: 5,
+                type_id: 6,
                 length: 0,
                 data: _,
             } => Ok(Self::TimePlease),
             RawMessage {
-                type_id: 6,
+                type_id: 7,
                 length: _,
                 data,
             } => Ok(Self::AttemptDirectConnect(serde_json::from_slice(data)?)),
             RawMessage {
-                type_id: 7,
+                type_id: 8,
                 length: 0,
                 data: _,
             } => Ok(Self::StartRelayMode),
             RawMessage {
-                type_id: 8,
+                type_id: 9,
                 length: _,
                 data,
             } => Ok(Self::Relay(RelayPayload { data: data.clone() })),
@@ -332,6 +340,17 @@ mod tests {
     }
 
     #[test]
+    fn test_server_serialise_already_joined() {
+        let message = ServerMessage::AlreadyJoined;
+
+        let raw_message = message.serialise().unwrap();
+
+        assert_eq!(raw_message.type_id, 3);
+        assert_eq!(raw_message.data.len(), 0);
+        assert_eq!(raw_message.length, 0);
+    }
+
+    #[test]
     fn test_server_serialise_peer_joined() {
         let message = ServerMessage::PeerJoined(PeerJoinedPayload {
             peer_key: "key".to_string(),
@@ -340,7 +359,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 3);
+        assert_eq!(raw_message.type_id, 4);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
             r#"{"peerKey":"key","peerIpAddress":"123.123.123.123"}"#
@@ -354,7 +373,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 4);
+        assert_eq!(raw_message.type_id, 5);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -365,7 +384,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 5);
+        assert_eq!(raw_message.type_id, 6);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -380,7 +399,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 6);
+        assert_eq!(raw_message.type_id, 7);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
             r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#
@@ -394,7 +413,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 7);
+        assert_eq!(raw_message.type_id, 8);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -407,7 +426,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 8);
+        assert_eq!(raw_message.type_id, 9);
         assert_eq!(raw_message.data, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
         assert_eq!(raw_message.length, 9);
     }
@@ -445,9 +464,18 @@ mod tests {
     }
 
     #[test]
+    fn test_server_deserialise_already_joined() {
+        let raw_message = RawMessage::new(3, vec![]);
+
+        let message = ServerMessage::deserialise(&raw_message).unwrap();
+
+        assert_eq!(message, ServerMessage::AlreadyJoined);
+    }
+
+    #[test]
     fn test_server_deserialise_peer_joined() {
         let raw_message = RawMessage::new(
-            3,
+            4,
             Vec::from(r#"{"peerKey": "key", "peerIpAddress": "123.123.123.123"}"#.as_bytes()),
         );
 
@@ -464,7 +492,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_peer_left() {
-        let raw_message = RawMessage::new(4, vec![]);
+        let raw_message = RawMessage::new(5, vec![]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -473,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_time_please() {
-        let raw_message = RawMessage::new(5, vec![]);
+        let raw_message = RawMessage::new(6, vec![]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -483,7 +511,7 @@ mod tests {
     #[test]
     fn test_server_deserialise_attempt_direct_connect() {
         let raw_message = RawMessage::new(
-            6,
+            7,
             Vec::from(r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#.as_bytes()),
         );
 
@@ -501,7 +529,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_start_relay_mode() {
-        let raw_message = RawMessage::new(7, vec![]);
+        let raw_message = RawMessage::new(8, vec![]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -510,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_relay() {
-        let raw_message = RawMessage::new(8, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let raw_message = RawMessage::new(9, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 

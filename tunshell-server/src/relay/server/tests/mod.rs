@@ -163,6 +163,37 @@ fn test_connect_with_invalid_key() {
 }
 
 #[test]
+fn test_connect_and_joined_twice_with_same_key() {
+    Runtime::new().unwrap().block_on(async {
+        let server = init_server(Config::from_env().unwrap()).await;
+        let mut con1 = create_client_connection_to_server(&server).await;
+        let mut con2 = create_client_connection_to_server(&server).await;
+
+        let mock_session = create_mock_session().await;
+
+        send_key_to_server(&mut con1, &mock_session.client.key).await;
+        assert_next_message_is_key_accepted(&mut con1, KeyType::Client).await;
+
+        send_key_to_server(&mut con2, &mock_session.client.key).await;
+        assert_next_message_is_key_accepted(&mut con2, KeyType::Client).await;
+
+        assert_eq!(
+            con2.next().await.unwrap().unwrap(),
+            ServerMessage::AlreadyJoined
+        );
+        assert_eq!(con2.next().await.unwrap().unwrap(), ServerMessage::Close);
+        
+        delay_for(Duration::from_millis(50)).await;
+
+        let server = server.stop().await.unwrap();
+
+        assert_eq!(server.connections.new.0.len(), 0);
+        assert_eq!(server.connections.waiting.0.len(), 1);
+        assert_eq!(server.connections.paired.0.len(), 0);
+    });
+}
+
+#[test]
 fn test_connect_with_to_expired_session() {
     Runtime::new().unwrap().block_on(async {
         let server = init_server(Config::from_env().unwrap()).await;

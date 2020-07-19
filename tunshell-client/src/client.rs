@@ -9,11 +9,7 @@ use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
-use tokio_rustls::{
-    client::TlsStream,
-    rustls::{ClientConfig},
-    TlsConnector,
-};
+use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
 use tokio_util::compat::*;
 use tunshell_shared::*;
 use webpki::DNSNameRef;
@@ -84,7 +80,7 @@ impl<'a> Client<'a> {
                     Ok(rustls::ServerCertVerified::assertion())
                 }
             }
-       
+
             config
                 .dangerous()
                 .set_certificate_verifier(Arc::new(NullCertVerifier {}));
@@ -98,8 +94,7 @@ impl<'a> Client<'a> {
             .next()
             .unwrap();
 
-        let network_stream = TcpStream::connect(relay_addr)
-        .await?;
+        let network_stream = TcpStream::connect(relay_addr).await?;
         network_stream.set_keepalive(Some(Duration::from_secs(30)))?;
         let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
 
@@ -178,6 +173,9 @@ impl<'a> Client<'a> {
                     }
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => break,
+                Some(Ok(ServerMessage::AlreadyJoined)) => {
+                    return Err(Error::msg("Connection has already been joined by another host"))
+                }
                 Some(Ok(message)) => {
                     return Err(Error::msg(format!(
                         "Unexpected response returned by server: {:?}",
