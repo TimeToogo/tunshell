@@ -1,6 +1,6 @@
 use super::{
-    schedule_resend_if_dropped, SendEvent, SendEventReceiver,
-    UdpConnectionVars, UdpPacket, UdpPacketType,
+    schedule_resend_if_dropped, SendEvent, SendEventReceiver, UdpConnectionVars, UdpPacket,
+    UdpPacketType,
 };
 use anyhow::{Error, Result};
 use log::*;
@@ -42,7 +42,11 @@ impl RecvLoop {
         Self { socket, con }
     }
 
-    async fn start(mut self, mut terminator: UnboundedReceiver<()>) -> Self {
+    async fn start(
+        mut self,
+        mut recv_terminator: UnboundedReceiver<()>,
+        send_terminator: UnboundedSender<()>,
+    ) -> Self {
         let recv_timeout = {
             let con = self.con.lock().unwrap();
             let config = con.config();
@@ -61,7 +65,7 @@ impl RecvLoop {
                     Err(err) => Err(Error::from(err))
                 },
                 _ = delay_for(recv_timeout) => handle_recv_timeout(Arc::clone(&self.con)),
-                _ = terminator.recv() => break
+                _ = recv_terminator.recv() => break
             };
 
             if let Err(err) = result {
@@ -75,6 +79,7 @@ impl RecvLoop {
 
         try_disconnect(&self.con);
         debug!("recv loop ended");
+        send_terminator.send(()).unwrap_or_else(|_| ());
         self
     }
 }
@@ -92,7 +97,11 @@ impl SendLoop {
         }
     }
 
-    async fn start(mut self, mut terminator: UnboundedReceiver<()>) -> Self {
+    async fn start(
+        mut self,
+        mut send_terminator: UnboundedReceiver<()>,
+        recv_terminator: UnboundedSender<()>,
+    ) -> Self {
         let keep_alive_interval = {
             let con = self.con.lock().unwrap();
             let config = con.config();
@@ -111,7 +120,7 @@ impl SendLoop {
                     None => Err(Error::msg("send channel has been dropped"))
                 },
                 _ = delay_for(keep_alive_interval) => handle_keep_alive(Arc::clone(&self.con), &mut self.socket).await,
-                _ = terminator.recv() => break
+                _ = send_terminator.recv() => break
             };
 
             if let Err(err) = result {
@@ -125,6 +134,7 @@ impl SendLoop {
 
         try_disconnect(&self.con);
         debug!("send loop ended");
+        recv_terminator.send(()).unwrap_or_else(|_| ());
         self
     }
 }
@@ -161,8 +171,12 @@ impl UdpConnectionOrchestrator {
         let (tx_recv, rx_recv) = unbounded_channel();
         let (tx_send, rx_send) = unbounded_channel();
 
+        let (tx_recv2, tx_send2) = (tx_recv.clone(), tx_send.clone());
         let task = tokio::spawn(async move {
-            tokio::join!(recv_loop.start(rx_recv), send_loop.start(rx_send))
+            tokio::join!(
+                recv_loop.start(rx_recv, tx_send2.clone()),
+                send_loop.start(rx_send, tx_recv2.clone()),
+            )
         });
 
         self.state = OrchestratorState::Running {
@@ -208,7 +222,10 @@ fn is_connected(con: &Arc<Mutex<UdpConnectionVars>>) -> bool {
 
 fn try_disconnect(con: &Arc<Mutex<UdpConnectionVars>>) {
     match con.try_lock() {
-        Ok(mut con) => con.try_set_state_disconnected(),
+        Ok(mut con) => {
+            con.try_set_state_disconnected();
+            con.wake_recv_tasks();
+        },
         Err(err) => warn!("failed to lock connection state: {}", err),
     };
 }

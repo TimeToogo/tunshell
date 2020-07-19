@@ -34,6 +34,12 @@ impl ShellServer {
 
         self.steam_shell_io(&mut stream, shell).await?;
 
+        // We keep the connection alive for some time to allow the receive
+        // of any acknowledgement packets and so the client can continue to receive
+        // the last message
+        // Improvement: add trait method to TunnelStream wait for ack'd connection state 
+        time::delay_for(Duration::from_millis(500)).await;
+
         Ok(())
     }
 

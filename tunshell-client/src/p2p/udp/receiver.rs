@@ -105,9 +105,7 @@ impl UdpConnectionVars {
         // If new bytes are available in the reassembled_buffer
         // we wake the task wakers which are waiting for new data
         if reassembled_bytes > 0 {
-            for waker in self.recv_wakers.drain(..) {
-                waker.wake();
-            }
+            self.wake_recv_tasks();
         }
 
         // If we have acknowledged any new bytes we trigger an ack-update 
@@ -122,6 +120,12 @@ impl UdpConnectionVars {
         }
 
         advanced_sequence_numbers
+    }
+
+    pub(super) fn wake_recv_tasks(&mut self) {
+        for waker in self.recv_wakers.drain(..) {
+            waker.wake();
+        }
     }
 
     pub(super) fn recv_available_bytes(&self) -> usize {

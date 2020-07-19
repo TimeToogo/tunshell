@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "tunshell-client",
     "tunshell-shared",
+    "tunshell-client",
     "tunshell-server",
 ]

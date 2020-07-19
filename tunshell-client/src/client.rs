@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 use tokio_rustls::{
     client::TlsStream,
-    rustls::{self, ClientConfig},
+    rustls::{ClientConfig},
     TlsConnector,
 };
 use tokio_util::compat::*;
@@ -45,7 +45,7 @@ impl<'a> Client<'a> {
         println!("Negotiating connection...");
         let message_stream = Arc::new(Mutex::new(message_stream));
         let peer_socket = self
-            .negotiate_peer_connect(&message_stream, &mut peer_info, key_type.is_host())
+            .negotiate_peer_connection(&message_stream, &mut peer_info, key_type.is_host())
             .await?;
 
         let exit_code = match key_type {
@@ -73,7 +73,7 @@ impl<'a> Client<'a> {
         {
             struct NullCertVerifier {}
 
-            impl rustls::ServerCertVerifier for NullCertVerifier {
+            impl tokio_rustls::rustls::ServerCertVerifier for NullCertVerifier {
                 fn verify_server_cert(
                     &self,
                     _roots: &rustls::RootCertStore,
@@ -137,7 +137,7 @@ impl<'a> Client<'a> {
         }
     }
 
-    async fn negotiate_peer_connect(
+    async fn negotiate_peer_connection(
         &mut self,
         message_stream: &Arc<Mutex<ClientMessageStream>>,
         peer_info: &mut PeerJoinedPayload,
