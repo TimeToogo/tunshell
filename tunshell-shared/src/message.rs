@@ -50,20 +50,17 @@ pub enum KeyType {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct KeyAcceptedPayload {
     pub key_type: KeyType,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct PeerJoinedPayload {
     pub peer_key: String,
     pub peer_ip_address: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct AttemptDirectConnectPayload {
     pub connect_at: u64,
     pub peer_listen_port: u16,
@@ -76,7 +73,6 @@ pub struct KeyPayload {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct TimePayload {
     pub client_time: u64,
 }
@@ -323,9 +319,9 @@ mod tests {
         assert_eq!(raw_message.type_id, 1);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
-            r#"{"keyType":"client"}"#
+            r#"{"key_type":"client"}"#
         );
-        assert_eq!(raw_message.length, 20);
+        assert_eq!(raw_message.length, 21);
     }
 
     #[test]
@@ -362,9 +358,9 @@ mod tests {
         assert_eq!(raw_message.type_id, 4);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
-            r#"{"peerKey":"key","peerIpAddress":"123.123.123.123"}"#
+            r#"{"peer_key":"key","peer_ip_address":"123.123.123.123"}"#
         );
-        assert_eq!(raw_message.length, 51);
+        assert_eq!(raw_message.length, 54);
     }
 
     #[test]
@@ -402,9 +398,9 @@ mod tests {
         assert_eq!(raw_message.type_id, 7);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
-            r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#
+            r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#
         );
-        assert_eq!(raw_message.length, 60);
+        assert_eq!(raw_message.length, 65);
     }
 
     #[test]
@@ -442,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_key_accepted() {
-        let raw_message = RawMessage::new(1, Vec::from(r#"{"keyType": "host"}"#.as_bytes()));
+        let raw_message = RawMessage::new(1, Vec::from(r#"{"key_type": "host"}"#.as_bytes()));
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -476,7 +472,7 @@ mod tests {
     fn test_server_deserialise_peer_joined() {
         let raw_message = RawMessage::new(
             4,
-            Vec::from(r#"{"peerKey": "key", "peerIpAddress": "123.123.123.123"}"#.as_bytes()),
+            Vec::from(r#"{"peer_key": "key", "peer_ip_address": "123.123.123.123"}"#.as_bytes()),
         );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
@@ -512,7 +508,7 @@ mod tests {
     fn test_server_deserialise_attempt_direct_connect() {
         let raw_message = RawMessage::new(
             7,
-            Vec::from(r#"{"connectAt":12345,"peerListenPort":12,"selfListenPort":123}"#.as_bytes()),
+            Vec::from(r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#.as_bytes()),
         );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
@@ -583,9 +579,9 @@ mod tests {
         assert_eq!(raw_message.type_id, 2);
         assert_eq!(
             raw_message.data,
-            Vec::from(r#"{"clientTime":12345}"#.as_bytes())
+            Vec::from(r#"{"client_time":12345}"#.as_bytes())
         );
-        assert_eq!(raw_message.length, 20);
+        assert_eq!(raw_message.length, 21);
     }
 
     #[test]
@@ -648,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_time() {
-        let raw_message = RawMessage::new(2, Vec::from(r#"{"clientTime":12345}"#.as_bytes()));
+        let raw_message = RawMessage::new(2, Vec::from(r#"{"client_time":12345}"#.as_bytes()));
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
