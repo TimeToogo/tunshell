@@ -107,11 +107,28 @@ impl FallbackShell {
         let output = process.unwrap().wait_with_output()?;
         debug!("cmd exited with: {}", output.status);
 
-        self.output.write_all(output.stdout.as_slice())?;
-        self.output.write_all(output.stderr.as_slice())?;
+        self.output.write("\r\n".as_bytes())?;
+        self.output
+            .write_all(convert_to_crlf(output.stdout).as_slice())?;
+        self.output
+            .write_all(convert_to_crlf(output.stderr).as_slice())?;
 
         Ok(())
     }
+}
+
+fn convert_to_crlf(mut data: Vec<u8>) -> Vec<u8> {
+    let mut i = 0;
+
+    while i < data.len() {
+        if i > 0 && data[i] == 0x0A && data[i - 1] != 0x0D {
+            data.insert(i, 0x0D);
+        }
+
+        i += 1;
+    }
+
+    data
 }
 
 #[async_trait]

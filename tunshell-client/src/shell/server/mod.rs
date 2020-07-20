@@ -79,13 +79,13 @@ impl ShellServer {
         };
 
         debug!("initialising pty shell");
-        let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
+        // let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
 
-        if let Ok(pty_shell) = pty_shell {
-            return Ok(Box::new(pty_shell));
-        }
+        // if let Ok(pty_shell) = pty_shell {
+        //     return Ok(Box::new(pty_shell));
+        // }
 
-        warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
+        // warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
 
         debug!("falling back to in-built shell");
         let fallback_shell = FallbackShell::new(request.term.as_ref(), request.size.clone());
