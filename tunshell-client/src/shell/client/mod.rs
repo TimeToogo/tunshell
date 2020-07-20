@@ -17,11 +17,11 @@ pub struct ShellClient {}
 type ShellStream = ShellClientStream<Compat<Box<dyn TunnelStream>>>;
 
 impl ShellClient {
-    pub fn new() -> Result<ShellClient> {
+    pub(crate) fn new() -> Result<ShellClient> {
         Ok(ShellClient {})
     }
 
-    pub async fn connect(self, stream: Box<dyn TunnelStream>, key: ShellKey) -> Result<u8> {
+    pub(crate) async fn connect(self, stream: Box<dyn TunnelStream>, key: ShellKey) -> Result<u8> {
         info!("connecting to shell server");
         let mut stream = ShellStream::new(stream.compat());
 

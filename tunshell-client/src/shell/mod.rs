@@ -20,5 +20,5 @@ impl ShellKey {
     }
 }
 
-pub use client::*;
-pub use server::*;
+pub(crate) use client::*;
+pub(crate) use server::*;

@@ -1,4 +1,7 @@
+use super::shell::Shell;
+use crate::shell::proto::WindowSize;
 use anyhow::{Context, Error, Result};
+use async_trait::async_trait;
 use log::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
@@ -11,7 +14,7 @@ use tokio::sync::mpsc::{
 };
 use tokio::task::JoinHandle;
 
-pub struct ShellPty {
+pub struct PtyShell {
     state: ShellState,
     master_pty: Box<dyn portable_pty::MasterPty + Send>,
     reader_rx: Receiver<Vec<u8>>,
@@ -25,13 +28,13 @@ struct ShellState {
     exit_status: Arc<Mutex<Option<portable_pty::ExitStatus>>>,
 }
 
-impl ShellPty {
-    pub fn new(term: &str, shell: Option<&str>, pty_size: PtySize) -> Result<Self> {
-        info!("creating shell pty");
+impl PtyShell {
+    pub(super) fn new(term: &str, shell: Option<&str>, size: WindowSize) -> Result<Self> {
+        info!("creating pty shell");
         let pty_system = native_pty_system();
 
         let pty: portable_pty::PtyPair = pty_system
-            .openpty(pty_size)
+            .openpty(size.into())
             .with_context(|| "could not open pty")?;
 
         let mut cmd = get_default_shell(shell)?;
@@ -60,19 +63,13 @@ impl ShellPty {
         let (_, writer_tx) = Self::start_pty_writer_task(pty_writer, state.clone());
 
         info!("created shell pty");
-        Ok(ShellPty {
+        Ok(PtyShell {
             state,
             master_pty: pty.master,
             reader_rx,
             recv_buff: vec![],
             writer_tx,
         })
-    }
-
-    pub fn resize(&self, pty_size: PtySize) -> Result<()> {
-        self.master_pty
-            .resize(pty_size)
-            .with_context(|| "Failed to resize pty")
     }
 
     fn start_pty_reader_task(
@@ -139,14 +136,14 @@ impl ShellPty {
         (task, tx)
     }
 
-    pub(super) async fn write_all(&mut self, buff: &[u8]) -> Result<()> {
-        self.writer_tx
-            .send(Some(buff.to_vec()))
-            .await
-            .map_err(Error::from)
+    fn exit_sync(&mut self) -> Result<()> {
+        self.state.exit_shell(false)
     }
+}
 
-    pub(super) async fn read(&mut self, buff: &mut [u8]) -> Result<usize> {
+#[async_trait]
+impl Shell for PtyShell {
+    async fn read(&mut self, buff: &mut [u8]) -> Result<usize> {
         while self.recv_buff.len() == 0 {
             let stdout = match self.reader_rx.recv().await {
                 Some(data) => data,
@@ -173,11 +170,20 @@ impl ShellPty {
         Ok(read)
     }
 
-    fn exit_sync(&mut self) -> Result<()> {
-        self.state.exit_shell(false)
+    async fn write(&mut self, buff: &[u8]) -> Result<()> {
+        self.writer_tx
+            .send(Some(buff.to_vec()))
+            .await
+            .map_err(Error::from)
     }
 
-    pub(super) fn exit_code(&self) -> Result<u8> {
+    fn resize(&mut self, size: WindowSize) -> Result<()> {
+        self.master_pty
+            .resize(size.into())
+            .with_context(|| "Failed to resize pty")
+    }
+
+    fn exit_code(&self) -> Result<u8> {
         let status = self.state.exit_status.lock().unwrap();
 
         let status = match status.as_ref() {
@@ -189,6 +195,17 @@ impl ShellPty {
             Ok(0)
         } else {
             Ok(1)
+        }
+    }
+}
+
+impl Into<PtySize> for WindowSize {
+    fn into(self) -> PtySize {
+        PtySize {
+            cols: self.0,
+            rows: self.1,
+            pixel_width: 0,
+            pixel_height: 0,
         }
     }
 }
@@ -315,7 +332,7 @@ impl ShellState {
     }
 }
 
-impl Drop for ShellPty {
+impl Drop for PtyShell {
     fn drop(&mut self) {
         self.exit_sync().expect("Failed to exit shell");
     }
@@ -364,12 +381,12 @@ mod tests {
     #[test]
     fn test_shell_pty_exit_on_error() {
         Runtime::new().unwrap().block_on(async {
-            let mut pty: ShellPty = ShellPty::new("", Some("/bin/bash"), PtySize::default())
+            let mut pty: PtyShell = PtyShell::new("", Some("/bin/bash"), WindowSize(80, 80))
                 .expect("Failed to initialise ShellPty");
 
             tokio::time::delay_for(Duration::from_millis(10)).await;
 
-            pty.write_all("exit 1\n\n".as_bytes())
+            pty.write("exit 1\n\n".as_bytes())
                 .await
                 .expect("failed to write to shell");
 

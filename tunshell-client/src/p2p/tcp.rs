@@ -155,6 +155,8 @@ mod tests {
                     connect_at: 1,
                     peer_listen_port: 22335,
                     self_listen_port: 22334,
+                    session_salt: vec![1, 2, 3],
+                    session_key: vec![4, 5, 6],
                 },
             );
 
@@ -206,6 +208,8 @@ mod tests {
                     connect_at: 1,
                     peer_listen_port: 22444,
                     self_listen_port: 22445,
+                    session_salt: vec![1, 2, 3],
+                    session_key: vec![4, 5, 6],
                 },
             );
 
@@ -246,6 +250,8 @@ mod tests {
                     connect_at: 1,
                     peer_listen_port: 22554,
                     self_listen_port: 22555,
+                    session_salt: vec![1, 2, 3],
+                    session_key: vec![4, 5, 6],
                 },
             );
 

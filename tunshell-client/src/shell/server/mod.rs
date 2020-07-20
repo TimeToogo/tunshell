@@ -3,25 +3,28 @@ use crate::{ShellKey, TunnelStream};
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
 use log::*;
-use portable_pty::PtySize;
 use std::time::Duration;
 use tokio::time;
 use tokio_util::compat::*;
 
+mod fallback;
 mod pty;
+mod shell;
 
+use fallback::*;
 use pty::*;
+use shell::*;
 
 type ShellStream = ShellServerStream<Compat<Box<dyn TunnelStream>>>;
 
-pub struct ShellServer {}
+pub(crate) struct ShellServer {}
 
 impl ShellServer {
-    pub fn new() -> Result<ShellServer> {
+    pub(crate) fn new() -> Result<ShellServer> {
         Ok(ShellServer {})
     }
 
-    pub async fn run(self, stream: Box<dyn TunnelStream>, key: ShellKey) -> Result<()> {
+    pub(crate) async fn run(self, stream: Box<dyn TunnelStream>, key: ShellKey) -> Result<()> {
         let mut stream = ShellStream::new(stream.compat());
 
         info!("waiting for key");
@@ -37,7 +40,7 @@ impl ShellServer {
         // We keep the connection alive for some time to allow the receive
         // of any acknowledgement packets and so the client can continue to receive
         // the last message
-        // Improvement: add trait method to TunnelStream wait for ack'd connection state 
+        // Improvement: add trait method to TunnelStream wait for ack'd connection state
         time::delay_for(Duration::from_millis(500)).await;
 
         Ok(())
@@ -64,7 +67,7 @@ impl ShellServer {
         }
     }
 
-    async fn start_shell(&self, stream: &mut ShellStream) -> Result<ShellPty> {
+    async fn start_shell(&self, stream: &mut ShellStream) -> Result<Box<dyn Shell>> {
         let request = tokio::select! {
             message = stream.next() => match message {
                 Some(Ok(ShellClientMessage::StartShell(request))) => request,
@@ -75,19 +78,26 @@ impl ShellServer {
             _ = time::delay_for(Duration::from_millis(3000)) => return Err(Error::msg("timed out while waiting for shell request"))
         };
 
-        ShellPty::new(
-            request.term.as_ref(),
-            None,
-            PtySize {
-                rows: request.size.0,
-                cols: request.size.1,
-                pixel_width: 0,
-                pixel_height: 0,
-            },
-        )
+        debug!("initialising pty shell");
+        let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
+
+        if let Ok(pty_shell) = pty_shell {
+            return Ok(Box::new(pty_shell));
+        }
+
+        warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
+
+        debug!("falling back to in-built shell");
+        let fallback_shell = FallbackShell::new(request.term.as_ref(), request.size.clone());
+
+        Ok(Box::new(fallback_shell))
     }
 
-    async fn steam_shell_io(&self, stream: &mut ShellStream, mut shell: ShellPty) -> Result<()> {
+    async fn steam_shell_io<'a>(
+        &self,
+        stream: &mut ShellStream,
+        mut shell: Box<dyn Shell + 'a>,
+    ) -> Result<()> {
         let mut buff = [0u8; 1024];
 
         loop {
@@ -114,17 +124,12 @@ impl ShellServer {
                 message = stream.next() => match message {
                     Some(Ok(ShellClientMessage::Stdin(payload))) => {
                         info!("received {} bytes from client shell", payload.len());
-                        shell.write_all(payload.as_slice()).await?;
+                        shell.write(payload.as_slice()).await?;
                         info!("wrote {} bytes to pty", payload.len());
                     }
                     Some(Ok(ShellClientMessage::Resize(size))) => {
                         info!("received window resize: {:?}", size);
-                        shell.resize(PtySize {
-                            cols: size.0,
-                            rows: size.1,
-                            pixel_width: 0,
-                            pixel_height: 0,
-                        })?;
+                        shell.resize(size)?;
                     }
                     Some(Ok(message)) => {
                         return Err(Error::msg(format!("received unexpected message from shell client {:?}", message)));

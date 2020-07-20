@@ -229,13 +229,16 @@ impl<'a> Client<'a> {
             result = tcp.connect(master_side) => match result {
                 Ok(_) => Some(Box::new(tcp)),
                 Err(err) => {
-                    error!("Error while establishing TCP connection: {}", err);
+                    warn!("Error while establishing TCP connection: {}", err);
                     None
                 }
             },
             result = udp.connect(master_side) => match result {
                 Ok(_) => Some(Box::new(udp)),
-                Err(err) => {error!("Error while establishing UDP connection: {}", err); None}
+                Err(err) => {
+                    warn!("Error while establishing UDP connection: {}", err);
+                    None
+                }
             }
         };
 
