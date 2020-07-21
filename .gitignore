@@ -46,3 +46,6 @@ target/
 # build artifacts
 build/tmp
 build/artifacts
+
+# logs
+*.log

@@ -16,6 +16,7 @@ services:
     ports:
       - "3000:3000"
       - "3001:3001"
+    command: sh -c 'cargo test -- --nocapture >test.log 2>&1'
     environment:
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_PORT: 3001
@@ -23,7 +24,7 @@ services:
       TLS_RELAY_PRIVATE_KEY: /app/tunshell-server/certs/development.key
       TLS_RELAY_CERT: /app/tunshell-server/certs/development.cert
       STATIC_DIR: /app/tunshell-server/static
-      RUST_LOG: tunshell_server=debug,server=debug
+      RUST_LOG: debug
       RUSTFLAGS: "--cfg integration"
       CARGO_TARGET_DIR: /app/target
   

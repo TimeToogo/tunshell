@@ -56,8 +56,9 @@ impl Future for NewConnections {
     type Output = Result<AcceptedConnection>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if let Poll::Ready((i, result)) = poll_all_remove_ready(self.0.iter_mut(), cx) {
-            self.0.swap_remove(i);
+        if let Poll::Ready((idx, result)) = poll_all_remove_ready(self.0.iter_mut().enumerate(), cx)
+        {
+            self.0.swap_remove(idx);
             return Poll::Ready(result);
         }
 
@@ -69,10 +70,13 @@ impl Future for PairedConnections {
     type Output = Result<(Connection, Connection)>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let poll = poll_all_remove_ready(self.0.iter_mut().map(|i| &mut i.task), cx);
+        let poll = poll_all_remove_ready(
+            self.0.iter_mut().enumerate().map(|(k, v)| (k, &mut v.task)),
+            cx,
+        );
 
-        if let Poll::Ready((i, result)) = poll {
-            self.0.swap_remove(i);
+        if let Poll::Ready((idx, result)) = poll {
+            self.0.swap_remove(idx);
             return Poll::Ready(result);
         }
 
@@ -112,21 +116,18 @@ impl Future for WaitingConnections {
 }
 
 fn poll_all_remove_ready<'a, T>(
-    futures: impl Iterator<Item = &'a mut JoinHandle<Result<T>>>,
+    futures: impl Iterator<Item = (usize, &'a mut JoinHandle<Result<T>>)>,
     cx: &mut Context<'_>,
 ) -> Poll<(usize, Result<T>)>
 where
     T: 'a,
 {
-    let mut i = 0;
-    for fut in futures {
+    for (k, fut) in futures {
         let poll = fut.poll_unpin(cx);
 
         if let Poll::Ready(result) = poll {
-            return Poll::Ready((i, result.unwrap_or_else(|err| Err(Error::from(err)))));
+            return Poll::Ready((k, result.unwrap_or_else(|err| Err(Error::from(err)))));
         }
-
-        i += 1;
     }
 
     Poll::Pending

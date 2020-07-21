@@ -1,9 +1,12 @@
 use super::super::config::Config;
-use anyhow::Result;
+use anyhow::{Error, Result};
 use log::*;
 use std::net::Ipv4Addr;
-use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream};
+use std::{sync::Arc, time::Duration};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    time::timeout,
+};
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
 
 pub(super) struct TlsListener {
@@ -23,6 +26,24 @@ impl TlsListener {
         let (socket, addr) = self.tcp.accept().await?;
         debug!("received connection from {}", addr);
 
-        Ok(self.tls.accept(socket).await?)
+        let result = timeout(Duration::from_secs(5), self.tls.accept(socket)).await;
+
+        if let Err(err) = result {
+            warn!("timed out while establishing tls connection with {}", addr);
+            return Err(Error::from(err));
+        }
+
+        let result = result.unwrap();
+
+        if let Err(err) = result {
+            warn!(
+                "error occurred while establishing TLS connection: {:?} [{}]",
+                err, addr
+            );
+            return Err(Error::from(err));
+        }
+
+        debug!("established TLS connection with {}", addr);
+        Ok(result.unwrap())
     }
 }

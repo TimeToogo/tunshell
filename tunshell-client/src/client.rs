@@ -67,9 +67,11 @@ impl<'a> Client<'a> {
 
         #[cfg(insecure)]
         {
+            use tokio_rustls::rustls;
+
             struct NullCertVerifier {}
 
-            impl tokio_rustls::rustls::ServerCertVerifier for NullCertVerifier {
+            impl rustls::ServerCertVerifier for NullCertVerifier {
                 fn verify_server_cert(
                     &self,
                     _roots: &rustls::RootCertStore,
@@ -89,7 +91,18 @@ impl<'a> Client<'a> {
         let connector = TlsConnector::from(Arc::new(config));
 
         let relay_dns_name = DNSNameRef::try_from_ascii_str(self.config.relay_host())?;
+
+        #[cfg(not(insecure))]
         let relay_addr = (self.config.relay_host(), self.config.relay_port())
+            .to_socket_addrs()?
+            .next()
+            .unwrap();
+
+        #[cfg(insecure)]
+        let relay_addr = (
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+            3001,
+        )
             .to_socket_addrs()?
             .next()
             .unwrap();
@@ -127,6 +140,11 @@ impl<'a> Client<'a> {
         message_stream: &mut ClientMessageStream,
     ) -> Result<PeerJoinedPayload> {
         match message_stream.next().await {
+            Some(Ok(ServerMessage::AlreadyJoined)) => {
+                return Err(Error::msg(
+                    "Connection has already been joined by another host",
+                ))
+            }
             Some(Ok(ServerMessage::PeerJoined(payload))) => Ok(payload),
             _ => Err(Error::msg("Unexpected response returned by server")),
         }
@@ -173,11 +191,6 @@ impl<'a> Client<'a> {
                     }
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => break,
-                Some(Ok(ServerMessage::AlreadyJoined)) => {
-                    return Err(Error::msg(
-                        "Connection has already been joined by another host",
-                    ))
-                }
                 Some(Ok(message)) => {
                     return Err(Error::msg(format!(
                         "Unexpected response returned by server: {:?}",

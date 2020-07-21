@@ -153,7 +153,13 @@ impl Server {
         // Ensure no race condition where connection can be joined twice
         if self.connections.waiting.0.contains_key(&accepted.con.key) {
             warn!("connection was joined twice");
-            tokio::spawn(async move { accepted.con.stream.write(ServerMessage::AlreadyJoined).await });
+            tokio::spawn(async move {
+                accepted
+                    .con
+                    .stream
+                    .write(ServerMessage::AlreadyJoined)
+                    .await
+            });
             return;
         }
 

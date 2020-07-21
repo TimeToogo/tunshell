@@ -16,6 +16,7 @@ pub(self) use utils::*;
 
 #[test]
 fn test_init_server() {
+    env_logger::init();
     Runtime::new().unwrap().block_on(async {
         let server = init_server(Config::from_env().unwrap()).await;
 
@@ -182,7 +183,7 @@ fn test_connect_and_joined_twice_with_same_key() {
             ServerMessage::AlreadyJoined
         );
         assert_eq!(con2.next().await.unwrap().unwrap(), ServerMessage::Close);
-        
+
         delay_for(Duration::from_millis(50)).await;
 
         let server = server.stop().await.unwrap();
@@ -343,6 +344,9 @@ fn test_direct_connection() {
         con_host.write(&ClientMessage::Close).await.unwrap();
         con_client.write(&ClientMessage::Close).await.unwrap();
 
+        // Wait for socket to be closed
+        delay_for(Duration::from_millis(1100)).await;
+
         con_host
             .next()
             .await
@@ -451,6 +455,9 @@ fn test_relayed_connection() {
         con_host.write(&ClientMessage::Close).await.unwrap();
         con_client.write(&ClientMessage::Close).await.unwrap();
 
+        // Wait for socket to be closed
+        delay_for(Duration::from_millis(1100)).await;
+        
         con_host
             .next()
             .await

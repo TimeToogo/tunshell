@@ -94,5 +94,8 @@ fn try_send_close<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
             .write(&ServerMessage::Close)
             .await
             .unwrap_or_else(|err| warn!("error while sending close: {}", err));
+        // Allow for final messages to be received by waiting before closing connection
+        tokio::time::delay_for(Duration::from_secs(1)).await;
+        // TCP connection closed here
     });
 }
