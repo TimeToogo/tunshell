@@ -1,6 +1,4 @@
-FROM rust:alpine AS build
-
-RUN apk add --no-cache musl-dev
+FROM rust AS build
 
 RUN mkdir /app/
 
@@ -10,7 +8,7 @@ WORKDIR /app/tunshell-server
 
 RUN cargo build --release
 
-FROM alpine:latest
+FROM debian:buster-slim
 RUN mkdir /app/
 
 COPY --from=build /app/target/release/server /app/server

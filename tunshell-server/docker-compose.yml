@@ -16,7 +16,6 @@ services:
     ports:
       - "3000:3000"
       - "3001:3001"
-    command: sh -c 'cargo test -- --nocapture >test.log 2>&1'
     environment:
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_PORT: 3001
