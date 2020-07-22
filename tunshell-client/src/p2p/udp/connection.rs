@@ -102,7 +102,7 @@ impl UdpConnection {
             Ok(_) => Ok(()),
             Err((config, err)) => {
                 debug!("UDP bind failed: {}", err);
-                mem::replace(&mut self.state, State::New(config));
+                self.state = State::New(config);
                 Err(err)
             }
         }
@@ -120,7 +120,7 @@ impl UdpConnection {
             .await
             .map_err(|err| (config.clone(), Error::from(err)))?;
 
-        mem::replace(&mut self.state, State::Bound(config, socket));
+        self.state = State::Bound(config, socket);
 
         Ok(())
     }
@@ -140,7 +140,7 @@ impl UdpConnection {
             Ok(_) => Ok(()),
             Err((config, err)) => {
                 debug!("UDP connection failed: {}", err);
-                mem::replace(&mut self.state, State::New(config));
+                self.state = State::New(config);
                 Err(err)
             }
         }
@@ -182,14 +182,11 @@ impl UdpConnection {
         let mut orchestrator = UdpConnectionOrchestrator::new(socket, Arc::clone(&con), send_rx);
         orchestrator.start_orchestration_loop();
 
-        mem::replace(
-            &mut self.state,
-            State::Running(Running {
-                con,
-                orchestrator,
-                sender: send_tx,
-            }),
-        );
+        self.state = State::Running(Running {
+            con,
+            orchestrator,
+            sender: send_tx,
+        });
 
         Ok(())
     }
@@ -289,7 +286,7 @@ impl AsyncWrite for UdpConnection {
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if let State::Disconnecting(running) = &self.state {
             if !self.is_connected() {
-                mem::replace(&mut self.state, State::Disconnected);
+                self.state = State::Disconnected;
                 return Poll::Ready(Ok(()));
             } else {
                 let mut con = running.con.lock().unwrap();
@@ -318,7 +315,7 @@ impl AsyncWrite for UdpConnection {
             con.close_wakers.push(cx.waker().clone());
         }
 
-        mem::replace(&mut self.state, State::Disconnecting(running));
+        self.state = State::Disconnecting(running);
         return Poll::Pending;
     }
 }
