@@ -1,7 +1,6 @@
 mod io_buff;
-mod unix;
+mod shell;
 
 pub(self) use io_buff::*;
 
-#[cfg(unix)]
-pub(crate) use unix::*;
+pub(crate) use shell::*;

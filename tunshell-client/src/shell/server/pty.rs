@@ -5,7 +5,10 @@ use async_trait::async_trait;
 use log::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+use std::{
+    panic,
+    sync::{Arc, Mutex},
+};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::{
     channel,
@@ -31,12 +34,25 @@ struct ShellState {
 impl PtyShell {
     pub(super) fn new(term: &str, shell: Option<&str>, size: WindowSize) -> Result<Self> {
         info!("creating pty shell");
-        let pty_system = native_pty_system();
+        let pty = panic::catch_unwind(|| {
+            let pty_system = native_pty_system();
 
-        let pty: portable_pty::PtyPair = pty_system
-            .openpty(size.into())
-            .with_context(|| "could not open pty")?;
+            pty_system
+                .openpty(size.into())
+                .with_context(|| "could not open pty")
+        });
 
+        if let Err(_) = pty {
+            return Err(Error::msg("failed to init pty system"));
+        }
+
+        let pty = pty.unwrap();
+
+        if let Err(_) = pty {
+            return Err(Error::msg("failed to init pty"));
+        }
+
+        let pty = pty.unwrap();
         let mut cmd = get_default_shell(shell)?;
         cmd.env("TERM", term);
 
