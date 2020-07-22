@@ -112,7 +112,7 @@ pub(super) async fn create_client_connection_to_server(
     ClientConnection::new(client.compat())
 }
 
-pub(super) struct NullCertVerifier {}
+pub(crate) struct NullCertVerifier {}
 
 impl rustls::ServerCertVerifier for NullCertVerifier {
     fn verify_server_cert(

@@ -12,7 +12,7 @@ use tunshell_shared::{ClientMessage, KeyType, PeerJoinedPayload, RelayPayload, S
 
 mod utils;
 
-pub(self) use utils::*;
+pub(crate) use utils::*;
 
 #[test]
 fn test_init_server() {
@@ -272,6 +272,8 @@ fn test_paired_connection() {
         send_key_to_server(&mut con_client, &mock_session.client.key).await;
         assert_next_message_is_key_accepted(&mut con_client, KeyType::Client).await;
 
+        delay_for(Duration::from_millis(10)).await;
+        
         let server = server.stop().await.unwrap();
 
         assert_eq!(server.connections.new.0.len(), 0);

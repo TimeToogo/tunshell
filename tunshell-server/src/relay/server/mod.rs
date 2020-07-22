@@ -55,27 +55,15 @@ impl Server {
         let mut next_clean_at =
             tokio::time::Instant::now() + self.config.expired_connection_clean_interval;
 
-        let (mut con_tx, mut con_rx) = mpsc::channel(128);
-
-        tokio::spawn(async move {
-            loop {
-                let incoming = tls_listener.accept().await;
-
-                if let Err(_) = con_tx.send(incoming).await {
-                    break;
-                }
-            }
-        });
-
         loop {
             tokio::select! {
-                stream = con_rx.recv() => { self.handle_new_connection(stream.unwrap()); },
+                stream = tls_listener.accept() => { self.handle_new_connection(stream); },
                 accepted = &mut self.connections.new => { self.handle_accepted_connection(accepted); },
                 closed = &mut self.connections.waiting => { self.handle_closed_waiting_connection(closed); },
                 finished = &mut self.connections.paired => { self.handle_finished_connection(finished); }
                 _ = tokio::time::delay_until(next_clean_at) => {
                     self.clean_expired_connections();
-                    next_clean_at += self.config.expired_connection_clean_interval;
+                    next_clean_at = tokio::time::Instant::now() + self.config.expired_connection_clean_interval;
                 }
                 _ = terminate_rx.recv() => break
             }
