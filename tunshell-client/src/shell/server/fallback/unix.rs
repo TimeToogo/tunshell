@@ -3,21 +3,14 @@ use crate::shell::{proto::WindowSize, server::shell::Shell};
 use anyhow::{Error, Result};
 use async_trait::async_trait;
 use log::*;
-use std::{
-    cmp,
-    collections::HashMap,
-    io::Write,
-    path::PathBuf,
-    pin::Pin,
-    process::{Command, Stdio},
-    task::{Context, Poll, Waker},
-};
-use tokio::io::AsyncReadExt;
+use std::{collections::HashMap, fs, io::Write, path::PathBuf, process::Stdio};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::process::{self, Command};
 
 /// In unix environments which do not support pty's we use this
 /// bare-bones shell implementation
 pub(crate) struct FallbackShell {
-    term: String,
+    _term: String,
     pwd: PathBuf,
     input: IoStream,
     output: IoStream,
@@ -29,7 +22,7 @@ pub(crate) struct FallbackShell {
 impl FallbackShell {
     pub(in super::super) fn new(term: &str, size: WindowSize) -> Self {
         let mut shell = Self {
-            term: term.to_owned(),
+            _term: term.to_owned(),
             pwd: std::env::current_dir().unwrap(),
             input: IoStream::new(),
             output: IoStream::new(),
@@ -38,9 +31,20 @@ impl FallbackShell {
             exit_code: None,
         };
 
+        shell.write_notice().unwrap();
         shell.write_prompt().unwrap();
 
         shell
+    }
+
+    fn write_notice(&mut self) -> Result<()> {
+        self.output.write("\r\n".as_bytes())?;
+        self.output.write("NOTICE: Tunshell is running in a limited environment and is unable to allocate a pty for a real shell. ".as_bytes())?;
+        self.output.write(
+            "Falling back to a built-in pseudo-shell with very limited function".as_bytes(),
+        )?;
+        self.output.write("\r\n\r\n".as_bytes())?;
+        Ok(())
     }
 
     fn write_prompt(&mut self) -> Result<()> {
@@ -60,7 +64,7 @@ impl FallbackShell {
                 }
 
                 let cmd = buff.drain(..i.unwrap()).collect::<Vec<u8>>();
-                // remove carraige return
+                // remove carriage return
                 buff.drain(..1);
 
                 Some(cmd)
@@ -71,6 +75,7 @@ impl FallbackShell {
             }
 
             self.run(String::from_utf8(cmd.unwrap())?).await?;
+            self.output.write("\r\n".as_bytes())?;
             self.write_prompt()?;
         }
     }
@@ -87,12 +92,43 @@ impl FallbackShell {
         let program = iter.next().unwrap().to_owned();
         let args = iter.collect::<Vec<&str>>();
 
+        match (program.as_str(), args.len()) {
+            ("exit", _) => self.exit(args.first().map(|i| i.to_string())),
+            ("cd", 1) => self.change_pwd(args.first().unwrap().to_string())?,
+            _ => self.run_process(program, args).await?,
+        }
+
+        Ok(())
+    }
+
+    fn change_pwd(&mut self, dir: String) -> Result<()> {
+        let new_pwd = self.pwd.join(dir.clone());
+
+        if !new_pwd.exists() {
+            self.output
+                .write(format!("no such directory: {}", dir).as_bytes())?;
+            return Ok(());
+        }
+
+        self.pwd = fs::canonicalize(new_pwd)?;
+        debug!("change pwd to: {}", self.pwd.to_string_lossy());
+        return Ok(());
+    }
+
+    fn exit(&mut self, code: Option<String>) {
+        let code = code.map(|i| i.parse::<u8>().unwrap_or(1)).unwrap_or(0);
+
+        self.exit_code = Some(code);
+        debug!("exited with status {}", code);
+    }
+
+    async fn run_process(&mut self, program: String, args: Vec<&str>) -> Result<()> {
         let mut cmd = Command::new(program);
 
         cmd.args(args)
             .current_dir(self.pwd.clone())
             .envs(self.env.iter())
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -100,23 +136,52 @@ impl FallbackShell {
 
         if let Err(err) = process {
             warn!("spawn failed with: {:?}", err);
+            self.output.write("\r\n".as_bytes())?;
             self.output.write(err.to_string().as_bytes())?;
             return Ok(());
         }
 
-        let output = process.unwrap().wait_with_output()?;
-        debug!("cmd exited with: {}", output.status);
+        let mut process = process.unwrap();
+        self.stream_process_io(&mut process).await?;
 
-        self.output.write("\r\n".as_bytes())?;
-        self.output
-            .write_all(convert_to_crlf(output.stdout).as_slice())?;
-        self.output
-            .write_all(convert_to_crlf(output.stderr).as_slice())?;
+        let exit_status = process.await?;
+        debug!("cmd exited with: {}", exit_status);
+
+        Ok(())
+    }
+
+    async fn stream_process_io(&mut self, process: &mut process::Child) -> Result<()> {
+        let mut stdin = process.stdin.take().unwrap();
+        let mut stdout = process.stdout.take().unwrap();
+        let mut stderr = process.stderr.take().unwrap();
+
+        let mut stdin_buff = [0u8; 1024];
+        let mut stdout_buff = [0u8; 1024];
+        let mut stderr_buff = [0u8; 1024];
+
+        loop {
+            tokio::select! {
+                read = self.input.read(&mut stdin_buff) => {
+                    stdin.write(&stdin_buff[..read?]).await?;
+                }
+                read = stdout.read(&mut stdout_buff) => {
+                    let read = read?;
+                    if read == 0 {break;}
+                    self.output.write_all(convert_to_crlf(stdout_buff[..read].to_vec()).as_slice())?;
+                }
+                read = stderr.read(&mut stderr_buff) => {
+                    let read = read?;
+                    if read == 0 {break;}
+                    self.output.write_all(convert_to_crlf(stdout_buff[..read].to_vec()).as_slice())?;
+                }
+            }
+        }
 
         Ok(())
     }
 }
 
+// TODO: convert to stream wrapper
 fn convert_to_crlf(mut data: Vec<u8>) -> Vec<u8> {
     let mut i = 0;
 

@@ -105,7 +105,7 @@ impl ShellClient {
                 message = stream.next() => match message {
                     Some(Ok(ShellServerMessage::Stdout(payload))) => {
                         info!("received {} bytes from remote shell", payload.len());
-                        stdout.write(payload.as_slice()).await?;
+                        stdout.write(payload.as_slice())?;
                     }
                     Some(Ok(ShellServerMessage::Exited(code))) => {
                         info!("remote shell exited with code {}", code);

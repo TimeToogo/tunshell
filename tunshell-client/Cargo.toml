@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 tunshell-shared = { path = "../tunshell-shared" }
 anyhow = "1.0.31"
-tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "dns", "time", "io-util", "tcp", "udp", "sync", "macros"] }
+tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "dns", "time", "io-util", "tcp", "udp", "sync", "process", "macros"] }
 tokio-rustls = { version = "0.13.1", features=["dangerous_configuration"] }
 webpki = "0.21.2"
 webpki-roots = "0.19.0"

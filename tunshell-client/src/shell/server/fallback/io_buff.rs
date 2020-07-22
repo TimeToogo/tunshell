@@ -1,5 +1,4 @@
 use io::Write;
-use log::*;
 use std::{
     cmp, io,
     pin::Pin,
@@ -81,6 +80,7 @@ impl IoStream {
         func(&mut state.buff)
     }
 
+    #[allow(dead_code)]
     pub(super) fn shutdown(&mut self) {
         let mut state = self.state.lock().unwrap();
 

@@ -124,7 +124,7 @@ impl HostShellStdout {
         (tx, thread)
     }
 
-    pub async fn write(&mut self, buff: &[u8]) -> Result<()> {
+    pub fn write(&mut self, buff: &[u8]) -> Result<()> {
         self.sender.unbounded_send(Vec::from(buff))?;
 
         Ok(())
