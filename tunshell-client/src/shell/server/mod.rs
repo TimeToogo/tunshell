@@ -8,12 +8,15 @@ use tokio::time;
 use tokio_util::compat::*;
 
 mod fallback;
-mod pty;
-mod shell;
-
 use fallback::*;
-use pty::*;
+
+mod shell;
 use shell::*;
+
+#[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
+mod pty;
+#[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
+use pty::*;
 
 type ShellStream = ShellServerStream<Compat<Box<dyn TunnelStream>>>;
 
@@ -78,14 +81,17 @@ impl ShellServer {
             _ = time::delay_for(Duration::from_millis(3000)) => return Err(Error::msg("timed out while waiting for shell request"))
         };
 
-        debug!("initialising pty shell");
-        let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
+        #[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
+        {
+            debug!("initialising pty shell");
+            let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
 
-        if let Ok(pty_shell) = pty_shell {
-            return Ok(Box::new(pty_shell));
+            if let Ok(pty_shell) = pty_shell {
+                return Ok(Box::new(pty_shell));
+            }
+
+            warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
         }
-
-        warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
 
         debug!("falling back to in-built shell");
         let fallback_shell = FallbackShell::new(request.term.as_ref(), request.size.clone());
@@ -125,7 +131,7 @@ impl ShellServer {
                     Some(Ok(ShellClientMessage::Stdin(payload))) => {
                         info!("received {} bytes from client shell", payload.len());
                         shell.write(payload.as_slice()).await?;
-                        info!("wrote {} bytes to pty", payload.len());
+                        info!("wrote {} bytes to shell", payload.len());
                     }
                     Some(Ok(ShellClientMessage::Resize(size))) => {
                         info!("received window resize: {:?}", size);

@@ -15,7 +15,7 @@ webpki = "0.21.2"
 webpki-roots = "0.19.0"
 tokio-util = { version = "0.3.1", features=["compat"] }
 futures = "0.3.5"
-portable-pty = "0.3.0"
+
 crossterm = { version = "0.17.5" }
 log = "0.4.8"
 env_logger = "0.7.1"
@@ -29,3 +29,6 @@ rand = "0.7.3"
 serde = "1.0.114"
 serde_json = "1.0.55"
 ring = "0.16.15"
+
+[target.'cfg(all(not(target_os = "ios"), not(target_os = "android")))'.dependencies]
+portable-pty = "0.3.0"
