@@ -23,6 +23,8 @@ jobs:
             target: arm-unknown-linux-musleabi
           - platform: ubuntu-latest
             target: arm-linux-androideabi
+          - platform: ubuntu-latest
+            target: i686-unknown-linux-musl
           # Apple
           - platform: macos-latest
             target: x86_64-apple-darwin

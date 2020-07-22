@@ -10,6 +10,9 @@ Linux:x86_64*)
 Linux:arm*)     
     TARGET="armv7-unknown-linux-musleabihf"
     ;;
+Linux:i686*)     
+    TARGET="i686-unknown-linux-musl"
+    ;;
 Darwin:x86_64*)    
     TARGET="x86_64-apple-darwin"
     ;;
