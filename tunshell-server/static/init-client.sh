@@ -13,6 +13,9 @@ Linux:arm*)
 Linux:i686*)     
     TARGET="i686-unknown-linux-musl"
     ;;
+Linux:i586*)     
+    TARGET="i586-unknown-linux-musl"
+    ;;
 Darwin:x86_64*)    
     TARGET="x86_64-apple-darwin"
     ;;
@@ -49,3 +52,4 @@ fi
 chmod +x $CLIENT_PATH
 
 TUNSHELL_KEY='__KEY__' $CLIENT_PATH
+
