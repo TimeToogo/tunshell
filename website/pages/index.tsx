@@ -6,9 +6,58 @@ interface SessionKeys {
   clientKey: string;
 }
 
+enum ClientHost {
+  Unix,
+  Windows,
+  Browser,
+}
+
+enum TargetHost {
+  Unix,
+  Windows,
+  Node,
+}
+
+const ClientHostScript = ({ host, sessionKey }) => {
+  switch (host) {
+    case ClientHost.Unix:
+      return <pre>sh &lt;(curl -sSf https://lets.tunshell.com/{sessionKey}.sh)</pre>;
+    case ClientHost.Windows:
+      return (
+        <pre>iex ((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/{sessionKey}.ps1'))</pre>
+      );
+    case ClientHost.Browser:
+      return <pre>TODO</pre>;
+  }
+};
+
+const TargetHostScript = ({ host, sessionKey }) => {
+  switch (host) {
+    case TargetHost.Unix:
+      return <pre>curl -sSf https://lets.tunshell.com/{sessionKey}.sh | sh</pre>;
+    case TargetHost.Windows:
+      return (
+        <pre>iex ((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/{sessionKey}.ps1'))</pre>
+      );
+    case TargetHost.Node:
+      return (
+        <pre>{`require('https').get('https://lets.tunshell.com/${sessionKey}.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require}))});`}</pre>
+      );
+  }
+};
+
+const getOptions = (enumClass: any): [string, string][] => {
+  return Object.keys(enumClass)
+    .filter((i) => /[^0-9]/.test(i))
+    .map((i) => [enumClass[i], i]);
+};
+
 export default function Home() {
   const [creatingSession, setCreatingSession] = useState<boolean>(false);
   const [sessionKeys, setSessionKeys] = useState<SessionKeys>();
+
+  const [clientHost, setClientHost] = useState<ClientHost>(ClientHost.Unix);
+  const [targetHost, setTargetHost] = useState<TargetHost>(TargetHost.Unix);
 
   const createSession = async () => {
     setCreatingSession(true);
@@ -21,7 +70,7 @@ export default function Home() {
 
       setSessionKeys({
         hostKey: response.host_key,
-        clientKey: response.client_key
+        clientKey: response.client_key,
       });
     } finally {
       setCreatingSession(false);
@@ -49,18 +98,22 @@ export default function Home() {
             <>
               <li>
                 Run this command on the <strong>target host</strong>:
-                <pre>
-                  sh &lt;(curl -sSf https://lets.tunshell.com/
-                  {sessionKeys.hostKey}.sh)
-                </pre>
+                <TargetHostScript host={targetHost} sessionKey={sessionKeys.hostKey} />
+                <div>
+                  {getOptions(TargetHost).map(([k, v]) => (
+                    <button onClick={() => setTargetHost(k as any)}>{v}</button>
+                  ))}
+                </div>
               </li>
 
               <li>
                 Run this command on your <strong>local host</strong>:
-                <pre>
-                  sh &lt;(curl -sSf https://lets.tunshell.com/
-                  {sessionKeys.clientKey}.sh)
-                </pre>
+                <ClientHostScript host={clientHost} sessionKey={sessionKeys.clientKey} />
+                <div>
+                  {getOptions(ClientHost).map(([k, v]) => (
+                    <button onClick={() => setClientHost(k as any)}>{v}</button>
+                  ))}
+                </div>
               </li>
             </>
           )}
@@ -100,13 +153,19 @@ export default function Home() {
         body {
           padding: 0;
           margin: 0;
-          font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
-            Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
-            sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans,
+            Droid Sans, Helvetica Neue, sans-serif;
         }
 
         * {
           box-sizing: border-box;
+        }
+
+        pre {
+          background: #eee;
+          padding: 1rem;
+          width: 50vw;
+          white-space: pre-wrap;
         }
       `}</style>
     </div>
