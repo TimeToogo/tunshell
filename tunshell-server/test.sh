@@ -7,4 +7,4 @@ export TLS_RELAY_CERT="$PWD/certs/development.cert"
 export STATIC_DIR="$PWD/static"
 
 docker-compose start mongo
-cargo test
+cargo test $@

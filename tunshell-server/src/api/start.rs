@@ -18,7 +18,7 @@ pub async fn start() -> Result<()> {
                 warp::path::param()
                     .and(warp::get())
                     .and_then(move |file_name: String| {
-                        routes::get_client_install_script(file_name)
+                        routes::client_install_script(file_name)
                     }),
             )
         })
