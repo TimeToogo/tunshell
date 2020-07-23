@@ -41,7 +41,7 @@ impl FallbackShell {
         self.output.write("\r\n".as_bytes())?;
         self.output.write("NOTICE: Tunshell is running in a limited environment and is unable to allocate a pty for a real shell. ".as_bytes())?;
         self.output.write(
-            "Falling back to a built-in pseudo-shell with very limited function".as_bytes(),
+            "Falling back to a built-in pseudo-shell with very limited functionality".as_bytes(),
         )?;
         self.output.write("\r\n\r\n".as_bytes())?;
         Ok(())
@@ -236,6 +236,6 @@ impl Drop for FallbackShell {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::time::Duration;
+    // use super::*;
+    // use std::time::Duration;
 }

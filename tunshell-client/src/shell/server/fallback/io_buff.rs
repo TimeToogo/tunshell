@@ -13,6 +13,7 @@ struct Inner {
     shutdown: bool,
 }
 
+/// An in-memory buffer with a sync write and an async read half
 pub(super) struct IoStream {
     state: Arc<Mutex<Inner>>,
 }
@@ -103,15 +104,8 @@ impl Clone for IoStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        sync::{Arc, Mutex},
-        time::Duration,
-    };
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        runtime::Runtime,
-        time::timeout,
-    };
+    use std::time::Duration;
+    use tokio::{io::AsyncReadExt, runtime::Runtime, time::timeout};
 
     #[test]
     fn test_new() {

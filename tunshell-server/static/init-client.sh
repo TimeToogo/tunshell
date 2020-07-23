@@ -38,14 +38,34 @@ fi
 
 TEMP_PATH="$TMPDIR/tunshell"
 CLIENT_PATH="$TEMP_PATH/client"
+HEADERS_PATH="$TEMP_PATH/headers"
 
 mkdir -p $TEMP_PATH
 
 
-echo "Installing client..."
 if [ -x "$(command -v curl)" ]
 then
-    curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH 
+    INSTALL_CLIENT=true
+
+    # Check if client is already downloaded and up-to-date
+    if [ -x "$(command -v grep)" ] && [ -x "$(command -v cut)" ] && [ -x "$(command -v sed)" ] && [ -f "$HEADERS_PATH" ]
+    then
+        CURRENT_ETAG=$(cat $HEADERS_PATH | grep etag)
+        LATEST_ETAG=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep etag)
+
+        if [ "$CURRENT_ETAG" == "$LATEST_ETAG" ]
+        then
+            echo "Client already installed..."
+            INSTALL_CLIENT=false
+        fi
+    fi
+
+    if [ "$INSTALL_CLIENT" == true ]
+    then
+        echo "Installing client..."
+        curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH -D $HEADERS_PATH
+
+    fi
 else
     wget https://artifacts.tunshell.com/client-${TARGET} -O $CLIENT_PATH 2> /dev/null
 fi

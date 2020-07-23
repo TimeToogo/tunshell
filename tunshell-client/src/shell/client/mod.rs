@@ -38,7 +38,7 @@ impl ShellClient {
         debug!("requesting shell from server pty");
         stream
             .write(&ShellClientMessage::StartShell(StartShellPayload {
-                term: host_shell.term()?,
+                term: host_shell.term().unwrap_or("".to_owned()),
                 size: WindowSize::from(host_shell.size()?),
             }))
             .await?;

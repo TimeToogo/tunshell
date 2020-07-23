@@ -34,11 +34,7 @@ jobs:
             target: x86_64-apple-ios
           # Windows
           - platform: windows-latest
-            target: x86_64-pc-windows-gnu
-          - platform: windows-latest
             target: x86_64-pc-windows-msvc
-          - platform: windows-latest
-            target: i686-pc-windows-gnu
           - platform: windows-latest
             target: i686-pc-windows-msvc
     runs-on: ${{ matrix.platform }}

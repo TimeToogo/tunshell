@@ -464,7 +464,7 @@ mod tests {
             assert_eq!(con2.is_disconnected(), true);
 
             // Wait for close packet to be sent and process
-            delay_for(Duration::from_millis(50)).await;
+            delay_for(Duration::from_millis(100)).await;
 
             assert_eq!(con1.is_new(), false);
             assert_eq!(con1.is_connected(), false);

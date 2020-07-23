@@ -7,4 +7,10 @@ tunshell todo:
  - [x] re-write server in Rust
  - [ ] basic rust-only shell fallback for limited envs without pty 
  - [ ] windows support?
+ - [ ] extend relay server to support websocket connections and implement client in-browser
  - [ ] docs / website / target init scripts for multiple langs
+
+future scope:
+
+ - [ ] integrate with https://github.com/uutils/coreutils for fallback shell
+ - [ ] 
