@@ -24,7 +24,10 @@ const ClientHostScript = ({ host, sessionKey }) => {
       return <pre>sh &lt;(curl -sSf https://lets.tunshell.com/{sessionKey}.sh)</pre>;
     case ClientHost.Windows:
       return (
-        <pre>iex ((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/{sessionKey}.ps1'))</pre>
+        <pre>
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; iex
+          ((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/{sessionKey}.ps1'))
+        </pre>
       );
     case ClientHost.Browser:
       return <pre>TODO</pre>;
@@ -36,9 +39,7 @@ const TargetHostScript = ({ host, sessionKey }) => {
     case TargetHost.Unix:
       return <pre>curl -sSf https://lets.tunshell.com/{sessionKey}.sh | sh</pre>;
     case TargetHost.Windows:
-      return (
-        <pre>iex ((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/{sessionKey}.ps1'))</pre>
-      );
+      return <ClientHostScript host={ClientHost.Windows} sessionKey={sessionKey} />;
     case TargetHost.Node:
       return (
         <pre>{`require('https').get('https://lets.tunshell.com/${sessionKey}.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require}))});`}</pre>

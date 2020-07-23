@@ -5,12 +5,19 @@ tunshell todo:
  - [x] replace thrussh with custom protocol over ~~TLS~~ AES
  - [x] fix up "early eof" error on client by fixing the handling server-side
  - [x] re-write server in Rust
+ - [x] windows support?
  - [ ] basic rust-only shell fallback for limited envs without pty 
- - [ ] windows support?
  - [ ] extend relay server to support websocket connections and implement client in-browser
- - [ ] docs / website / target init scripts for multiple langs
+ - [ ] init scripts for multiple langs
+    - [x] sh/bash
+    - [x] cmd/powershell
+    - [x] node
+    - [ ] python
+    - [ ] C#
+    - [ ] java
+ - [ ] docs / website
 
 future scope:
 
- - [ ] integrate with https://github.com/uutils/coreutils for fallback shell
+ - [ ] integrate with https://github.com/uutils/coreutils for enhanced fallback shell
  - [ ] 
