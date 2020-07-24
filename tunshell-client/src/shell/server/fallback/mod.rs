@@ -1,6 +1,6 @@
-mod io_buff;
+mod io_stream;
 mod shell;
 
-pub(self) use io_buff::*;
+pub(self) use io_stream::*;
 
 pub(crate) use shell::*;
