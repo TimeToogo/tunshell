@@ -53,14 +53,14 @@ then
         CURRENT_ETAG=$(cat $HEADERS_PATH | grep etag)
         LATEST_ETAG=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep etag)
 
-        if [ "$CURRENT_ETAG" == "$LATEST_ETAG" ]
+        if [ "$CURRENT_ETAG" = "$LATEST_ETAG" ]
         then
             echo "Client already installed..."
             INSTALL_CLIENT=false
         fi
     fi
 
-    if [ "$INSTALL_CLIENT" == true ]
+    if [ "$INSTALL_CLIENT" = true ]
     then
         echo "Installing client..."
         curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH -D $HEADERS_PATH
