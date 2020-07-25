@@ -5,6 +5,8 @@ use mongodb::{
     options::{FindOneOptions, UpdateOptions},
     Client,
 };
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
 use tunshell_shared::KeyType;
 
@@ -27,8 +29,12 @@ pub(crate) struct SessionStore {
 }
 
 impl Participant {
-    pub(crate) fn new(key: String) -> Participant {
-        Participant { key }
+    pub(crate) fn new(key: String) -> Self {
+        Self { key }
+    }
+
+    pub(crate) fn default() -> Self {
+        Self::new(generate_secure_key())
     }
 }
 
@@ -187,6 +193,11 @@ impl SessionStore {
     }
 }
 
+// Generates ~131 bits of entropy (22 chars) using alphanumeric charset
+pub(crate) fn generate_secure_key() -> String {
+    thread_rng().sample_iter(&Alphanumeric).take(22).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,5 +278,15 @@ mod tests {
         expected.created_at = created_at;
 
         assert_eq!(session, expected);
+    }
+
+    #[test]
+    fn test_generate_secure_id() {
+        let id1 = generate_secure_key();
+        let id2 = generate_secure_key();
+
+        assert_eq!(id1.len(), 22);
+        assert_eq!(id2.len(), 22);
+        assert_ne!(id1, id2);
     }
 }

@@ -7,8 +7,8 @@ tunshell todo:
  - [x] re-write server in Rust
  - [x] windows support?
  - [ ] security enhancements
-    - [ ] website to generate PSK for AEAD stream for relay and direct connections
-    - [ ] script templates to be moved to S3
+    - [x] website to generate PSK for AEAD stream for relay and direct connections
+    - [x] script templates to be moved to S3
     - [ ] move logic to decide on target/client host to client binary
  - [ ] basic rust-only shell fallback for limited envs without pty 
  - [ ] extend relay server to support websocket connections and implement client in-browser

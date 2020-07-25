@@ -28,7 +28,7 @@ impl ShellClient {
         info!("shell client attempting to authenticate");
         self.authenticate(&mut stream, key)
             .await
-            .with_context(|| "Error while authenticated with shell server")?;
+            .with_context(|| "Error while authenticating with shell server")?;
 
         info!("shell client authenticated");
 

@@ -156,11 +156,11 @@ impl<'a> Client<'a> {
         peer_info: &mut PeerJoinedPayload,
         master_side: bool,
     ) -> Result<Box<dyn TunnelStream>> {
-        loop {
-            let mut message_stream = message_stream.lock().unwrap();
-            match message_stream.next().await {
+        let stream = loop {
+            let mut msg_stream = message_stream.lock().unwrap();
+            match msg_stream.next().await {
                 Some(Ok(ServerMessage::TimePlease)) => {
-                    message_stream
+                    msg_stream
                         .write(&ClientMessage::Time(TimePayload {
                             client_time: SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
@@ -172,7 +172,7 @@ impl<'a> Client<'a> {
                 Some(Ok(ServerMessage::AttemptDirectConnect(payload))) => {
                     match self
                         .attempt_direct_connection(
-                            &mut message_stream,
+                            &mut msg_stream,
                             peer_info,
                             &payload,
                             master_side,
@@ -181,16 +181,18 @@ impl<'a> Client<'a> {
                     {
                         Some(direct_stream) => {
                             println!("Direct connection to peer established");
-                            return Ok(direct_stream);
+                            break direct_stream;
                         }
                         None => {
-                            message_stream
+                            msg_stream
                                 .write(&ClientMessage::DirectConnectFailed)
                                 .await?
                         }
                     }
                 }
-                Some(Ok(ServerMessage::StartRelayMode)) => break,
+                Some(Ok(ServerMessage::StartRelayMode)) => {
+                    break Box::new(RelayStream::new(Arc::clone(message_stream)))
+                }
                 Some(Ok(message)) => {
                     return Err(Error::msg(format!(
                         "Unexpected response returned by server: {:?}",
@@ -200,10 +202,16 @@ impl<'a> Client<'a> {
                 Some(Err(err)) => return Err(err),
                 None => return Err(Error::msg("Connection closed unexpectedly")),
             }
-        }
+        };
+
+        let stream = AesStream::new(
+            stream.compat(),
+            self.config.encryption_salt().as_bytes(),
+            self.config.encryption_key().as_bytes(),
+        );
 
         println!("Falling back to relayed connection");
-        Ok(Box::new(RelayStream::new(Arc::clone(message_stream))))
+        Ok(Box::new(stream))
     }
 
     async fn attempt_direct_connection(
@@ -260,13 +268,7 @@ impl<'a> Client<'a> {
             None => return Ok(None),
         };
 
-        let stream = AesStream::new(
-            stream.compat(),
-            connection_info.session_salt.as_slice(),
-            connection_info.session_key.as_slice(),
-        );
-
-        Ok(Some(Box::new(stream)))
+        Ok(Some(stream))
     }
 }
 
@@ -277,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_connect_to_relay_server() {
-        let config = Config::new("test", "relay.tunshell.com", 5000);
+        let config = Config::new("test", "relay.tunshell.com", 5000, "test", "test");
         let mut client = Client::new(&config);
 
         let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
@@ -287,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_send_invalid_key() {
-        let config = Config::new("invalid_key", "relay.tunshell.com", 5000);
+        let config = Config::new("invalid_key", "relay.tunshell.com", 5000, "test", "test");
         let mut client = Client::new(&config);
 
         let result = Runtime::new().unwrap().block_on(client.start_session());

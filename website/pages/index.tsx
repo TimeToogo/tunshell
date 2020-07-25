@@ -18,15 +18,50 @@ enum TargetHost {
   Node,
 }
 
-const ClientHostScript = ({ host, sessionKey }) => {
+interface EncryptionKey {
+  salt: string;
+  key: string;
+}
+
+// Generates a secure PSK for each of the clients
+// Salt: 8 alphanumeric chars (47 bits of entropy)
+// Key: 22 alphanumeric chars (131 bits of entropy)
+const generateEncryptionKey = (): EncryptionKey => {
+  const alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+  const gen = (len: number): string => {
+    const buff = new Uint8Array(len);
+    window.crypto.getRandomValues(buff);
+    let out = "";
+
+    for (let i = 0; i < len; i++) {
+      out += alphanumeric[buff[i] % alphanumeric.length];
+    }
+
+    return out;
+  };
+
+  return {
+    salt: gen(8),
+    key: gen(22),
+  };
+};
+
+const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
   switch (host) {
     case ClientHost.Unix:
-      return <pre>sh &lt;(curl -sSf https://lets.tunshell.com/init.sh) {sessionKey}</pre>;
+      return (
+        <pre>
+          sh &lt;(curl -sSf https://lets.tunshell.com/init.sh) {sessionKey} {encryptionKey.salt} {encryptionKey.key}
+        </pre>
+      );
     case ClientHost.Windows:
       return (
         <pre>
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;
-          &amp; $([scriptblock]::Create((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) {sessionKey}
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; &amp;
+          $([scriptblock]::Create((New-Object
+          System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) {sessionKey} {encryptionKey.salt}{" "}
+          {encryptionKey.key}
         </pre>
       );
     case ClientHost.Browser:
@@ -34,15 +69,20 @@ const ClientHostScript = ({ host, sessionKey }) => {
   }
 };
 
-const TargetHostScript = ({ host, sessionKey }) => {
+const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
   switch (host) {
     case TargetHost.Unix:
-      return <pre>curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin {sessionKey}</pre>;
+      return (
+        <pre>
+          curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin {sessionKey} {encryptionKey.salt}{" "}
+          {encryptionKey.key}
+        </pre>
+      );
     case TargetHost.Windows:
-      return <ClientHostScript host={ClientHost.Windows} sessionKey={sessionKey} />;
+      return <ClientHostScript host={ClientHost.Windows} sessionKey={sessionKey} encryptionKey={encryptionKey} />;
     case TargetHost.Node:
       return (
-        <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['${sessionKey}']}))});`}</pre>
+        <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['${sessionKey}', ${encryptionKey.salt}, ${encryptionKey.key}]}))});`}</pre>
       );
   }
 };
@@ -56,6 +96,7 @@ const getOptions = (enumClass: any): [string, string][] => {
 export default function Home() {
   const [creatingSession, setCreatingSession] = useState<boolean>(false);
   const [sessionKeys, setSessionKeys] = useState<SessionKeys>();
+  const [encryptionKey, setEncryptionKey] = useState<EncryptionKey>();
 
   const [clientHost, setClientHost] = useState<ClientHost>(ClientHost.Unix);
   const [targetHost, setTargetHost] = useState<TargetHost>(TargetHost.Unix);
@@ -73,6 +114,7 @@ export default function Home() {
         hostKey: response.host_key,
         clientKey: response.client_key,
       });
+      setEncryptionKey(generateEncryptionKey());
     } finally {
       setCreatingSession(false);
     }
@@ -95,11 +137,11 @@ export default function Home() {
             </button>
           </li>
           {creatingSession && <li>Loading...</li>}
-          {sessionKeys && (
+          {sessionKeys && encryptionKey && (
             <>
               <li>
                 Run this command on the <strong>target host</strong>:
-                <TargetHostScript host={targetHost} sessionKey={sessionKeys.hostKey} />
+                <TargetHostScript host={targetHost} sessionKey={sessionKeys.hostKey} encryptionKey={encryptionKey} />
                 <div>
                   {getOptions(TargetHost).map(([k, v]) => (
                     <button onClick={() => setTargetHost(k as any)}>{v}</button>
@@ -109,7 +151,7 @@ export default function Home() {
 
               <li>
                 Run this command on your <strong>local host</strong>:
-                <ClientHostScript host={clientHost} sessionKey={sessionKeys.clientKey} />
+                <ClientHostScript host={clientHost} sessionKey={sessionKeys.clientKey} encryptionKey={encryptionKey} />
                 <div>
                   {getOptions(ClientHost).map(([k, v]) => (
                     <button onClick={() => setClientHost(k as any)}>{v}</button>

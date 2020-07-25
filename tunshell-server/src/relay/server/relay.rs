@@ -94,14 +94,9 @@ pub(super) fn pair_connections(
 
 async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection) -> Result<bool> {
     // TODO: Improve port selection
-    let (port1, port2, session_salt, session_key) = {
+    let (port1, port2) = {
         let mut rng = rand::thread_rng();
-        (
-            rng.gen_range(20000, 40000),
-            rng.gen_range(20000, 40000),
-            rng.gen::<[u8; 32]>().to_vec(),
-            rng.gen::<[u8; 32]>().to_vec(),
-        )
+        (rng.gen_range(20000, 40000), rng.gen_range(20000, 40000))
     };
 
     tokio::try_join!(
@@ -110,8 +105,6 @@ async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection)
                 connect_at: 0,
                 self_listen_port: port1,
                 peer_listen_port: port2,
-                session_salt: session_salt.clone(),
-                session_key: session_key.clone()
             }
         )),
         con2.stream.write(ServerMessage::AttemptDirectConnect(
@@ -119,8 +112,6 @@ async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection)
                 connect_at: 0,
                 self_listen_port: port2,
                 peer_listen_port: port1,
-                session_salt,
-                session_key
             }
         ))
     )

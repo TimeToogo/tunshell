@@ -65,8 +65,6 @@ pub struct AttemptDirectConnectPayload {
     pub connect_at: u64,
     pub peer_listen_port: u16,
     pub self_listen_port: u16,
-    pub session_salt: Vec<u8>,
-    pub session_key: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -393,8 +391,6 @@ mod tests {
             connect_at: 12345,
             peer_listen_port: 12,
             self_listen_port: 123,
-            session_salt: vec![1, 2, 3],
-            session_key: vec![4, 5, 6],
         });
 
         let raw_message = message.serialise().unwrap();
@@ -402,9 +398,9 @@ mod tests {
         assert_eq!(raw_message.type_id, 7);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
-            r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123,"session_salt":[1,2,3],"session_key":[4,5,6]}"#
+            r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#
         );
-        assert_eq!(raw_message.length, 110);
+        assert_eq!(raw_message.length, 65);
     }
 
     #[test]
@@ -512,9 +508,7 @@ mod tests {
     fn test_server_deserialise_attempt_direct_connect() {
         let raw_message = RawMessage::new(
             7,
-            Vec::from(
-                r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123,"session_salt":[1,2,3],"session_key":[4,5,6]}"#.as_bytes(),
-            ),
+            Vec::from(r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#.as_bytes()),
         );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
@@ -525,8 +519,6 @@ mod tests {
                 connect_at: 12345,
                 peer_listen_port: 12,
                 self_listen_port: 123,
-                session_salt: vec![1, 2, 3],
-                session_key: vec![4, 5, 6],
             })
         )
     }

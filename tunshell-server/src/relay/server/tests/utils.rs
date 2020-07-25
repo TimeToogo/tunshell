@@ -127,10 +127,7 @@ impl rustls::ServerCertVerifier for NullCertVerifier {
 }
 
 pub(super) async fn create_mock_session() -> Session {
-    let mock_session = Session::new(
-        Participant::new(uuid::Uuid::new_v4().to_string()),
-        Participant::new(uuid::Uuid::new_v4().to_string()),
-    );
+    let mock_session = Session::new(Participant::default(), Participant::default());
 
     let db = db::connect().await.unwrap();
     SessionStore::new(db).save(&mock_session).await.unwrap();

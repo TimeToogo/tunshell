@@ -1,7 +1,6 @@
 use crate::db::{Participant, Session, SessionStore};
 use log::*;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use warp::{http::Response, hyper::Body, Rejection, Reply};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -14,10 +13,7 @@ pub(crate) async fn create_session(db: mongodb::Client) -> Result<Box<dyn Reply>
     let mut store = SessionStore::new(db);
 
     debug!("creating new session");
-    let session = Session::new(
-        Participant::new(Uuid::new_v4().to_string()),
-        Participant::new(Uuid::new_v4().to_string()),
-    );
+    let session = Session::new(Participant::default(), Participant::default());
 
     let result = store.save(&session).await;
 
@@ -38,7 +34,7 @@ pub(crate) async fn create_session(db: mongodb::Client) -> Result<Box<dyn Reply>
     })))
 }
 
-#[cfg(all(test, integration))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::db;
