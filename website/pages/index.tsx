@@ -21,12 +21,12 @@ enum TargetHost {
 const ClientHostScript = ({ host, sessionKey }) => {
   switch (host) {
     case ClientHost.Unix:
-      return <pre>sh &lt;(curl -sSf https://lets.tunshell.com/{sessionKey}.sh)</pre>;
+      return <pre>sh &lt;(curl -sSf https://lets.tunshell.com/init.sh) {sessionKey}</pre>;
     case ClientHost.Windows:
       return (
         <pre>
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; iex
-          ((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/{sessionKey}.ps1'))
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;
+          &amp; $([scriptblock]::Create((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) {sessionKey}
         </pre>
       );
     case ClientHost.Browser:
@@ -37,12 +37,12 @@ const ClientHostScript = ({ host, sessionKey }) => {
 const TargetHostScript = ({ host, sessionKey }) => {
   switch (host) {
     case TargetHost.Unix:
-      return <pre>curl -sSf https://lets.tunshell.com/{sessionKey}.sh | sh</pre>;
+      return <pre>curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin {sessionKey}</pre>;
     case TargetHost.Windows:
       return <ClientHostScript host={ClientHost.Windows} sessionKey={sessionKey} />;
     case TargetHost.Node:
       return (
-        <pre>{`require('https').get('https://lets.tunshell.com/${sessionKey}.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require}))});`}</pre>
+        <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['${sessionKey}']}))});`}</pre>
       );
   }
 };

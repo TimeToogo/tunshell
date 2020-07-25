@@ -46,7 +46,7 @@ impl<'a> Client<'a> {
 
         let exit_code = match key_type {
             KeyType::Host => ShellServer::new()?
-                .run(peer_socket, ShellKey::new(self.config.client_key()))
+                .run(peer_socket, ShellKey::new(self.config.session_key()))
                 .await
                 .and_then(|_| Ok(0))?,
             KeyType::Client => {
@@ -117,7 +117,7 @@ impl<'a> Client<'a> {
     async fn send_key(&self, message_stream: &mut ClientMessageStream) -> Result<KeyType> {
         message_stream
             .write(&ClientMessage::Key(KeyPayload {
-                key: self.config.client_key().to_owned(),
+                key: self.config.session_key().to_owned(),
             }))
             .await?;
 

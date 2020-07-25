@@ -20,5 +20,4 @@ echo %CLIENT_PATH%
 echo "Installing client..."
 powershell -Command "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://artifacts.tunshell.com/client-%TARGET%.exe', '%CLIENT_PATH%')"
 
-set TUNSHELL_KEY=__KEY__
-%CLIENT_PATH%
+%CLIENT_PATH% %*

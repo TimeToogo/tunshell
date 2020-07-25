@@ -19,10 +19,8 @@ SCRIPT_DIR=`cd $SCRIPT_DIR;pwd`
 
 mkdir -p $SCRIPT_DIR/artifacts
 
-echo "Building $TARGET..."
-
 echo "Compiling tunshell-client for $TARGET..."
-cd $SCRIPT_DIR/../
+cd $SCRIPT_DIR/../../
 rustup target add $TARGET
 cross build -p tunshell-client --release --target $TARGET
-cp $SCRIPT_DIR/../target/$TARGET/release/client $SCRIPT_DIR/artifacts/client-$TARGET
+cp $SCRIPT_DIR/../../target/$TARGET/release/client $SCRIPT_DIR/artifacts/client-$TARGET

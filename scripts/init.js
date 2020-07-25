@@ -6,6 +6,10 @@
   const os = require("os");
   const { spawn } = require("child_process");
 
+  if (!args) {
+    throw new Error(`args variable must be set`);
+  }
+
   const getTarget = () => {
     const targets = {
       linux: {
@@ -65,11 +69,10 @@
     });
   };
 
-  const execClient = (client) => {
-    process.env.TUNSHELL_KEY = "__KEY__";
+  const execClient = (client, args) => {
     fs.chmodSync(client, 0755);
 
-    spawn(client, [], { stdio: "inherit" });
+    spawn(client, args, { stdio: "inherit" });
   };
 
   const target = getTarget();
@@ -81,5 +84,5 @@
   console.log("Installing client...");
   let clientPath = await downloadClient(target);
 
-  execClient(clientPath);
+  execClient(clientPath, args);
 })();

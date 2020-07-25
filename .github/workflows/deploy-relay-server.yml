@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - enhancement/rust
 
 jobs:
   build_test_deploy:

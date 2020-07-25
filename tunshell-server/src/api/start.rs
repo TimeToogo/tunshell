@@ -13,16 +13,6 @@ pub async fn start() -> Result<()> {
 
     let router = warp::any()
         .and({
-            warp::header::exact("host", "lets.tunshell.com").and(
-                // GET lets.tunshell.com/{file_name}
-                warp::path::param()
-                    .and(warp::get())
-                    .and_then(move |file_name: String| {
-                        routes::client_install_script(file_name)
-                    }),
-            )
-        })
-        .or({
             warp::path("api").and(
                 // POST /api/sessions
                 warp::path("sessions")

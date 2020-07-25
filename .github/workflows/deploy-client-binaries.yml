@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - enhancement/rust
 
 jobs:
   build_and_deploy:
@@ -41,12 +40,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - run: ./install-deps.sh
-      working-directory: build
+      working-directory: tunshell-client/build
       shell: bash
       env:
         TEMPDIR: /tmp
     - run: ./compile.sh ${{ matrix.target }}
-      working-directory: build
+      working-directory: tunshell-client/build
       shell: bash
       env:
         TEMPDIR: /tmp
@@ -54,7 +53,7 @@ jobs:
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3
       run: aws s3 cp --recursive artifacts/ s3://artifacts.tunshell.com/ --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
-      working-directory: build
+      working-directory: tunshell-client/build
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}

@@ -44,8 +44,8 @@ target/
 .env
 
 # build artifacts
-build/tmp
-build/artifacts
+tunshell-client/build/tmp
+tunshell-client/build/artifacts
 
 # logs
 *.log

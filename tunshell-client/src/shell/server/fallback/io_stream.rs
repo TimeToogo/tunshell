@@ -76,11 +76,6 @@ impl Write for IoStream {
 }
 
 impl IoStream {
-    pub(super) fn process_buff<R>(&mut self, func: impl FnOnce(&mut Vec<u8>) -> R) -> R {
-        let mut state = self.state.lock().unwrap();
-        func(&mut state.buff)
-    }
-
     #[allow(dead_code)]
     pub(super) fn shutdown(&mut self) {
         let mut state = self.state.lock().unwrap();

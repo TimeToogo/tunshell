@@ -71,5 +71,4 @@ else
 fi
 chmod +x $CLIENT_PATH
 
-TUNSHELL_KEY='__KEY__' $CLIENT_PATH
-
+$CLIENT_PATH $1 $2 $3
