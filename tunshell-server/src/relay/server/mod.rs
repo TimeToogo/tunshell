@@ -6,7 +6,7 @@ use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::{net::TcpStream, task::JoinHandle};
 use tokio_rustls::server::TlsStream;
-use tunshell_shared::{ClientMessage, KeyAcceptedPayload, ServerMessage};
+use tunshell_shared::{ClientMessage, ServerMessage};
 
 mod connection;
 mod message_stream;
@@ -121,9 +121,7 @@ impl Server {
             }
 
             connection
-                .write(ServerMessage::KeyAccepted(KeyAcceptedPayload {
-                    key_type: session.key_type(key.as_ref()).unwrap(),
-                }))
+                .write(ServerMessage::KeyAccepted)
                 .await?;
 
             debug!("key accepted");
@@ -150,7 +148,7 @@ impl Server {
             }
         };
 
-        // Ensure no race condition where connection can be joined twice
+        // Prevent attempts to join with same key twice
         if self.connections.waiting.0.contains_key(&accepted.con.key) {
             warn!("connection was joined twice");
             tokio::spawn(async move {

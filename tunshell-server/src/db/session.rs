@@ -8,7 +8,6 @@ use mongodb::{
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
-use tunshell_shared::KeyType;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct Participant {
@@ -18,8 +17,8 @@ pub(crate) struct Participant {
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct Session {
     id: ObjectId,
-    pub(crate) host: Participant,
-    pub(crate) client: Participant,
+    pub(crate) peer1: Participant,
+    pub(crate) peer2: Participant,
     pub(crate) created_at: DateTime<Utc>,
 }
 
@@ -59,8 +58,8 @@ impl Into<bson::Document> for Session {
     fn into(self) -> bson::Document {
         doc! {
             "_id": self.id,
-            "host": Into::<bson::Document>::into(self.host),
-            "client": Into::<bson::Document>::into(self.client),
+            "peer1": Into::<bson::Document>::into(self.peer1),
+            "peer2": Into::<bson::Document>::into(self.peer2),
             "created_at": self.created_at
         }
     }
@@ -71,36 +70,36 @@ impl TryFrom<bson::Document> for Session {
 
     fn try_from(value: bson::Document) -> Result<Self, Self::Error> {
         let id = value.get_object_id("_id")?.clone();
-        let host = Participant::try_from(value.get_document("host")?.clone())?;
-        let client = Participant::try_from(value.get_document("client")?.clone())?;
+        let peer1 = Participant::try_from(value.get_document("peer1")?.clone())?;
+        let peer2 = Participant::try_from(value.get_document("peer2")?.clone())?;
         let created_at = value.get_datetime("created_at")?.clone();
 
         Ok(Self {
             id,
-            host,
-            client,
+            peer1,
+            peer2,
             created_at,
         })
     }
 }
 
 impl Session {
-    pub(crate) fn new(host: Participant, client: Participant) -> Session {
+    pub(crate) fn new(peer1: Participant, peer2: Participant) -> Session {
         Session {
             id: ObjectId::new(),
-            host,
-            client,
+            peer1,
+            peer2,
             created_at: Utc::now(),
         }
     }
 
     pub(crate) fn participant(&self, key: &str) -> Option<&Participant> {
-        if self.host.key == key {
-            return Some(&self.host);
+        if self.peer1.key == key {
+            return Some(&self.peer1);
         }
 
-        if self.client.key == key {
-            return Some(&self.client);
+        if self.peer2.key == key {
+            return Some(&self.peer2);
         }
 
         None
@@ -108,36 +107,24 @@ impl Session {
 
     #[allow(dead_code)]
     pub(crate) fn participant_mut(&mut self, key: &str) -> Option<&mut Participant> {
-        if self.host.key == key {
-            return Some(&mut self.host);
+        if self.peer1.key == key {
+            return Some(&mut self.peer1);
         }
 
-        if self.client.key == key {
-            return Some(&mut self.client);
+        if self.peer2.key == key {
+            return Some(&mut self.peer2);
         }
 
         None
     }
 
     pub(crate) fn other_participant(&self, key: &str) -> Option<&Participant> {
-        if self.host.key == key {
-            return Some(&self.client);
+        if self.peer1.key == key {
+            return Some(&self.peer2);
         }
 
-        if self.client.key == key {
-            return Some(&self.host);
-        }
-
-        None
-    }
-
-    pub(crate) fn key_type(&self, key: &str) -> Option<KeyType> {
-        if self.host.key == key {
-            return Some(KeyType::Host);
-        }
-
-        if self.client.key == key {
-            return Some(KeyType::Client);
+        if self.peer2.key == key {
+            return Some(&self.peer1);
         }
 
         None
@@ -157,7 +144,7 @@ impl SessionStore {
             .collection("sessions")
             .find_one(
                 doc! {
-                    "$or": [{"host.key": key.clone()}, {"client.key": key.clone()}]
+                    "$or": [{"peer1.key": key.clone()}, {"peer2.key": key.clone()}]
                 },
                 FindOneOptions::default(),
             )
@@ -230,8 +217,8 @@ mod tests {
     #[test]
     fn test_session_into_bson() {
         let session = Session::new(
-            Participant::new("host-key".to_owned()),
-            Participant::new("client-key".to_owned()),
+            Participant::new("peer1-key".to_owned()),
+            Participant::new("peer2-key".to_owned()),
         );
 
         let document: bson::Document = session.clone().into();
@@ -240,11 +227,11 @@ mod tests {
             document,
             doc! {
                 "_id": session.id,
-                "host": {
-                    "key": "host-key",
+                "peer1": {
+                    "key": "peer1-key",
                 },
-                "client": {
-                    "key": "client-key",
+                "peer2": {
+                    "key": "peer2-key",
                 },
                 "created_at": session.created_at
             }
@@ -258,11 +245,11 @@ mod tests {
 
         let document = doc! {
             "_id": id.clone(),
-            "host": {
-                "key": "host-key",
+            "peer1": {
+                "key": "peer1-key",
             },
-            "client": {
-                "key": "client-key",
+            "peer2": {
+                "key": "peer2-key",
             },
             "created_at": created_at.clone()
         };
@@ -270,8 +257,8 @@ mod tests {
         let session = Session::try_from(document).unwrap();
 
         let mut expected = Session::new(
-            Participant::new("host-key".to_owned()),
-            Participant::new("client-key".to_owned()),
+            Participant::new("peer1-key".to_owned()),
+            Participant::new("peer2-key".to_owned()),
         );
 
         expected.id = id;

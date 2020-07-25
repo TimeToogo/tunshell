@@ -285,9 +285,6 @@ mod tests {
             ClientMessage::Key(KeyPayload {
                 key: "key".to_owned(),
             }),
-            ClientMessage::Time(TimePayload {
-                client_time: 123456,
-            }),
             ClientMessage::DirectConnectSucceeded,
         ];
         let mock_stream = Cursor::new(
@@ -359,9 +356,7 @@ mod tests {
     #[test]
     fn test_write_multiple_server_messages() {
         let messages = vec![
-            ServerMessage::KeyAccepted(KeyAcceptedPayload {
-                key_type: KeyType::Client,
-            }),
+            ServerMessage::KeyAccepted,
             ServerMessage::StartRelayMode,
             ServerMessage::Close,
         ];

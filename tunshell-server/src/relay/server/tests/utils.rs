@@ -15,9 +15,7 @@ use tokio::sync::mpsc;
 use tokio::{net::TcpStream, task::JoinHandle};
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
-use tunshell_shared::{
-    ClientMessage, KeyAcceptedPayload, KeyPayload, KeyType, MessageStream, ServerMessage,
-};
+use tunshell_shared::{ClientMessage, KeyPayload, MessageStream, ServerMessage};
 
 lazy_static! {
     static ref TCP_PORT_NUMBER: Mutex<u16> = Mutex::from(35555);
@@ -143,12 +141,9 @@ pub(super) async fn send_key_to_server(con: &mut ClientConnection, key: &str) {
     .unwrap();
 }
 
-pub(super) async fn assert_next_message_is_key_accepted(
-    con: &mut ClientConnection,
-    key_type: KeyType,
-) {
+pub(super) async fn assert_next_message_is_key_accepted(con: &mut ClientConnection) {
     assert_eq!(
         con.next().await.unwrap().unwrap(),
-        ServerMessage::KeyAccepted(KeyAcceptedPayload { key_type })
+        ServerMessage::KeyAccepted
     );
 }

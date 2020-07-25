@@ -71,4 +71,4 @@ else
 fi
 chmod +x $CLIENT_PATH
 
-$CLIENT_PATH $1 $2 $3
+$CLIENT_PATH $1 $2 $3 $4

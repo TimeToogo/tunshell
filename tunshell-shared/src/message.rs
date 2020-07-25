@@ -20,12 +20,11 @@ where
 #[derive(Debug, PartialEq, Clone)]
 pub enum ServerMessage {
     Close,
-    KeyAccepted(KeyAcceptedPayload),
+    KeyAccepted,
     KeyRejected,
     AlreadyJoined,
     PeerJoined(PeerJoinedPayload),
     PeerLeft,
-    TimePlease,
     AttemptDirectConnect(AttemptDirectConnectPayload),
     StartRelayMode,
     Relay(RelayPayload),
@@ -35,23 +34,9 @@ pub enum ServerMessage {
 pub enum ClientMessage {
     Close,
     Key(KeyPayload),
-    Time(TimePayload),
     DirectConnectSucceeded,
     DirectConnectFailed,
     Relay(RelayPayload),
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub enum KeyType {
-    #[serde(rename = "client")]
-    Client,
-    #[serde(rename = "host")]
-    Host,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct KeyAcceptedPayload {
-    pub key_type: KeyType,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -72,30 +57,9 @@ pub struct KeyPayload {
     pub key: String,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct TimePayload {
-    pub client_time: u64,
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct RelayPayload {
     pub data: Vec<u8>,
-}
-
-impl KeyType {
-    pub fn is_client(&self) -> bool {
-        match self {
-            Self::Client => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_host(&self) -> bool {
-        match self {
-            Self::Host => true,
-            _ => false,
-        }
-    }
 }
 
 impl RawMessage {
@@ -132,15 +96,14 @@ impl Message for ServerMessage {
     fn type_id(&self) -> u8 {
         match self {
             Self::Close => 0,
-            Self::KeyAccepted(_) => 1,
+            Self::KeyAccepted => 1,
             Self::KeyRejected => 2,
             Self::AlreadyJoined => 3,
             Self::PeerJoined(_) => 4,
             Self::PeerLeft => 5,
-            Self::TimePlease => 6,
-            Self::AttemptDirectConnect(_) => 7,
-            Self::StartRelayMode => 8,
-            Self::Relay(_) => 9,
+            Self::AttemptDirectConnect(_) => 6,
+            Self::StartRelayMode => 7,
+            Self::Relay(_) => 8,
         }
     }
 
@@ -149,12 +112,11 @@ impl Message for ServerMessage {
 
         let data: Vec<u8> = match self {
             Self::Close => vec![],
-            Self::KeyAccepted(payload) => serde_json::to_vec(&payload)?,
+            Self::KeyAccepted => vec![],
             Self::KeyRejected => vec![],
             Self::AlreadyJoined => vec![],
             Self::PeerJoined(payload) => serde_json::to_vec(&payload)?,
             Self::PeerLeft => vec![],
-            Self::TimePlease => vec![],
             Self::AttemptDirectConnect(payload) => serde_json::to_vec(&payload)?,
             Self::StartRelayMode => vec![],
             Self::Relay(payload) => payload.data.clone(),
@@ -173,8 +135,8 @@ impl Message for ServerMessage {
             RawMessage {
                 type_id: 1,
                 length: _,
-                data,
-            } => Ok(Self::KeyAccepted(serde_json::from_slice(data)?)),
+                data: _,
+            } => Ok(Self::KeyAccepted),
             RawMessage {
                 type_id: 2,
                 length: 0,
@@ -197,21 +159,16 @@ impl Message for ServerMessage {
             } => Ok(Self::PeerLeft),
             RawMessage {
                 type_id: 6,
-                length: 0,
-                data: _,
-            } => Ok(Self::TimePlease),
-            RawMessage {
-                type_id: 7,
                 length: _,
                 data,
             } => Ok(Self::AttemptDirectConnect(serde_json::from_slice(data)?)),
             RawMessage {
-                type_id: 8,
+                type_id: 7,
                 length: 0,
                 data: _,
             } => Ok(Self::StartRelayMode),
             RawMessage {
-                type_id: 9,
+                type_id: 8,
                 length: _,
                 data,
             } => Ok(Self::Relay(RelayPayload { data: data.clone() })),
@@ -225,10 +182,9 @@ impl Message for ClientMessage {
         match self {
             Self::Close => 0,
             Self::Key(_) => 1,
-            Self::Time(_) => 2,
-            Self::DirectConnectSucceeded => 3,
-            Self::DirectConnectFailed => 4,
-            Self::Relay(_) => 5,
+            Self::DirectConnectSucceeded => 2,
+            Self::DirectConnectFailed => 3,
+            Self::Relay(_) => 4,
         }
     }
 
@@ -238,7 +194,6 @@ impl Message for ClientMessage {
         let data: Vec<u8> = match self {
             Self::Close => vec![],
             Self::Key(payload) => serde_json::to_vec(&payload)?,
-            Self::Time(payload) => serde_json::to_vec(&payload)?,
             Self::DirectConnectSucceeded => vec![],
             Self::DirectConnectFailed => vec![],
             Self::Relay(payload) => payload.data.clone(),
@@ -261,21 +216,16 @@ impl Message for ClientMessage {
             } => Ok(Self::Key(serde_json::from_slice(data)?)),
             RawMessage {
                 type_id: 2,
-                length: _,
-                data,
-            } => Ok(Self::Time(serde_json::from_slice(data)?)),
-            RawMessage {
-                type_id: 3,
                 length: 0,
                 data: _,
             } => Ok(Self::DirectConnectSucceeded),
             RawMessage {
-                type_id: 4,
+                type_id: 3,
                 length: 0,
                 data: _,
             } => Ok(Self::DirectConnectFailed),
             RawMessage {
-                type_id: 5,
+                type_id: 4,
                 length: _,
                 data,
             } => Ok(Self::Relay(RelayPayload { data: data.clone() })),
@@ -310,18 +260,13 @@ mod tests {
 
     #[test]
     fn test_server_serialise_key_accepted() {
-        let message = ServerMessage::KeyAccepted(KeyAcceptedPayload {
-            key_type: KeyType::Client,
-        });
+        let message = ServerMessage::KeyAccepted;
 
         let raw_message = message.serialise().unwrap();
 
         assert_eq!(raw_message.type_id, 1);
-        assert_eq!(
-            String::from_utf8(raw_message.data).unwrap(),
-            r#"{"key_type":"client"}"#
-        );
-        assert_eq!(raw_message.length, 21);
+        assert_eq!(raw_message.data.len(), 0);
+        assert_eq!(raw_message.length, 0);
     }
 
     #[test]
@@ -375,17 +320,6 @@ mod tests {
     }
 
     #[test]
-    fn test_server_serialise_time_please() {
-        let message = ServerMessage::TimePlease;
-
-        let raw_message = message.serialise().unwrap();
-
-        assert_eq!(raw_message.type_id, 6);
-        assert_eq!(raw_message.data.len(), 0);
-        assert_eq!(raw_message.length, 0);
-    }
-
-    #[test]
     fn test_server_serialise_attempt_direct_connect() {
         let message = ServerMessage::AttemptDirectConnect(AttemptDirectConnectPayload {
             connect_at: 12345,
@@ -395,7 +329,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 7);
+        assert_eq!(raw_message.type_id, 6);
         assert_eq!(
             String::from_utf8(raw_message.data).unwrap(),
             r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#
@@ -409,7 +343,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 8);
+        assert_eq!(raw_message.type_id, 7);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -422,7 +356,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 9);
+        assert_eq!(raw_message.type_id, 8);
         assert_eq!(raw_message.data, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
         assert_eq!(raw_message.length, 9);
     }
@@ -438,16 +372,11 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_key_accepted() {
-        let raw_message = RawMessage::new(1, Vec::from(r#"{"key_type": "host"}"#.as_bytes()));
+        let raw_message = RawMessage::new(1, vec![]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
-        assert_eq!(
-            message,
-            ServerMessage::KeyAccepted(KeyAcceptedPayload {
-                key_type: KeyType::Host
-            })
-        );
+        assert_eq!(message, ServerMessage::KeyAccepted);
     }
 
     #[test]
@@ -496,19 +425,12 @@ mod tests {
     }
 
     #[test]
-    fn test_server_deserialise_time_please() {
-        let raw_message = RawMessage::new(6, vec![]);
-
-        let message = ServerMessage::deserialise(&raw_message).unwrap();
-
-        assert_eq!(message, ServerMessage::TimePlease);
-    }
-
-    #[test]
     fn test_server_deserialise_attempt_direct_connect() {
         let raw_message = RawMessage::new(
-            7,
-            Vec::from(r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#.as_bytes()),
+            6,
+            Vec::from(
+                r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#.as_bytes(),
+            ),
         );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
@@ -525,7 +447,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_start_relay_mode() {
-        let raw_message = RawMessage::new(8, vec![]);
+        let raw_message = RawMessage::new(7, vec![]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -534,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_relay() {
-        let raw_message = RawMessage::new(9, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let raw_message = RawMessage::new(8, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -571,26 +493,12 @@ mod tests {
     }
 
     #[test]
-    fn test_client_serialise_time() {
-        let message = ClientMessage::Time(TimePayload { client_time: 12345 });
-
-        let raw_message = message.serialise().unwrap();
-
-        assert_eq!(raw_message.type_id, 2);
-        assert_eq!(
-            raw_message.data,
-            Vec::from(r#"{"client_time":12345}"#.as_bytes())
-        );
-        assert_eq!(raw_message.length, 21);
-    }
-
-    #[test]
     fn test_client_serialise_direct_connect_succeeded() {
         let message = ClientMessage::DirectConnectSucceeded;
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 3);
+        assert_eq!(raw_message.type_id, 2);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -601,7 +509,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 4);
+        assert_eq!(raw_message.type_id, 3);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -614,7 +522,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 5);
+        assert_eq!(raw_message.type_id, 4);
         assert_eq!(raw_message.data, vec![1, 2, 3, 4, 5]);
         assert_eq!(raw_message.length, 5);
     }
@@ -643,20 +551,8 @@ mod tests {
     }
 
     #[test]
-    fn test_client_deserialise_time() {
-        let raw_message = RawMessage::new(2, Vec::from(r#"{"client_time":12345}"#.as_bytes()));
-
-        let message = ClientMessage::deserialise(&raw_message).unwrap();
-
-        assert_eq!(
-            message,
-            ClientMessage::Time(TimePayload { client_time: 12345 })
-        );
-    }
-
-    #[test]
     fn test_client_deserialise_direct_contact_succeeded() {
-        let raw_message = RawMessage::new(3, vec![]);
+        let raw_message = RawMessage::new(2, vec![]);
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -665,7 +561,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_direct_contact_failed() {
-        let raw_message = RawMessage::new(4, vec![]);
+        let raw_message = RawMessage::new(3, vec![]);
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -674,7 +570,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_relay() {
-        let raw_message = RawMessage::new(5, vec![1, 2, 3, 4, 5]);
+        let raw_message = RawMessage::new(4, vec![1, 2, 3, 4, 5]);
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 

@@ -8,7 +8,7 @@ use tokio::{
     time::{delay_for, timeout},
 };
 use tokio_util::compat::*;
-use tunshell_shared::{ClientMessage, KeyType, PeerJoinedPayload, RelayPayload, ServerMessage};
+use tunshell_shared::{ClientMessage, PeerJoinedPayload, RelayPayload, ServerMessage};
 
 mod utils;
 
@@ -57,16 +57,16 @@ fn test_connect_to_server_without_sending_key_timeout() {
 }
 
 #[test]
-fn test_connect_with_valid_host_key() {
+fn test_connect_with_valid_key() {
     Runtime::new().unwrap().block_on(async {
         let server = init_server(Config::from_env().unwrap()).await;
         let mut con = create_client_connection_to_server(&server).await;
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con, &mock_session.host.key).await;
+        send_key_to_server(&mut con, &mock_session.peer1.key).await;
 
-        assert_next_message_is_key_accepted(&mut con, KeyType::Host).await;
+        assert_next_message_is_key_accepted(&mut con).await;
 
         let server = server.stop().await.unwrap();
 
@@ -77,7 +77,7 @@ fn test_connect_with_valid_host_key() {
                 .connections
                 .waiting
                 .0
-                .contains_key(&mock_session.host.key),
+                .contains_key(&mock_session.peer1.key),
             true
         );
         assert_eq!(server.connections.paired.0.len(), 0);
@@ -93,9 +93,9 @@ fn test_close_connection_while_waiting_for_peer() {
 
             let mock_session = create_mock_session().await;
 
-            send_key_to_server(&mut con, &mock_session.host.key).await;
+            send_key_to_server(&mut con, &mock_session.peer1.key).await;
 
-            assert_next_message_is_key_accepted(&mut con, KeyType::Host).await;
+            assert_next_message_is_key_accepted(&mut con).await;
 
             // Connection should drop here
         }
@@ -119,9 +119,9 @@ fn test_connect_with_valid_client_key() {
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con, &mock_session.client.key).await;
+        send_key_to_server(&mut con, &mock_session.peer2.key).await;
 
-        assert_next_message_is_key_accepted(&mut con, KeyType::Client).await;
+        assert_next_message_is_key_accepted(&mut con).await;
 
         delay_for(Duration::from_millis(50)).await;
 
@@ -134,7 +134,7 @@ fn test_connect_with_valid_client_key() {
                 .connections
                 .waiting
                 .0
-                .contains_key(&mock_session.client.key),
+                .contains_key(&mock_session.peer2.key),
             true
         );
         assert_eq!(server.connections.paired.0.len(), 0);
@@ -172,11 +172,11 @@ fn test_connect_and_joined_twice_with_same_key() {
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con1, &mock_session.client.key).await;
-        assert_next_message_is_key_accepted(&mut con1, KeyType::Client).await;
+        send_key_to_server(&mut con1, &mock_session.peer2.key).await;
+        assert_next_message_is_key_accepted(&mut con1).await;
 
-        send_key_to_server(&mut con2, &mock_session.client.key).await;
-        assert_next_message_is_key_accepted(&mut con2, KeyType::Client).await;
+        send_key_to_server(&mut con2, &mock_session.peer2.key).await;
+        assert_next_message_is_key_accepted(&mut con2).await;
 
         assert_eq!(
             con2.next().await.unwrap().unwrap(),
@@ -207,7 +207,7 @@ fn test_connect_with_to_expired_session() {
             .await
             .unwrap();
 
-        send_key_to_server(&mut con, &mock_session.host.key).await;
+        send_key_to_server(&mut con, &mock_session.peer1.key).await;
 
         let response = con.next().await.unwrap().unwrap();
 
@@ -234,9 +234,9 @@ fn test_clean_expired_waiting_connections() {
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con, &mock_session.client.key).await;
+        send_key_to_server(&mut con, &mock_session.peer2.key).await;
 
-        assert_next_message_is_key_accepted(&mut con, KeyType::Client).await;
+        assert_next_message_is_key_accepted(&mut con).await;
 
         // Wait for connection to be cleaned up by gc timeout
         delay_for(Duration::from_millis(1000)).await;
@@ -266,11 +266,11 @@ fn test_paired_connection() {
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con_host, &mock_session.host.key).await;
-        assert_next_message_is_key_accepted(&mut con_host, KeyType::Host).await;
+        send_key_to_server(&mut con_host, &mock_session.peer1.key).await;
+        assert_next_message_is_key_accepted(&mut con_host).await;
 
-        send_key_to_server(&mut con_client, &mock_session.client.key).await;
-        assert_next_message_is_key_accepted(&mut con_client, KeyType::Client).await;
+        send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
+        assert_next_message_is_key_accepted(&mut con_client).await;
 
         delay_for(Duration::from_millis(10)).await;
         
@@ -293,16 +293,16 @@ fn test_direct_connection() {
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con_host, &mock_session.host.key).await;
-        assert_next_message_is_key_accepted(&mut con_host, KeyType::Host).await;
+        send_key_to_server(&mut con_host, &mock_session.peer1.key).await;
+        assert_next_message_is_key_accepted(&mut con_host).await;
 
-        send_key_to_server(&mut con_client, &mock_session.client.key).await;
-        assert_next_message_is_key_accepted(&mut con_client, KeyType::Client).await;
+        send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
+        assert_next_message_is_key_accepted(&mut con_client).await;
 
         assert_eq!(
             con_host.next().await.unwrap().unwrap(),
             ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.client.key.to_owned(),
+                peer_key: mock_session.peer2.key.to_owned(),
                 peer_ip_address: "127.0.0.1".to_owned()
             })
         );
@@ -310,7 +310,7 @@ fn test_direct_connection() {
         assert_eq!(
             con_client.next().await.unwrap().unwrap(),
             ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.host.key.to_owned(),
+                peer_key: mock_session.peer1.key.to_owned(),
                 peer_ip_address: "127.0.0.1".to_owned()
             })
         );
@@ -377,16 +377,16 @@ fn test_relayed_connection() {
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con_host, &mock_session.host.key).await;
-        assert_next_message_is_key_accepted(&mut con_host, KeyType::Host).await;
+        send_key_to_server(&mut con_host, &mock_session.peer1.key).await;
+        assert_next_message_is_key_accepted(&mut con_host).await;
 
-        send_key_to_server(&mut con_client, &mock_session.client.key).await;
-        assert_next_message_is_key_accepted(&mut con_client, KeyType::Client).await;
+        send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
+        assert_next_message_is_key_accepted(&mut con_client).await;
 
         assert_eq!(
             con_host.next().await.unwrap().unwrap(),
             ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.client.key.to_owned(),
+                peer_key: mock_session.peer2.key.to_owned(),
                 peer_ip_address: "127.0.0.1".to_owned()
             })
         );
@@ -394,7 +394,7 @@ fn test_relayed_connection() {
         assert_eq!(
             con_client.next().await.unwrap().unwrap(),
             ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.host.key.to_owned(),
+                peer_key: mock_session.peer1.key.to_owned(),
                 peer_ip_address: "127.0.0.1".to_owned()
             })
         );
@@ -490,16 +490,16 @@ fn test_clean_up_paired_connection() {
 
         let mock_session = create_mock_session().await;
 
-        send_key_to_server(&mut con_host, &mock_session.host.key).await;
-        assert_next_message_is_key_accepted(&mut con_host, KeyType::Host).await;
+        send_key_to_server(&mut con_host, &mock_session.peer1.key).await;
+        assert_next_message_is_key_accepted(&mut con_host).await;
 
-        send_key_to_server(&mut con_client, &mock_session.client.key).await;
-        assert_next_message_is_key_accepted(&mut con_client, KeyType::Client).await;
+        send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
+        assert_next_message_is_key_accepted(&mut con_client).await;
 
         assert_eq!(
             con_host.next().await.unwrap().unwrap(),
             ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.client.key.to_owned(),
+                peer_key: mock_session.peer2.key.to_owned(),
                 peer_ip_address: "127.0.0.1".to_owned()
             })
         );
@@ -507,7 +507,7 @@ fn test_clean_up_paired_connection() {
         assert_eq!(
             con_client.next().await.unwrap().unwrap(),
             ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.host.key.to_owned(),
+                peer_key: mock_session.peer1.key.to_owned(),
                 peer_ip_address: "127.0.0.1".to_owned()
             })
         );

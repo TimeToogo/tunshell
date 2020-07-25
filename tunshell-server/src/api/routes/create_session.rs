@@ -5,8 +5,8 @@ use warp::{http::Response, hyper::Body, Rejection, Reply};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ResponsePayload<'a> {
-    host_key: &'a str,
-    client_key: &'a str,
+    peer1_key: &'a str,
+    peer2_key: &'a str,
 }
 
 pub(crate) async fn create_session(db: mongodb::Client) -> Result<Box<dyn Reply>, Rejection> {
@@ -29,8 +29,8 @@ pub(crate) async fn create_session(db: mongodb::Client) -> Result<Box<dyn Reply>
     }
 
     Ok(Box::new(warp::reply::json(&ResponsePayload {
-        host_key: &session.host.key,
-        client_key: &session.client.key,
+        peer1_key: &session.peer1.key,
+        peer2_key: &session.peer2.key,
     })))
 }
 
@@ -61,8 +61,8 @@ mod tests {
 
             let response = serde_json::from_slice::<ResponsePayload<'_>>(body.as_slice()).unwrap();
 
-            assert_ne!(response.host_key, "");
-            assert_ne!(response.client_key, "");
+            assert_ne!(response.peer1_key, "");
+            assert_ne!(response.peer2_key, "");
 
             debug!("response: {:?}", response);
         });

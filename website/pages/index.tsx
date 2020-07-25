@@ -52,7 +52,7 @@ const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
     case ClientHost.Unix:
       return (
         <pre>
-          sh &lt;(curl -sSf https://lets.tunshell.com/init.sh) {sessionKey} {encryptionKey.salt} {encryptionKey.key}
+          sh &lt;(curl -sSf https://lets.tunshell.com/init.sh) L {sessionKey} {encryptionKey.salt} {encryptionKey.key}
         </pre>
       );
     case ClientHost.Windows:
@@ -60,8 +60,8 @@ const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
         <pre>
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; &amp;
           $([scriptblock]::Create((New-Object
-          System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) {sessionKey} {encryptionKey.salt}{" "}
-          {encryptionKey.key}
+          System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) L {sessionKey}{" "}
+          {encryptionKey.salt} {encryptionKey.key}
         </pre>
       );
     case ClientHost.Browser:
@@ -74,15 +74,22 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
     case TargetHost.Unix:
       return (
         <pre>
-          curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin {sessionKey} {encryptionKey.salt}{" "}
+          curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin T {sessionKey} {encryptionKey.salt}{" "}
           {encryptionKey.key}
         </pre>
       );
     case TargetHost.Windows:
-      return <ClientHostScript host={ClientHost.Windows} sessionKey={sessionKey} encryptionKey={encryptionKey} />;
+      return (
+        <pre>
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; &amp;
+          $([scriptblock]::Create((New-Object
+          System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) T {sessionKey}{" "}
+          {encryptionKey.salt} {encryptionKey.key}
+        </pre>
+      );
     case TargetHost.Node:
       return (
-        <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['${sessionKey}', ${encryptionKey.salt}, ${encryptionKey.key}]}))});`}</pre>
+        <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['T','${sessionKey}','${encryptionKey.salt}','${encryptionKey.key}']}))});`}</pre>
       );
   }
 };
@@ -91,6 +98,20 @@ const getOptions = (enumClass: any): [string, string][] => {
   return Object.keys(enumClass)
     .filter((i) => /[^0-9]/.test(i))
     .map((i) => [enumClass[i], i]);
+};
+
+const randomizeSessionKeys = (response): SessionKeys => {
+  const flip = Math.random() >= 0.5;
+
+  return flip
+    ? {
+        hostKey: response.peer2_key,
+        clientKey: response.peer1_key,
+      }
+    : {
+        hostKey: response.peer1_key,
+        clientKey: response.peer2_key,
+      };
 };
 
 export default function Home() {
@@ -110,10 +131,7 @@ export default function Home() {
         method: "POST",
       }).then((i) => i.json());
 
-      setSessionKeys({
-        hostKey: response.host_key,
-        clientKey: response.client_key,
-      });
+      setSessionKeys(randomizeSessionKeys(response));
       setEncryptionKey(generateEncryptionKey());
     } finally {
       setCreatingSession(false);

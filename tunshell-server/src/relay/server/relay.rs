@@ -42,7 +42,7 @@ pub(super) fn pair_connections(
             // relay server does not have to do much, since the clients
             // will stream between themselves.
             // The next message must indicate the connection is over so
-            // wait until a message is received.
+            // we wait until a message is received.
             debug!("direct connection established");
 
             let message: Result<ClientMessage> = tokio::select! {

@@ -1,3 +1,4 @@
+use crate::ClientMode;
 use crate::{
     p2p::{self, P2PConnection},
     AesStream, Config, RelayStream, ShellClient, ShellKey, ShellServer, TunnelStream,
@@ -32,7 +33,7 @@ impl<'a> Client<'a> {
 
         let mut message_stream = ClientMessageStream::new(relay_socket.compat());
 
-        let key_type = self.send_key(&mut message_stream).await?;
+        self.send_key(&mut message_stream).await?;
 
         println!("Waiting for peer to join...");
         let mut peer_info = self.wait_for_peer_to_join(&mut message_stream).await?;
@@ -41,17 +42,17 @@ impl<'a> Client<'a> {
         println!("Negotiating connection...");
         let message_stream = Arc::new(Mutex::new(message_stream));
         let peer_socket = self
-            .negotiate_peer_connection(&message_stream, &mut peer_info, key_type.is_host())
+            .negotiate_peer_connection(&message_stream, &mut peer_info, self.config.is_target())
             .await?;
 
-        let exit_code = match key_type {
-            KeyType::Host => ShellServer::new()?
-                .run(peer_socket, ShellKey::new(self.config.session_key()))
+        let exit_code = match self.config.mode() {
+            ClientMode::Target => ShellServer::new()?
+                .run(peer_socket, ShellKey::new(self.config.encryption_key()))
                 .await
                 .and_then(|_| Ok(0))?,
-            KeyType::Client => {
+            ClientMode::Local => {
                 ShellClient::new()?
-                    .connect(peer_socket, ShellKey::new(&peer_info.peer_key))
+                    .connect(peer_socket, ShellKey::new(self.config.encryption_key()))
                     .await?
             }
         };
@@ -114,7 +115,7 @@ impl<'a> Client<'a> {
         Ok(transport_stream)
     }
 
-    async fn send_key(&self, message_stream: &mut ClientMessageStream) -> Result<KeyType> {
+    async fn send_key(&self, message_stream: &mut ClientMessageStream) -> Result<()> {
         message_stream
             .write(&ClientMessage::Key(KeyPayload {
                 key: self.config.session_key().to_owned(),
@@ -122,7 +123,7 @@ impl<'a> Client<'a> {
             .await?;
 
         match message_stream.next().await {
-            Some(Ok(ServerMessage::KeyAccepted(payload))) => Ok(payload.key_type),
+            Some(Ok(ServerMessage::KeyAccepted)) => Ok(()),
             Some(Ok(ServerMessage::KeyRejected)) => {
                 Err(Error::msg("The session key has expired or is invalid"))
             }
@@ -159,16 +160,6 @@ impl<'a> Client<'a> {
         let stream = loop {
             let mut msg_stream = message_stream.lock().unwrap();
             match msg_stream.next().await {
-                Some(Ok(ServerMessage::TimePlease)) => {
-                    msg_stream
-                        .write(&ClientMessage::Time(TimePayload {
-                            client_time: SystemTime::now()
-                                .duration_since(UNIX_EPOCH)
-                                .unwrap()
-                                .as_millis() as u64,
-                        }))
-                        .await?
-                }
                 Some(Ok(ServerMessage::AttemptDirectConnect(payload))) => {
                     match self
                         .attempt_direct_connection(
@@ -279,7 +270,14 @@ mod tests {
 
     #[test]
     fn test_connect_to_relay_server() {
-        let config = Config::new("test", "relay.tunshell.com", 5000, "test", "test");
+        let config = Config::new(
+            ClientMode::Target,
+            "test",
+            "relay.tunshell.com",
+            5000,
+            "test",
+            "test",
+        );
         let mut client = Client::new(&config);
 
         let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
@@ -289,7 +287,14 @@ mod tests {
 
     #[test]
     fn test_send_invalid_key() {
-        let config = Config::new("invalid_key", "relay.tunshell.com", 5000, "test", "test");
+        let config = Config::new(
+            ClientMode::Target,
+            "invalid_key",
+            "relay.tunshell.com",
+            5000,
+            "test",
+            "test",
+        );
         let mut client = Client::new(&config);
 
         let result = Runtime::new().unwrap().block_on(client.start_session());
