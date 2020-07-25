@@ -13,5 +13,4 @@ Write-Host "Installing client..."
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 (New-Object Net.WebClient).DownloadFile("https://artifacts.tunshell.com/client-$TARGET.exe", "$CLIENT_PATH")
 
-[System.Environment]::SetEnvironmentVariable("TUNSHELL_KEY", "__KEY__")
 Invoke-Expression "$CLIENT_PATH $($args -join " ")"

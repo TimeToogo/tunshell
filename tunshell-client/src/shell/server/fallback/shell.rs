@@ -1,17 +1,19 @@
-use super::IoStream;
+use super::{ByteChannel, OutputStream};
 use crate::shell::{proto::WindowSize, server::shell::Shell};
 use anyhow::{Error, Result};
 use async_trait::async_trait;
+use futures::{Future, TryFuture};
 use log::*;
 use std::{
     collections::HashMap,
     fs,
     io::Write,
     path::PathBuf,
+    pin::Pin,
     process::Stdio,
     sync::{Arc, Mutex},
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::{
     process::{self, Command},
     task::JoinHandle,
@@ -20,19 +22,22 @@ use tokio::{
 /// In unix environments which do not support pty's we use this
 /// bare-bones shell implementation
 pub(crate) struct FallbackShell {
-    input: IoStream,
-    output: IoStream,
     interpreter_task: JoinHandle<Result<()>>,
-    state: Arc<Mutex<SharedState>>,
+    state: SharedState,
 }
 
 struct Interpreter {
-    input: IoStream,
-    output: IoStream,
-    state: Arc<Mutex<SharedState>>,
+    state: SharedState,
 }
 
+#[derive(Clone)]
 struct SharedState {
+    inner: Arc<Mutex<Inner>>,
+}
+
+struct Inner {
+    input: ByteChannel,
+    output: OutputStream,
     pwd: PathBuf,
     size: WindowSize,
     env: HashMap<String, String>,
@@ -41,14 +46,10 @@ struct SharedState {
 
 impl FallbackShell {
     pub(in super::super) fn new(_term: &str, size: WindowSize) -> Self {
-        let input = IoStream::new();
-        let output = IoStream::new();
-        let state = Arc::new(Mutex::new(SharedState::new(size)));
+        let state = SharedState::new(size);
 
         let mut shell = Self {
-            input: input.clone(),
-            output: output.clone(),
-            interpreter_task: Interpreter::start(input, output, Arc::clone(&state)),
+            interpreter_task: Interpreter::start(state.clone()),
             state,
         };
 
@@ -58,12 +59,15 @@ impl FallbackShell {
     }
 
     fn write_notice(&mut self) -> Result<()> {
-        self.output.write("\r\n".as_bytes())?;
-        self.output.write("NOTICE: Tunshell is running in a limited environment and is unable to allocate a pty for a real shell. ".as_bytes())?;
-        self.output.write(
+        let mut state = self.state.inner.lock().unwrap();
+
+        state.output.write("\r\n".as_bytes())?;
+        state.output.write("NOTICE: Tunshell is running in a limited environment and is unable to allocate a pty for a real shell. ".as_bytes())?;
+        state.output.write(
             "Falling back to a built-in pseudo-shell with very limited functionality".as_bytes(),
         )?;
-        self.output.write("\r\n\r\n".as_bytes())?;
+        state.output.write("\r\n\r\n".as_bytes())?;
+
         Ok(())
     }
 }
@@ -75,7 +79,7 @@ impl Shell for FallbackShell {
             return Ok(0);
         }
 
-        self.output.read(buff).await.map_err(Error::from)
+        self.state.read_output(buff).await
     }
 
     async fn write(&mut self, buff: &[u8]) -> Result<()> {
@@ -84,20 +88,21 @@ impl Shell for FallbackShell {
         }
 
         // echo chars
-        self.output.write(buff)?;
+        let mut state = self.state.inner.lock().unwrap();
+        state.output.write(buff)?;
 
-        self.input.write_all(buff).map_err(Error::from)?;
+        state.input.write_all(buff).map_err(Error::from)?;
         Ok(())
     }
 
     fn resize(&mut self, size: WindowSize) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.inner.lock().unwrap();
         state.size = size;
         Ok(())
     }
 
     fn exit_code(&self) -> Result<u8> {
-        let state = self.state.lock().unwrap();
+        let state = self.state.inner.lock().unwrap();
         state
             .exit_code
             .ok_or_else(|| Error::msg("shell has not closed"))
@@ -109,16 +114,8 @@ impl Drop for FallbackShell {
 }
 
 impl Interpreter {
-    fn start(
-        mut input: IoStream,
-        mut output: IoStream,
-        state: Arc<Mutex<SharedState>>,
-    ) -> JoinHandle<Result<()>> {
-        let interpreter = Self {
-            input: input.clone(),
-            output: output.clone(),
-            state,
-        };
+    fn start(state: SharedState) -> JoinHandle<Result<()>> {
+        let interpreter = Self { state };
 
         tokio::spawn(interpreter.start_loop())
     }
@@ -137,7 +134,7 @@ impl Interpreter {
                 }
 
                 let mut chunk = [0u8; 1024];
-                let read = self.input.read(&mut chunk).await?;
+                let read = self.state.read_input(&mut chunk).await?;
 
                 if read == 0 {
                     return Ok(());
@@ -146,7 +143,7 @@ impl Interpreter {
                 buff.extend_from_slice(&chunk[..read]);
             };
 
-            let exit_code = { self.state.lock().unwrap().exit_code };
+            let exit_code = { self.state.inner.lock().unwrap().exit_code };
 
             if exit_code.is_some() {
                 break;
@@ -157,16 +154,21 @@ impl Interpreter {
             buff.drain(..1);
 
             self.run(String::from_utf8(cmd)?).await?;
-            self.output.write("\r\n".as_bytes())?;
+
+            {
+                let mut state = self.state.inner.lock().unwrap();
+                state.output.write("\r\n".as_bytes())?;
+            }
         }
 
         Ok(())
     }
 
     fn write_prompt(&mut self) -> Result<()> {
-        let pwd = { self.state.lock().unwrap().pwd.clone() };
-        self.output.write(pwd.to_string_lossy().as_bytes())?;
-        self.output.write("> ".as_bytes())?;
+        let mut state = self.state.inner.lock().unwrap();
+        let pwd = state.pwd.clone();
+        state.output.write(pwd.to_string_lossy().as_bytes())?;
+        state.output.write("> ".as_bytes())?;
         Ok(())
     }
 
@@ -192,11 +194,12 @@ impl Interpreter {
     }
 
     fn change_pwd(&mut self, dir: String) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.inner.lock().unwrap();
         let new_pwd = state.pwd.join(dir.clone());
 
         if !new_pwd.exists() {
-            self.output
+            state
+                .output
                 .write(format!("no such directory: {}", dir).as_bytes())?;
             return Ok(());
         }
@@ -209,7 +212,7 @@ impl Interpreter {
     fn exit(&mut self, code: Option<String>) {
         let code = code.map(|i| i.parse::<u8>().unwrap_or(1)).unwrap_or(0);
 
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.inner.lock().unwrap();
         state.exit_code = Some(code);
         debug!("exited with status {}", code);
     }
@@ -218,7 +221,7 @@ impl Interpreter {
         let mut cmd = Command::new(program.clone());
 
         let (pwd, env) = {
-            let state = self.state.lock().unwrap();
+            let state = self.state.inner.lock().unwrap();
             (state.pwd.clone(), state.env.clone())
         };
 
@@ -234,8 +237,9 @@ impl Interpreter {
 
         if let Err(err) = process {
             warn!("spawn failed with: {:?}", err);
-            self.output.write("\r\n".as_bytes())?;
-            self.output.write(err.to_string().as_bytes())?;
+            let mut state = self.state.inner.lock().unwrap();
+            state.output.write("\r\n".as_bytes())?;
+            state.output.write(err.to_string().as_bytes())?;
             return Ok(());
         }
 
@@ -259,7 +263,7 @@ impl Interpreter {
 
         loop {
             tokio::select! {
-                read = self.input.read(&mut stdin_buff) => {
+                read = self.state.read_input(&mut stdin_buff) => {
                     let read = read?;
                     debug!("read {} bytes from shell stdin", read);
                     stdin.write_all(&stdin_buff[..read]).await?;
@@ -269,13 +273,15 @@ impl Interpreter {
                     let read = read?;
                     debug!("read {} bytes from process stdout", read);
                     if read == 0 {break;}
-                    self.output.write_all(convert_to_crlf(stdout_buff[..read].to_vec()).as_slice())?;
+                    let mut state = self.state.inner.lock().unwrap();
+                    state.output.write_all(&stdout_buff[..read])?;
                 }
                 read = stderr.read(&mut stderr_buff) => {
                     let read = read?;
                     debug!("read {} bytes from process stderr", read);
                     if read == 0 {break;}
-                    self.output.write_all(convert_to_crlf(stdout_buff[..read].to_vec()).as_slice())?;
+                    let mut state = self.state.inner.lock().unwrap();
+                    state.output.write_all(&stderr_buff[..read])?;
                 }
             }
         }
@@ -287,27 +293,40 @@ impl Interpreter {
 impl SharedState {
     fn new(size: WindowSize) -> Self {
         Self {
-            size,
-            pwd: std::env::current_dir().unwrap(),
-            env: HashMap::new(),
-            exit_code: None,
+            inner: Arc::new(Mutex::new(Inner {
+                size,
+                input: ByteChannel::new(),
+                output: OutputStream::new(),
+                pwd: std::env::current_dir().unwrap(),
+                env: HashMap::new(),
+                exit_code: None,
+            })),
         }
     }
-}
 
-// TODO: convert to stream wrapper
-fn convert_to_crlf(mut data: Vec<u8>) -> Vec<u8> {
-    let mut i = 0;
+    fn read_input<'a>(
+        &'a mut self,
+        buff: &'a mut [u8],
+    ) -> impl Future<Output = Result<usize>> + 'a {
+        futures::future::poll_fn(move |cx| {
+            let mut state = self.inner.lock().unwrap();
+            let result = Pin::new(&mut state.input).poll_read(cx, buff);
 
-    while i < data.len() {
-        if i > 0 && data[i] == 0x0A && data[i - 1] != 0x0D {
-            data.insert(i, 0x0D);
-        }
-
-        i += 1;
+            result.map_err(Error::from)
+        })
     }
 
-    data
+    fn read_output<'a>(
+        &'a mut self,
+        buff: &'a mut [u8],
+    ) -> impl Future<Output = Result<usize>> + 'a {
+        futures::future::poll_fn(move |cx| {
+            let mut state = self.inner.lock().unwrap();
+            let result = Pin::new(&mut state.output).poll_read(cx, buff);
+
+            result.map_err(Error::from)
+        })
+    }
 }
 
 #[cfg(test)]
