@@ -11,6 +11,7 @@ const CR: u8 = 0x0D;
 const LF: u8 = 0x0A;
 
 /// Output byte stream for the fallback terminal
+/// Performs conversion of LF to CRLF line endings.
 pub(super) struct OutputStream {
     inner: ByteChannel,
     last_byte: Option<u8>,
@@ -22,6 +23,10 @@ impl OutputStream {
             inner: ByteChannel::new(),
             last_byte: None,
         }
+    }
+
+    pub(super) fn shutdown(&mut self) {
+        self.inner.shutdown();
     }
 }
 
@@ -71,8 +76,7 @@ impl Write for OutputStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
-    use tokio::{io::AsyncReadExt, runtime::Runtime, time::timeout};
+    use tokio::{io::AsyncReadExt, runtime::Runtime};
 
     #[test]
     fn test_new() {

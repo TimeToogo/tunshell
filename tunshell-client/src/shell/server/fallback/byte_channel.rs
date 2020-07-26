@@ -29,11 +29,11 @@ impl AsyncRead for ByteChannel {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        if self.shutdown {
-            return Poll::Ready(Ok(0));
-        }
-
         if self.buff.len() == 0 {
+            if self.shutdown {
+                return Poll::Ready(Ok(0));
+            }
+
             self.read_wakers.push(cx.waker().clone());
             return Poll::Pending;
         }
@@ -69,7 +69,6 @@ impl Write for ByteChannel {
 }
 
 impl ByteChannel {
-    #[allow(dead_code)]
     pub(super) fn shutdown(&mut self) {
         self.shutdown = true;
 
@@ -82,10 +81,7 @@ impl ByteChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        sync::{Arc, Mutex},
-        time::Duration,
-    };
+    use std::time::Duration;
     use tokio::{io::AsyncReadExt, runtime::Runtime, time::timeout};
 
     #[test]

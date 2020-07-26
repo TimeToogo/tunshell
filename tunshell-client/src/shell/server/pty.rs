@@ -1,4 +1,4 @@
-use super::shell::Shell;
+use super::{get_default_shell, shell::Shell, DefaultShell};
 use crate::shell::proto::WindowSize;
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
@@ -53,7 +53,7 @@ impl PtyShell {
         }
 
         let pty = pty.unwrap();
-        let mut cmd = get_default_shell(shell)?;
+        let mut cmd: CommandBuilder = get_default_shell(shell)?.into();
         cmd.env("TERM", term);
 
         let shell = pty
@@ -265,51 +265,6 @@ where
     Ok(value)
 }
 
-#[cfg(not(target_os = "windows"))]
-fn get_default_shell(shell: Option<&str>) -> Result<CommandBuilder> {
-    // Copied from portable_pty
-    let shell = shell
-        .and_then(|i| Some(i.to_owned()))
-        .unwrap_or(std::env::var("SHELL").or_else(|_| {
-            let ent = unsafe { libc::getpwuid(libc::getuid()) };
-
-            if ent.is_null() {
-                Ok("/bin/sh".into())
-            } else {
-                use std::ffi::CStr;
-                use std::str;
-                let shell = unsafe { CStr::from_ptr((*ent).pw_shell) };
-                shell
-                    .to_str()
-                    .map(str::to_owned)
-                    .context("failed to resolve shell")
-            }
-        })?);
-
-    let mut cmd = CommandBuilder::new(shell.clone());
-
-    if shell == "bash" || shell == "/bin/bash" {
-        cmd.arg("--norc");
-    }
-
-    if shell == "zsh" || shell == "/bin/zsh" {
-        cmd.arg("--no-rcs");
-    }
-
-    Ok(cmd)
-}
-
-#[cfg(target_os = "windows")]
-fn get_default_shell(shell: Option<&str>) -> Result<CommandBuilder> {
-    // Copied from portable_pty
-    let shell = shell
-        .and_then(|i| Some(i.to_owned()))
-        .unwrap_or(std::env::var("ComSpec").unwrap_or("cmd.exe".into()));
-
-    let cmd = CommandBuilder::new(shell);
-    Ok(cmd)
-}
-
 impl ShellState {
     fn is_running(&self) -> bool {
         let exit_status = self.exit_status.lock().unwrap();
@@ -354,45 +309,18 @@ impl Drop for PtyShell {
     }
 }
 
+impl Into<CommandBuilder> for DefaultShell {
+    fn into(self) -> CommandBuilder {
+        let mut cmd = CommandBuilder::new(self.path);
+        cmd.args(self.args);
+        cmd
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
-
-    #[test]
-    fn test_new_shell_bash() {
-        let cmd = get_default_shell(Some("/bin/bash")).unwrap();
-
-        assert_eq!(
-            format!("{:?}", cmd),
-            "CommandBuilder { args: [\"/bin/bash\", \"--norc\"], envs: [], cwd: None }"
-        );
-    }
-
-    #[test]
-    fn test_new_shell_zsh() {
-        let cmd = get_default_shell(Some("/bin/zsh")).unwrap();
-
-        assert_eq!(
-            format!("{:?}", cmd),
-            "CommandBuilder { args: [\"/bin/zsh\", \"--no-rcs\"], envs: [], cwd: None }"
-        );
-    }
-
-    #[test]
-    fn test_new_shell_sh() {
-        let cmd = get_default_shell(Some("/bin/sh")).unwrap();
-
-        assert_eq!(
-            format!("{:?}", cmd),
-            "CommandBuilder { args: [\"/bin/sh\"], envs: [], cwd: None }"
-        );
-    }
-
-    #[test]
-    fn test_new_shell_no_env() {
-        get_default_shell(None).unwrap();
-    }
 
     #[test]
     fn test_shell_pty_exit_on_error() {
