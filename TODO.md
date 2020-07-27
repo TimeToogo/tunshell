@@ -11,7 +11,9 @@ tunshell todo:
     - [x] script templates to be moved to S3
     - [x] move logic to decide on target/client host to client binary
  - [x] basic rust-only shell fallback for limited envs without pty 
- - [ ] extend relay server to support websocket connections and implement client in-browser
+ - [ ] support in-browser terminal client
+    - [ ] tunshell-client wasm target
+    - [ ] extend relay server to support websocket connections and implement client in-browser
  - [ ] init scripts for multiple langs
     - [x] sh/bash
     - [x] cmd/powershell

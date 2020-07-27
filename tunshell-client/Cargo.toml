@@ -4,31 +4,54 @@ version = "0.1.0"
 authors = ["Elliot Levin <elliotlevin@hotmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 tunshell-shared = { path = "../tunshell-shared" }
 anyhow = "1.0.31"
-tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "dns", "time", "io-util", "tcp", "udp", "sync", "process", "macros"] }
-tokio-rustls = { version = "0.13.1", features=["dangerous_configuration"] }
-webpki = "0.21.2"
-webpki-roots = "0.19.0"
 tokio-util = { version = "0.3.1", features=["compat"] }
 futures = "0.3.5"
-
-crossterm = { version = "0.17.5" }
 log = "0.4.8"
 env_logger = "0.7.1"
-libc = "0.2.71"
 async-trait = "0.1.33"
 twox-hash = "1.5.0"
 byteorder = "1.3.4"
-lazy_static = "1.4.0"
 thiserror = "1.0.19"
 rand = "0.7.3"
 serde = "1.0.114"
 serde_json = "1.0.55"
+cfg-if = "0.1.10"
+
+[target.'cfg(all(not(target_os = "ios"), not(target_os = "android"), not(target_arch = "wasm32")))'.dependencies]
+portable-pty = "0.3.0"
+
+[target.'cfg(unix)'.dependencies]
+# tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "dns", "time", "io-util", "tcp", "udp", "sync", "process", "macros"] } # no-wasm
+tokio-rustls = { version = "0.13.1", features=["dangerous_configuration"] }
+webpki = "0.21.2"
+webpki-roots = "0.19.0"
+crossterm = { version = "0.17.5" }
+libc = "0.2.71"
 ring = "0.16.15"
 
-[target.'cfg(all(not(target_os = "ios"), not(target_os = "android")))'.dependencies]
-portable-pty = "0.3.0"
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "0.2.21", features=["blocking", "time", "io-util", "sync", "macros"] }
+wee_alloc = "0.4.5"
+wasm-bindgen = "0.2.65"
+wasm-bindgen-futures = "0.4.15"
+console_error_panic_hook = "0.1.6"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3.42"
+features = [
+    "console",
+    "WebSocket",
+    "Crypto",
+    "SubtleCrypto",
+    "CryptoKey",
+    "Pbkdf2Params"
+]
+
+[dev-dependencies]
+lazy_static = "1.4.0"

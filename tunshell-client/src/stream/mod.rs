@@ -1,5 +1,6 @@
 use tokio::io::{AsyncRead, AsyncWrite};
 
+mod crypto;
 mod aes_stream;
 mod relay_stream;
 

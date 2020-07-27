@@ -1,35 +1,26 @@
-use crate::ClientMode;
-use crate::{
-    p2p::{self, P2PConnection},
-    AesStream, Config, RelayStream, ShellClient, ShellKey, ShellServer, TunnelStream,
-};
+use crate::{AesStream, ClientMode, Config, RelayStream, ServerStream, ShellKey, TunnelStream};
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
 use log::*;
-use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::net::TcpStream;
-use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
 use tokio_util::compat::*;
 use tunshell_shared::*;
-use webpki::DNSNameRef;
 
-pub type ClientMessageStream =
-    MessageStream<ClientMessage, ServerMessage, Compat<TlsStream<TcpStream>>>;
+pub type ClientMessageStream = MessageStream<ClientMessage, ServerMessage, Compat<ServerStream>>;
 
-pub struct Client<'a> {
-    config: &'a Config,
+pub struct Client {
+    config: Config,
 }
 
-impl<'a> Client<'a> {
-    pub fn new(config: &'a Config) -> Self {
+impl Client {
+    pub fn new(config: Config) -> Self {
         Self { config }
     }
 
     pub async fn start_session(&mut self) -> Result<u8> {
         println!("Connecting to relay server...");
-        let relay_socket: TlsStream<TcpStream> = self.connect_to_relay().await?;
+        let relay_socket = ServerStream::connect(&self.config).await?;
 
         let mut message_stream = ClientMessageStream::new(relay_socket.compat());
 
@@ -46,73 +37,11 @@ impl<'a> Client<'a> {
             .await?;
 
         let exit_code = match self.config.mode() {
-            ClientMode::Target => ShellServer::new()?
-                .run(peer_socket, ShellKey::new(self.config.encryption_key()))
-                .await
-                .and_then(|_| Ok(0))?,
-            ClientMode::Local => {
-                ShellClient::new()?
-                    .connect(peer_socket, ShellKey::new(self.config.encryption_key()))
-                    .await?
-            }
+            ClientMode::Target => self.start_shell_server(peer_socket).await?,
+            ClientMode::Local => self.start_shell_client(peer_socket).await?
         };
 
         Ok(exit_code)
-    }
-
-    async fn connect_to_relay(&mut self) -> Result<TlsStream<TcpStream>> {
-        let mut config = ClientConfig::default();
-        config
-            .root_store
-            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-
-        #[cfg(insecure)]
-        {
-            use tokio_rustls::rustls;
-
-            struct NullCertVerifier {}
-
-            impl rustls::ServerCertVerifier for NullCertVerifier {
-                fn verify_server_cert(
-                    &self,
-                    _roots: &rustls::RootCertStore,
-                    _presented_certs: &[rustls::Certificate],
-                    _dns_name: webpki::DNSNameRef,
-                    _ocsp_response: &[u8],
-                ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-                    Ok(rustls::ServerCertVerified::assertion())
-                }
-            }
-
-            config
-                .dangerous()
-                .set_certificate_verifier(Arc::new(NullCertVerifier {}));
-        }
-
-        let connector = TlsConnector::from(Arc::new(config));
-
-        let relay_dns_name = DNSNameRef::try_from_ascii_str(self.config.relay_host())?;
-
-        #[cfg(not(insecure))]
-        let relay_addr = (self.config.relay_host(), self.config.relay_port())
-            .to_socket_addrs()?
-            .next()
-            .unwrap();
-
-        #[cfg(insecure)]
-        let relay_addr = (
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-            3001,
-        )
-            .to_socket_addrs()?
-            .next()
-            .unwrap();
-
-        let network_stream = TcpStream::connect(relay_addr).await?;
-        network_stream.set_keepalive(Some(Duration::from_secs(30)))?;
-        let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
-
-        Ok(transport_stream)
     }
 
     async fn send_key(&self, message_stream: &mut ClientMessageStream) -> Result<()> {
@@ -205,6 +134,7 @@ impl<'a> Client<'a> {
         Ok(Box::new(stream))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     async fn attempt_direct_connection(
         &mut self,
         _message_stream: &mut ClientMessageStream,
@@ -212,7 +142,8 @@ impl<'a> Client<'a> {
         connection_info: &AttemptDirectConnectPayload,
         master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
-        // peer_info.peer_ip_address = "127.0.0.1".to_owned();
+        use crate::p2p::{self, P2PConnection};
+
         println!(
             "Attempting direct connection to {}",
             peer_info.peer_ip_address
@@ -261,29 +192,42 @@ impl<'a> Client<'a> {
 
         Ok(Some(stream))
     }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn attempt_direct_connection(
+        &mut self,
+        _message_stream: &mut ClientMessageStream,
+        peer_info: &mut PeerJoinedPayload,
+        connection_info: &AttemptDirectConnectPayload,
+        master_side: bool,
+    ) -> Result<Option<Box<dyn TunnelStream>>> {
+        Err(Error::msg("not supported"))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn start_shell_server(&self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
+        crate::ShellServer::new()?
+            .run(peer_socket, ShellKey::new(self.config.encryption_key()))
+            .await
+            .and_then(|_| Ok(0))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn start_shell_server(&self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
+        unreachable!()
+    }
+
+    async fn start_shell_client(&self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
+        crate::ShellClient::new()?
+            .connect(peer_socket, ShellKey::new(self.config.encryption_key()))
+            .await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::runtime::Runtime;
-
-    #[test]
-    fn test_connect_to_relay_server() {
-        let config = Config::new(
-            ClientMode::Target,
-            "test",
-            "relay.tunshell.com",
-            5000,
-            "test",
-            "test",
-        );
-        let mut client = Client::new(&config);
-
-        let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
-
-        result.unwrap();
-    }
 
     #[test]
     fn test_send_invalid_key() {
@@ -295,7 +239,7 @@ mod tests {
             "test",
             "test",
         );
-        let mut client = Client::new(&config);
+        let mut client = Client::new(config);
 
         let result = Runtime::new().unwrap().block_on(client.start_session());
 

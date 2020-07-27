@@ -46,6 +46,7 @@ target/
 # build artifacts
 tunshell-client/build/tmp
 tunshell-client/build/artifacts
+tunshell-client/pkg
 
 # logs
 *.log

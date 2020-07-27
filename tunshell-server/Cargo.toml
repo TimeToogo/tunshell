@@ -21,5 +21,7 @@ env_logger = "0.7.1"
 warp = "0.2.3"
 chrono = "0.4.13"
 rustls = "0.18.0"
-lazy_static = "1.4.0"
 rand = "0.7.3"
+
+[dev-dependencies]
+lazy_static = "1.4.0"

@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import Head from "next/head";
+import dynamic from "next/dynamic";
+import { TunshellClient } from "../services/tunshell-client";
 
 interface SessionKeys {
   hostKey: string;
@@ -47,6 +49,15 @@ const generateEncryptionKey = (): EncryptionKey => {
   };
 };
 
+const InBrowserClient = dynamic({
+  loader: async () => {
+    // Import the wasm module
+    const client = await new TunshellClient().init();
+    // Return a React component that calls the add_one method on the wasm module
+    return ({ sessionKey, encryptionKey } : any) => <pre>{JSON.stringify(client)}</pre>;
+  },
+});
+
 const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
   switch (host) {
     case ClientHost.Unix:
@@ -65,7 +76,11 @@ const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
         </pre>
       );
     case ClientHost.Browser:
-      return <pre>TODO</pre>;
+      return (
+        <pre>
+          <InBrowserClient sessionKey={sessionKey} encryptionKey={encryptionKey} />
+        </pre>
+      );
   }
 };
 

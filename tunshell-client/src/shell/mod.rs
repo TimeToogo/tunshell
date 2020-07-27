@@ -1,7 +1,15 @@
 mod client;
-mod proto;
-mod server;
+pub(crate) use client::*;
 
+cfg_if::cfg_if! {
+    if #[cfg(not(target_arch = "wasm32"))] {
+
+        mod server;
+        pub(crate) use server::*;
+    }
+}
+
+mod proto;
 use proto::*;
 
 pub struct ShellKey {
@@ -19,6 +27,3 @@ impl ShellKey {
         &self.key
     }
 }
-
-pub(crate) use client::*;
-pub(crate) use server::*;

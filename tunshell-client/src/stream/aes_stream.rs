@@ -1,12 +1,9 @@
-use super::TunnelStream;
-use anyhow::{Error, Result};
+use super::{crypto::*, TunnelStream};
+use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use futures::Stream;
 use io::prelude::*;
 use log::*;
-use ring::aead::*;
-use ring::pbkdf2::*;
-use ring::rand::{SecureRandom, SystemRandom};
 use std::cmp;
 use std::io;
 use std::{
@@ -18,9 +15,9 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tunshell_shared::{Message, MessageStream, RawMessage};
 
 #[derive(Debug, Clone, PartialEq)]
-struct EncryptedMessage {
-    nonce: Vec<u8>,
-    ciphertext: Vec<u8>,
+pub(super) struct EncryptedMessage {
+    pub(super) nonce: Vec<u8>,
+    pub(super) ciphertext: Vec<u8>,
 }
 
 impl Message for EncryptedMessage {
@@ -61,7 +58,7 @@ type AesMessageStream<S> = MessageStream<EncryptedMessage, EncryptedMessage, S>;
 
 pub struct AesStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> {
     inner: AesMessageStream<S>,
-    key: LessSafeKey,
+    key: Key,
     read_buff: Vec<u8>,
     write_buff: Option<EncryptedMessage>,
 }
@@ -184,56 +181,6 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
 }
 
 impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> TunnelStream for AesStream<S> {}
-
-fn derive_key(salt: &[u8], key: &[u8]) -> LessSafeKey {
-    let mut derived_key = [0u8; 32];
-    derive(
-        PBKDF2_HMAC_SHA256,
-        std::num::NonZeroU32::new(1000).unwrap(),
-        salt,
-        key,
-        &mut derived_key,
-    );
-
-    LessSafeKey::new(UnboundKey::new(&AES_256_GCM, &derived_key).unwrap())
-}
-
-fn encrypt(plaintext: &[u8], key: &LessSafeKey) -> EncryptedMessage {
-    let mut nonce = [0u8; 12];
-    let rand = SystemRandom::new();
-    rand.fill(&mut nonce).unwrap();
-
-    let mut ciphertext = plaintext.to_vec();
-    key.seal_in_place_append_tag(
-        Nonce::assume_unique_for_key(nonce.to_owned()),
-        Aad::empty(),
-        &mut ciphertext,
-    )
-    .unwrap();
-
-    debug!("encrypted {} bytes", plaintext.len());
-    EncryptedMessage {
-        nonce: nonce.to_vec(),
-        ciphertext,
-    }
-}
-
-fn decrypt(message: EncryptedMessage, key: &LessSafeKey) -> Result<Vec<u8>> {
-    let mut nonce = [0u8; 12];
-    nonce.copy_from_slice(&message.nonce[..12]);
-    let mut plaintext = message.ciphertext.clone();
-
-    let plaintext = key
-        .open_in_place(
-            Nonce::assume_unique_for_key(nonce.to_owned()),
-            Aad::empty(),
-            &mut plaintext,
-        )
-        .map_err(|_| Error::msg("failed to decrypt message"))?;
-
-    debug!("decrypted {} bytes", plaintext.len());
-    Ok(plaintext.to_vec())
-}
 
 #[cfg(test)]
 mod tests {

@@ -9,8 +9,15 @@ use std::time::Duration;
 use tokio::time;
 use tokio_util::compat::*;
 
-mod shell;
-use shell::*;
+cfg_if::cfg_if! {
+    if #[cfg(not(target_arch = "wasm32"))] {
+        mod shell;
+        use shell::*;
+    } else {
+        mod xtermjs;
+        use xtermjs::*;
+    }
+}
 
 pub struct ShellClient {}
 
