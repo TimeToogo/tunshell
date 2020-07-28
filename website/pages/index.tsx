@@ -21,12 +21,10 @@ enum TargetHost {
 }
 
 interface EncryptionKey {
-  salt: string;
   key: string;
 }
 
 // Generates a secure PSK for each of the clients
-// Salt: 8 alphanumeric chars (47 bits of entropy)
 // Key: 22 alphanumeric chars (131 bits of entropy)
 const generateEncryptionKey = (): EncryptionKey => {
   const alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -44,7 +42,6 @@ const generateEncryptionKey = (): EncryptionKey => {
   };
 
   return {
-    salt: gen(8),
     key: gen(22),
   };
 };
@@ -63,7 +60,7 @@ const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
     case ClientHost.Unix:
       return (
         <pre>
-          sh &lt;(curl -sSf https://lets.tunshell.com/init.sh) L {sessionKey} {encryptionKey.salt} {encryptionKey.key}
+          sh &lt;(curl -sSf https://lets.tunshell.com/init.sh) L {sessionKey} {encryptionKey.key}
         </pre>
       );
     case ClientHost.Windows:
@@ -72,7 +69,7 @@ const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; &amp;
           $([scriptblock]::Create((New-Object
           System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) L {sessionKey}{" "}
-          {encryptionKey.salt} {encryptionKey.key}
+          {encryptionKey.key}
         </pre>
       );
     case ClientHost.Browser:
@@ -89,8 +86,7 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
     case TargetHost.Unix:
       return (
         <pre>
-          curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin T {sessionKey} {encryptionKey.salt}{" "}
-          {encryptionKey.key}
+          curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin T {sessionKey} {encryptionKey.key}
         </pre>
       );
     case TargetHost.Windows:
@@ -99,12 +95,12 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; &amp;
           $([scriptblock]::Create((New-Object
           System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) T {sessionKey}{" "}
-          {encryptionKey.salt} {encryptionKey.key}
+          {encryptionKey.key}
         </pre>
       );
     case TargetHost.Node:
       return (
-        <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['T','${sessionKey}','${encryptionKey.salt}','${encryptionKey.key}']}))});`}</pre>
+        <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['T','${sessionKey}','${encryptionKey.key}']}))});`}</pre>
       );
   }
 };

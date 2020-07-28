@@ -106,6 +106,7 @@ mod tests {
             let peer_info = PeerJoinedPayload {
                 peer_ip_address: "127.0.0.1".to_owned(),
                 peer_key: "test".to_owned(),
+                session_nonce: "nonce".to_owned(),
             };
             let mut connection1 = UdpConnectionAdaptor::new(
                 peer_info.clone(),
@@ -133,6 +134,7 @@ mod tests {
             let peer_info = PeerJoinedPayload {
                 peer_ip_address: "127.0.0.1".to_owned(),
                 peer_key: "test".to_owned(),
+                session_nonce: "nonce".to_owned(),
             };
 
             let mut connection1 = UdpConnectionAdaptor::new(

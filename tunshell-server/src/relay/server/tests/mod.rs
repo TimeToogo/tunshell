@@ -273,7 +273,7 @@ fn test_paired_connection() {
         assert_next_message_is_key_accepted(&mut con_client).await;
 
         delay_for(Duration::from_millis(10)).await;
-        
+
         let server = server.stop().await.unwrap();
 
         assert_eq!(server.connections.new.0.len(), 0);
@@ -299,21 +299,19 @@ fn test_direct_connection() {
         send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
         assert_next_message_is_key_accepted(&mut con_client).await;
 
-        assert_eq!(
-            con_host.next().await.unwrap().unwrap(),
-            ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.peer2.key.to_owned(),
-                peer_ip_address: "127.0.0.1".to_owned()
-            })
-        );
+        let peer_joined1 = assert_next_message_is_peer_joined(
+            &mut con_host,
+            "127.0.0.1",
+            mock_session.peer2.key.as_str(),
+        ).await;
 
-        assert_eq!(
-            con_client.next().await.unwrap().unwrap(),
-            ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.peer1.key.to_owned(),
-                peer_ip_address: "127.0.0.1".to_owned()
-            })
-        );
+        let peer_joined2 = assert_next_message_is_peer_joined(
+            &mut con_client,
+            "127.0.0.1",
+            mock_session.peer1.key.as_str(),
+        ).await;
+
+        assert_eq!(peer_joined1.session_nonce, peer_joined2.session_nonce);
 
         let message_host = con_host.next().await.unwrap().unwrap();
         let message_client = con_client.next().await.unwrap().unwrap();
@@ -383,21 +381,17 @@ fn test_relayed_connection() {
         send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
         assert_next_message_is_key_accepted(&mut con_client).await;
 
-        assert_eq!(
-            con_host.next().await.unwrap().unwrap(),
-            ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.peer2.key.to_owned(),
-                peer_ip_address: "127.0.0.1".to_owned()
-            })
-        );
+        assert_next_message_is_peer_joined(
+            &mut con_host,
+            "127.0.0.1",
+            mock_session.peer2.key.as_str(),
+        ).await;
 
-        assert_eq!(
-            con_client.next().await.unwrap().unwrap(),
-            ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.peer1.key.to_owned(),
-                peer_ip_address: "127.0.0.1".to_owned()
-            })
-        );
+        assert_next_message_is_peer_joined(
+            &mut con_client,
+            "127.0.0.1",
+            mock_session.peer1.key.as_str(),
+        ).await;
 
         let message_host = con_host.next().await.unwrap().unwrap();
         let message_client = con_client.next().await.unwrap().unwrap();
@@ -459,7 +453,7 @@ fn test_relayed_connection() {
 
         // Wait for socket to be closed
         delay_for(Duration::from_millis(1100)).await;
-        
+
         con_host
             .next()
             .await
@@ -496,21 +490,17 @@ fn test_clean_up_paired_connection() {
         send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
         assert_next_message_is_key_accepted(&mut con_client).await;
 
-        assert_eq!(
-            con_host.next().await.unwrap().unwrap(),
-            ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.peer2.key.to_owned(),
-                peer_ip_address: "127.0.0.1".to_owned()
-            })
-        );
+        assert_next_message_is_peer_joined(
+            &mut con_host,
+            "127.0.0.1",
+            mock_session.peer2.key.as_str(),
+        ).await;
 
-        assert_eq!(
-            con_client.next().await.unwrap().unwrap(),
-            ServerMessage::PeerJoined(PeerJoinedPayload {
-                peer_key: mock_session.peer1.key.to_owned(),
-                peer_ip_address: "127.0.0.1".to_owned()
-            })
-        );
+        assert_next_message_is_peer_joined(
+            &mut con_client,
+            "127.0.0.1",
+            mock_session.peer1.key.as_str(),
+        ).await;
 
         let message_host = con_host.next().await.unwrap().unwrap();
         let message_client = con_client.next().await.unwrap().unwrap();

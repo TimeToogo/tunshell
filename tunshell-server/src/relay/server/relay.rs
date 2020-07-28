@@ -2,7 +2,7 @@ use super::{Connection, PairedConnection};
 use anyhow::{Context as AnyhowContext, Error, Result};
 use futures::FutureExt;
 use log::*;
-use rand::Rng;
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use tunshell_shared::{
@@ -16,17 +16,21 @@ pub(super) fn pair_connections(
 ) -> PairedConnection {
     debug!("pairing connections");
 
+    let session_nonce = generate_secure_nonce();
+
     let task = async move {
         tokio::try_join!(
             con1.stream
                 .write(ServerMessage::PeerJoined(PeerJoinedPayload {
                     peer_ip_address: con2.remote_addr.ip().to_string(),
                     peer_key: con2.key.clone(),
+                    session_nonce: session_nonce.clone()
                 })),
             con2.stream
                 .write(ServerMessage::PeerJoined(PeerJoinedPayload {
                     peer_ip_address: con1.remote_addr.ip().to_string(),
                     peer_key: con1.key.clone(),
+                    session_nonce
                 })),
         )
         .context("sending peer joined message")?;
@@ -92,10 +96,15 @@ pub(super) fn pair_connections(
     }
 }
 
+// 22 alphanurmeric chars ~= 131 bits of entropy
+fn generate_secure_nonce() -> String {
+    thread_rng().sample_iter(&Alphanumeric).take(22).collect()
+}
+
 async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection) -> Result<bool> {
     // TODO: Improve port selection
     let (port1, port2) = {
-        let mut rng = rand::thread_rng();
+        let mut rng = thread_rng();
         (rng.gen_range(20000, 40000), rng.gen_range(20000, 40000))
     };
 

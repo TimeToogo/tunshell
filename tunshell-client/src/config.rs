@@ -4,7 +4,6 @@ use std::{convert::TryFrom, env};
 pub struct Config {
     mode: ClientMode,
     session_key: String,
-    encryption_salt: String,
     encryption_key: String,
     relay_host: String,
     relay_port: u16,
@@ -25,15 +24,10 @@ impl Config {
         let mode =
             ClientMode::try_from(args.next().expect("mode arg (2) must be set").as_str()).unwrap();
         let session_key = args.next().expect("session key arg (3) must be set");
-        let encryption_salt = args.next().expect("encryption salt arg (4) must be set");
-        let encryption_key = args.next().expect("encryption key arg (5) must be set");
+        let encryption_key = args.next().expect("encryption key arg (4) must be set");
 
         if session_key.len() < 10 {
             panic!("session key is too short")
-        }
-
-        if encryption_salt.len() < 5 {
-            panic!("encryption salt is too short")
         }
 
         if encryption_key.len() < 10 {
@@ -45,7 +39,6 @@ impl Config {
             session_key,
             relay_host: "relay.tunshell.com".to_owned(),
             relay_port: 5000,
-            encryption_salt,
             encryption_key,
         }
     }
@@ -55,7 +48,6 @@ impl Config {
         client_key: &str,
         relay_host: &str,
         relay_port: u16,
-        encryption_salt: &str,
         encryption_key: &str,
     ) -> Self {
         Self {
@@ -63,7 +55,6 @@ impl Config {
             session_key: client_key.to_owned(),
             relay_host: relay_host.to_owned(),
             relay_port,
-            encryption_salt: encryption_salt.to_owned(),
             encryption_key: encryption_key.to_owned(),
         }
     }
@@ -86,10 +77,6 @@ impl Config {
 
     pub fn relay_port(&self) -> u16 {
         self.relay_port
-    }
-
-    pub fn encryption_salt(&self) -> &str {
-        &self.encryption_salt[..]
     }
 
     pub fn encryption_key(&self) -> &str {

@@ -10,6 +10,7 @@ tunshell todo:
     - [x] website to generate PSK for AEAD stream for relay and direct connections
     - [x] script templates to be moved to S3
     - [x] move logic to decide on target/client host to client binary
+    - [x] relay server to generate session specific key which is concat to the client PSK
  - [x] basic rust-only shell fallback for limited envs without pty 
  - [ ] support in-browser terminal client
     - [ ] tunshell-client wasm target

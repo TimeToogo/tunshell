@@ -6,7 +6,7 @@ use std::panic;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
-pub fn tunshell_init_client(client_key: String, encryption_salt: String, encryption_key: String) {
+pub fn tunshell_init_client(client_key: String, encryption_key: String) {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     let config = Config::new(
@@ -14,7 +14,6 @@ pub fn tunshell_init_client(client_key: String, encryption_salt: String, encrypt
         &client_key,
         "relay.tunshell.com",
         5001,
-        &encryption_salt,
         &encryption_key,
     );
 

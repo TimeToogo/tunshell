@@ -43,6 +43,7 @@ pub enum ClientMessage {
 pub struct PeerJoinedPayload {
     pub peer_key: String,
     pub peer_ip_address: String,
+    pub session_nonce: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -296,16 +297,17 @@ mod tests {
         let message = ServerMessage::PeerJoined(PeerJoinedPayload {
             peer_key: "key".to_string(),
             peer_ip_address: "123.123.123.123".to_string(),
+            session_nonce: "nonce".to_string(),
         });
 
         let raw_message = message.serialise().unwrap();
 
         assert_eq!(raw_message.type_id, 4);
         assert_eq!(
-            String::from_utf8(raw_message.data).unwrap(),
-            r#"{"peer_key":"key","peer_ip_address":"123.123.123.123"}"#
+            String::from_utf8(raw_message.data.clone()).unwrap(),
+            r#"{"peer_key":"key","peer_ip_address":"123.123.123.123","session_nonce":"nonce"}"#
         );
-        assert_eq!(raw_message.length, 54);
+        assert_eq!(raw_message.length, raw_message.data.len() as u16);
     }
 
     #[test]
@@ -401,7 +403,7 @@ mod tests {
     fn test_server_deserialise_peer_joined() {
         let raw_message = RawMessage::new(
             4,
-            Vec::from(r#"{"peer_key": "key", "peer_ip_address": "123.123.123.123"}"#.as_bytes()),
+            Vec::from(r#"{"peer_key": "key", "peer_ip_address": "123.123.123.123", "session_nonce": "nonce"}"#.as_bytes()),
         );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
@@ -410,7 +412,8 @@ mod tests {
             message,
             ServerMessage::PeerJoined(PeerJoinedPayload {
                 peer_key: "key".to_owned(),
-                peer_ip_address: "123.123.123.123".to_owned()
+                peer_ip_address: "123.123.123.123".to_owned(),
+                session_nonce: "nonce".to_owned()
             })
         );
     }

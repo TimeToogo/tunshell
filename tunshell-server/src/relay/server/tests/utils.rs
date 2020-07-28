@@ -147,3 +147,29 @@ pub(super) async fn assert_next_message_is_key_accepted(con: &mut ClientConnecti
         ServerMessage::KeyAccepted
     );
 }
+
+pub(super) async fn assert_next_message_is_peer_joined(
+    con: &mut ClientConnection,
+    peer_ip_address: &str,
+    peer_key: &str,
+) -> PeerJoinedPayload {
+    let message = con.next().await.unwrap().unwrap();
+    let payload = match &message {
+        ServerMessage::PeerJoined(i) => i.clone(),
+        msg @ _ => panic!(
+            "expected PeerJoined payload from connection but received: {:?}",
+            msg
+        ),
+    };
+
+    assert_eq!(
+        message,
+        ServerMessage::PeerJoined(PeerJoinedPayload {
+            peer_ip_address: peer_ip_address.to_owned(),
+            peer_key: peer_key.to_owned(),
+            session_nonce: payload.session_nonce.clone()
+        })
+    );
+
+    payload
+}

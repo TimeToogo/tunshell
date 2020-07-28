@@ -122,9 +122,10 @@ impl Client {
             }
         };
 
+        assert!(peer_info.session_nonce.len() > 10);
         let stream = AesStream::new(
             stream.compat(),
-            self.config.encryption_salt().as_bytes(),
+            peer_info.session_nonce.as_bytes(),
             self.config.encryption_key().as_bytes(),
         );
 
@@ -228,13 +229,28 @@ mod tests {
     use tokio::runtime::Runtime;
 
     #[test]
+    fn test_connect_to_relay_server() {
+        let config = Config::new(
+            ClientMode::Target,
+            "test",
+            "relay.tunshell.com",
+            5000,
+            "test",
+        );
+        let mut client = Client::new(&config);
+
+        let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
+
+        result.unwrap();
+    }
+
+    #[test]
     fn test_send_invalid_key() {
         let config = Config::new(
             ClientMode::Target,
             "invalid_key",
             "relay.tunshell.com",
             5000,
-            "test",
             "test",
         );
         let mut client = Client::new(config);
