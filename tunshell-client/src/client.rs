@@ -31,9 +31,8 @@ impl Client {
         println!("{} joined the session", peer_info.peer_ip_address);
 
         println!("Negotiating connection...");
-        let message_stream = Arc::new(Mutex::new(message_stream));
         let peer_socket = self
-            .negotiate_peer_connection(&message_stream, &mut peer_info, self.config.is_target())
+            .negotiate_peer_connection(message_stream, &mut peer_info, self.config.is_target())
             .await?;
 
         let exit_code = match self.config.mode() {
@@ -82,17 +81,16 @@ impl Client {
 
     async fn negotiate_peer_connection(
         &mut self,
-        message_stream: &Arc<Mutex<ClientMessageStream>>,
+        mut message_stream: ClientMessageStream,
         peer_info: &mut PeerJoinedPayload,
         master_side: bool,
     ) -> Result<Box<dyn TunnelStream>> {
         let stream = loop {
-            let mut msg_stream = message_stream.lock().unwrap();
-            match msg_stream.next().await {
+            match message_stream.next().await {
                 Some(Ok(ServerMessage::AttemptDirectConnect(payload))) => {
                     match self
                         .attempt_direct_connection(
-                            &mut msg_stream,
+                            &mut message_stream,
                             peer_info,
                             &payload,
                             master_side,
@@ -104,14 +102,14 @@ impl Client {
                             break direct_stream;
                         }
                         None => {
-                            msg_stream
+                            message_stream
                                 .write(&ClientMessage::DirectConnectFailed)
                                 .await?
                         }
                     }
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => {
-                    break Box::new(RelayStream::new(Arc::clone(message_stream)))
+                    break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))))
                 }
                 Some(Ok(message)) => {
                     return Err(Error::msg(format!(

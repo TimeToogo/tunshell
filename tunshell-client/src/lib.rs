@@ -18,9 +18,6 @@ pub use stream::*;
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
-        #[global_allocator]
-        static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
         mod wasm;
         pub use wasm::*;
     }
