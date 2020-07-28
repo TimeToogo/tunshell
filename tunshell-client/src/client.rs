@@ -195,9 +195,10 @@ impl<'a> Client<'a> {
             }
         };
 
+        assert!(peer_info.session_nonce.len() > 10);
         let stream = AesStream::new(
             stream.compat(),
-            self.config.encryption_salt().as_bytes(),
+            peer_info.session_nonce.as_bytes(),
             self.config.encryption_key().as_bytes(),
         );
 
@@ -276,7 +277,6 @@ mod tests {
             "relay.tunshell.com",
             5000,
             "test",
-            "test",
         );
         let mut client = Client::new(&config);
 
@@ -292,7 +292,6 @@ mod tests {
             "invalid_key",
             "relay.tunshell.com",
             5000,
-            "test",
             "test",
         );
         let mut client = Client::new(&config);
