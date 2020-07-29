@@ -181,7 +181,7 @@ impl WebSocketListener {
             .tls()
             .cert_path(config.tls_cert_path)
             .key_path(config.tls_key_path)
-            .run(([127, 0, 0, 1], config.ws_port));
+            .run(([0, 0, 0, 0], config.ws_port));
 
         let task = tokio::spawn(async move {
             tokio::select! {
@@ -306,6 +306,24 @@ mod tests {
             let message = client_con.next().await.unwrap().unwrap();
 
             assert_eq!(message, ClientMessage::binary(vec![4, 5, 6]));
+        });
+    }
+
+    #[test]
+    fn test_simultaneous_connections_to_listener() {
+        Runtime::new().unwrap().block_on(async {
+            let mut config = Config::from_env().unwrap();
+            let mut listener = init_server(&mut config).await;
+            let ((addr1, _client_con1), (addr2, _client_con2)) = futures::join!(
+                init_connection(config.ws_port),
+                init_connection(config.ws_port)
+            );
+
+            let server_con1 = listener.accept().await.unwrap();
+            let server_con2 = listener.accept().await.unwrap();
+
+            assert_eq!(addr1, server_con1.get_peer_addr().unwrap());
+            assert_eq!(addr2, server_con2.get_peer_addr().unwrap());
         });
     }
 }
