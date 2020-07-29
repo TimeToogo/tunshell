@@ -1,8 +1,8 @@
-use super::super::config::Config;
+use super::{super::config::Config, IoStream};
 use anyhow::{Error, Result};
 use log::*;
 use mpsc::{Receiver, Sender};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::{sync::Arc, time::Duration};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -18,9 +18,15 @@ pub(super) struct TlsListener {
     terminate_tx: Sender<()>,
 }
 
+impl IoStream for TlsStream<TcpStream> {
+    fn get_peer_addr(&self) -> Result<SocketAddr> {
+        self.get_ref().0.peer_addr().map_err(Error::from)
+    }
+}
+
 impl TlsListener {
     pub(super) async fn bind(config: &Config) -> Result<Self> {
-        let tcp = TcpListener::bind((Ipv4Addr::new(0, 0, 0, 0), config.port)).await?;
+        let tcp = TcpListener::bind((Ipv4Addr::new(0, 0, 0, 0), config.tls_port)).await?;
         let tls = TlsAcceptor::from(Arc::clone(&config.tls_config));
 
         let (terminate_tx, terminate_rx) = mpsc::channel(1);
@@ -104,9 +110,8 @@ async fn accept_tls_connection(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::relay::server::tests::NullCertVerifier;
+    use crate::relay::server::tests::insecure_tls_config;
     use lazy_static::lazy_static;
-    use rustls::ClientConfig;
     use std::{net::SocketAddr, sync::Mutex};
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
@@ -127,7 +132,7 @@ mod tests {
     }
 
     async fn init_server(config: &mut Config) -> TlsListener {
-        config.port = init_port_number();
+        config.tls_port = init_port_number();
         let server = TlsListener::bind(&config).await;
 
         server.unwrap()
@@ -138,18 +143,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut client_config = ClientConfig::default();
-
-        client_config
-            .set_single_client_cert(
-                Config::parse_tls_cert().unwrap(),
-                Config::parse_tls_private_key().unwrap(),
-            )
-            .unwrap();
-
-        client_config
-            .dangerous()
-            .set_certificate_verifier(Arc::new(NullCertVerifier {}));
+        let client_config = insecure_tls_config();
 
         let client = TlsConnector::from(Arc::new(client_config))
             .connect(
@@ -167,7 +161,7 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut config = Config::from_env().unwrap();
             let mut listener = init_server(&mut config).await;
-            let mut client_con = init_connection(config.port).await;
+            let mut client_con = init_connection(config.tls_port).await;
 
             let mut server_con = listener.accept().await.unwrap();
 
@@ -194,8 +188,10 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut config = Config::from_env().unwrap();
             let mut listener = init_server(&mut config).await;
-            let (client_con1, client_con2) =
-                futures::join!(init_connection(config.port), init_connection(config.port));
+            let (client_con1, client_con2) = futures::join!(
+                init_connection(config.tls_port),
+                init_connection(config.tls_port)
+            );
 
             let server_con1 = listener.accept().await.unwrap();
             let server_con2 = listener.accept().await.unwrap();

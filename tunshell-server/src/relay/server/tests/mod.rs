@@ -303,13 +303,15 @@ fn test_direct_connection() {
             &mut con_host,
             "127.0.0.1",
             mock_session.peer2.key.as_str(),
-        ).await;
+        )
+        .await;
 
         let peer_joined2 = assert_next_message_is_peer_joined(
             &mut con_client,
             "127.0.0.1",
             mock_session.peer1.key.as_str(),
-        ).await;
+        )
+        .await;
 
         assert_eq!(peer_joined1.session_nonce, peer_joined2.session_nonce);
 
@@ -385,13 +387,15 @@ fn test_relayed_connection() {
             &mut con_host,
             "127.0.0.1",
             mock_session.peer2.key.as_str(),
-        ).await;
+        )
+        .await;
 
         assert_next_message_is_peer_joined(
             &mut con_client,
             "127.0.0.1",
             mock_session.peer1.key.as_str(),
-        ).await;
+        )
+        .await;
 
         let message_host = con_host.next().await.unwrap().unwrap();
         let message_client = con_client.next().await.unwrap().unwrap();
@@ -494,13 +498,15 @@ fn test_clean_up_paired_connection() {
             &mut con_host,
             "127.0.0.1",
             mock_session.peer2.key.as_str(),
-        ).await;
+        )
+        .await;
 
         assert_next_message_is_peer_joined(
             &mut con_client,
             "127.0.0.1",
             mock_session.peer1.key.as_str(),
-        ).await;
+        )
+        .await;
 
         let message_host = con_host.next().await.unwrap().unwrap();
         let message_client = con_client.next().await.unwrap().unwrap();

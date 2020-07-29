@@ -9,11 +9,17 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-use tokio::{net::TcpStream, task::JoinHandle};
-use tokio_rustls::server::TlsStream;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    task::JoinHandle,
+};
 use tunshell_shared::ClientMessage;
 
-type ConnectionStream = ClientMessageStream<TlsStream<TcpStream>>;
+pub(super) trait IoStream: AsyncRead + AsyncWrite + Unpin + Send + Sync {
+    fn get_peer_addr(&self) -> Result<SocketAddr>;
+}
+
+type ConnectionStream = ClientMessageStream<Box<dyn IoStream>>;
 
 pub(super) struct Connection {
     pub(super) stream: ConnectionStream,

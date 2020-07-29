@@ -18,10 +18,13 @@ webpki = "0.21.3"
 webpki-roots = "0.20.0"
 log = "0.4.8"
 env_logger = "0.7.1"
-warp = "0.2.3"
+warp = { version = "0.2.3", features=["tls"] }
 chrono = "0.4.13"
 rustls = "0.18.0"
 rand = "0.7.3"
 
 [dev-dependencies]
 lazy_static = "1.4.0"
+async-tungstenite = { version = "0.8.0", features=["async-tls", "tokio-runtime"] }
+async-tls = "0.9.0"
+tungstenite = "0.11.0"

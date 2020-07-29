@@ -8,7 +8,10 @@ pub async fn start() -> Result<()> {
 
     let sessions = db::SessionStore::new(db::connect().await?);
 
-    info!("starting relay server on port {}", config.port);
+    info!(
+        "starting relay server on ports (tls: {}, ws: {})",
+        config.tls_port, config.ws_port
+    );
 
     Server::new(config, sessions).start(None).await
 }

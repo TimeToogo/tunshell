@@ -23,16 +23,17 @@ lazy_static! {
 
 type ClientConnection = MessageStream<ClientMessage, ServerMessage, Compat<TlsStream<TcpStream>>>;
 
-pub(super) fn init_port_number() -> u16 {
+pub(super) fn init_port_numbers() -> (u16, u16) {
     let mut port = TCP_PORT_NUMBER.lock().unwrap();
 
-    *port += 1;
+    *port += 2;
 
-    *port - 1
+    (*port - 1, *port - 2)
 }
 
 pub(super) struct TerminableServer {
-    port: u16,
+    tls_port: u16,
+    _ws_port: u16,
     running: JoinHandle<Server>,
     terminate: mpsc::Sender<()>,
 }
@@ -45,7 +46,9 @@ impl TerminableServer {
 }
 
 pub(super) async fn init_server(mut server_config: Config) -> TerminableServer {
-    server_config.port = init_port_number();
+    let (tls_port, ws_port) = init_port_numbers();
+    server_config.tls_port = tls_port;
+    server_config.ws_port = ws_port;
 
     let sessions = SessionStore::new(db::connect().await.unwrap());
 
@@ -61,7 +64,7 @@ pub(super) async fn init_server(mut server_config: Config) -> TerminableServer {
     loop {
         let socket = TcpStream::connect(SocketAddr::from((
             Ipv4Addr::new(127, 0, 0, 1),
-            server_config.port,
+            server_config.tls_port,
         )))
         .await;
 
@@ -73,7 +76,8 @@ pub(super) async fn init_server(mut server_config: Config) -> TerminableServer {
     }
 
     TerminableServer {
-        port: server_config.port,
+        tls_port: server_config.tls_port,
+        _ws_port: server_config.ws_port,
         running,
         terminate: tx,
     }
@@ -82,24 +86,14 @@ pub(super) async fn init_server(mut server_config: Config) -> TerminableServer {
 pub(super) async fn create_client_connection_to_server(
     server: &TerminableServer,
 ) -> ClientConnection {
-    let client = TcpStream::connect(SocketAddr::from((Ipv4Addr::new(127, 0, 0, 1), server.port)))
-        .await
-        .unwrap();
+    let client = TcpStream::connect(SocketAddr::from((
+        Ipv4Addr::new(127, 0, 0, 1),
+        server.tls_port,
+    )))
+    .await
+    .unwrap();
 
-    let mut client_config = ClientConfig::default();
-
-    client_config
-        .set_single_client_cert(
-            Config::parse_tls_cert().unwrap(),
-            Config::parse_tls_private_key().unwrap(),
-        )
-        .unwrap();
-
-    client_config
-        .dangerous()
-        .set_certificate_verifier(Arc::new(NullCertVerifier {}));
-
-    let client = TlsConnector::from(Arc::new(client_config))
+    let client = TlsConnector::from(Arc::new(insecure_tls_config()))
         .connect(
             webpki::DNSNameRef::try_from_ascii("localhost".as_bytes()).unwrap(),
             client,
@@ -122,6 +116,24 @@ impl rustls::ServerCertVerifier for NullCertVerifier {
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
         Ok(rustls::ServerCertVerified::assertion())
     }
+}
+
+pub(crate) fn insecure_tls_config() -> ClientConfig {
+    let mut client_config = ClientConfig::default();
+
+    let conf = Config::from_env().unwrap();
+    client_config
+        .set_single_client_cert(
+            Config::parse_tls_cert(conf.tls_cert_path).unwrap(),
+            Config::parse_tls_private_key(conf.tls_key_path).unwrap(),
+        )
+        .unwrap();
+
+    client_config
+        .dangerous()
+        .set_certificate_verifier(Arc::new(NullCertVerifier {}));
+
+    client_config
 }
 
 pub(super) async fn create_mock_session() -> Session {

@@ -11,8 +11,11 @@ const DEFAULT_CONNECTED_CONNECTION_EXPIRY_MS: u64 = 3600_000;
 
 #[derive(Clone)]
 pub(super) struct Config {
-    pub(super) port: u16,
+    pub(super) tls_port: u16,
+    pub(super) ws_port: u16,
     pub(super) tls_config: Arc<ServerConfig>,
+    pub(super) tls_key_path: String,
+    pub(super) tls_cert_path: String,
     pub(super) client_key_timeout: Duration,
     pub(super) expired_connection_clean_interval: Duration,
     pub(super) waiting_connection_expiry: Duration,
@@ -21,16 +24,25 @@ pub(super) struct Config {
 
 impl Config {
     pub(super) fn from_env() -> Result<Config> {
-        let port = env::var("TUNSHELL_RELAY_PORT")?;
-        let port = port.parse::<u16>()?;
+        let tls_port = env::var("TUNSHELL_RELAY_TLS_PORT")?.parse::<u16>()?;
+        let ws_port = env::var("TUNSHELL_RELAY_WS_PORT")?.parse::<u16>()?;
+
+        let tls_cert_path = env::var("TLS_RELAY_CERT")?;
+        let tls_key_path = env::var("TLS_RELAY_PRIVATE_KEY")?;
 
         let mut tls_config = ServerConfig::new(NoClientAuth::new());
-        tls_config.set_single_cert(Self::parse_tls_cert()?, Self::parse_tls_private_key()?)?;
+        tls_config.set_single_cert(
+            Self::parse_tls_cert(tls_cert_path.clone())?,
+            Self::parse_tls_private_key(tls_key_path.clone())?,
+        )?;
         let tls_config = Arc::new(tls_config);
 
         Ok(Config {
-            port,
+            tls_port,
+            ws_port,
             tls_config,
+            tls_cert_path,
+            tls_key_path,
             client_key_timeout: Duration::from_millis(DEFAULT_CLIENT_KEY_TIMEOUT_MS),
             expired_connection_clean_interval: Duration::from_millis(
                 DEFAULT_CLEAN_EXPIRED_CONNECTION_INTERVAL_MS,
@@ -40,15 +52,15 @@ impl Config {
         })
     }
 
-    pub(super) fn parse_tls_cert() -> Result<Vec<Certificate>> {
-        let file = fs::File::open(env::var("TLS_RELAY_CERT")?)?;
+    pub(super) fn parse_tls_cert(path: String) -> Result<Vec<Certificate>> {
+        let file = fs::File::open(path)?;
         let mut reader = io::BufReader::new(file);
 
         pemfile::certs(&mut reader).map_err(|_| Error::msg("failed to parse tls cert file"))
     }
 
-    pub(super) fn parse_tls_private_key() -> Result<PrivateKey> {
-        let file = fs::File::open(env::var("TLS_RELAY_PRIVATE_KEY")?)?;
+    pub(super) fn parse_tls_private_key(path: String) -> Result<PrivateKey> {
+        let file = fs::File::open(path)?;
         let mut reader = io::BufReader::new(file);
 
         let keys = pemfile::pkcs8_private_keys(&mut reader)
@@ -64,18 +76,21 @@ mod tests {
 
     #[test]
     fn test_config_from_env() {
-        env::remove_var("TUNSHELL_RELAY_PORT");
+        env::remove_var("TUNSHELL_RELAY_TLS_PORT");
+        env::remove_var("TUNSHELL_RELAY_WS_PORT");
         env::remove_var("TLS_RELAY_CERT");
         env::remove_var("TLS_RELAY_PRIVATE_KEY");
 
         assert!(Config::from_env().is_err());
 
-        env::set_var("TUNSHELL_RELAY_PORT", "1234");
+        env::set_var("TUNSHELL_RELAY_TLS_PORT", "1234");
+        env::set_var("TUNSHELL_RELAY_WS_PORT", "1235");
         env::set_var("TLS_RELAY_CERT", "certs/development.cert");
         env::set_var("TLS_RELAY_PRIVATE_KEY", "certs/development.key");
 
         let config = Config::from_env().unwrap();
 
-        assert_eq!(config.port, 1234);
+        assert_eq!(config.tls_port, 1234);
+        assert_eq!(config.ws_port, 1235);
     }
 }

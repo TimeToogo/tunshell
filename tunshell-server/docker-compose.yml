@@ -16,9 +16,11 @@ services:
     ports:
       - "3000:3000"
       - "3001:3001"
+      - "3002:3002"
     environment:
       TUNSHELL_API_PORT: 3000
-      TUNSHELL_RELAY_PORT: 3001
+      TUNSHELL_RELAY_TLS_PORT: 3001
+      TUNSHELL_RELAY_WS_PORT: 3002
       MONGO_CONNECTION_STRING: mongodb://relay:password@mongo:27017/relay
       TLS_RELAY_PRIVATE_KEY: /app/tunshell-server/certs/development.key
       TLS_RELAY_CERT: /app/tunshell-server/certs/development.cert

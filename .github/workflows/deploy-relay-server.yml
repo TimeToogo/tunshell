@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - feature/ws
 
 jobs:
   build_test_deploy:

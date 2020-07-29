@@ -4,8 +4,7 @@ use anyhow::{Error, Result};
 use log::*;
 use std::time::Instant;
 use tokio::sync::mpsc;
-use tokio::{net::TcpStream, task::JoinHandle};
-use tokio_rustls::server::TlsStream;
+use tokio::task::JoinHandle;
 use tunshell_shared::{ClientMessage, ServerMessage};
 
 mod connection;
@@ -13,14 +12,15 @@ mod message_stream;
 mod relay;
 mod session_validation;
 mod tls;
+mod ws;
 
 pub(self) use connection::*;
 pub(self) use message_stream::*;
 pub(self) use relay::*;
 pub(self) use session_validation::*;
 pub(self) use tls::*;
+pub(self) use ws::*;
 
-// #[cfg(all(test, integration))]
 #[cfg(test)]
 mod tests;
 
@@ -41,6 +41,7 @@ impl Server {
 
     pub(super) async fn start(&mut self, terminate_rx: Option<mpsc::Receiver<()>>) -> Result<()> {
         let mut tls_listener = TlsListener::bind(&self.config).await?;
+        let mut ws_listener = WebSocketListener::bind(&self.config).await?;
 
         // If the terminate channel is not supplied we create a default channel
         // that is never invoked
@@ -57,7 +58,8 @@ impl Server {
 
         loop {
             tokio::select! {
-                stream = tls_listener.accept() => { self.handle_new_connection(stream); },
+                stream = tls_listener.accept() => { self.handle_new_connection(stream.map(|i| Box::new(i) as Box<dyn IoStream>)); },
+                stream = ws_listener.accept() => { self.handle_new_connection(stream.map(|i| Box::new(i) as Box<dyn IoStream>)); },
                 accepted = &mut self.connections.new => { self.handle_accepted_connection(accepted); },
                 closed = &mut self.connections.waiting => { self.handle_closed_waiting_connection(closed); },
                 finished = &mut self.connections.paired => { self.handle_finished_connection(finished); }
@@ -72,7 +74,7 @@ impl Server {
         Ok(())
     }
 
-    fn handle_new_connection(&mut self, stream: Result<TlsStream<TcpStream>>) {
+    fn handle_new_connection(&mut self, stream: Result<Box<dyn IoStream>>) {
         if let Err(err) = stream {
             warn!("error while establishing connection: {:?}", err);
             return;
@@ -84,16 +86,13 @@ impl Server {
             .push(self.negotiate_key(stream.unwrap()));
     }
 
-    fn negotiate_key(
-        &self,
-        stream: TlsStream<TcpStream>,
-    ) -> JoinHandle<Result<AcceptedConnection>> {
+    fn negotiate_key(&self, stream: Box<dyn IoStream>) -> JoinHandle<Result<AcceptedConnection>> {
         debug!("negotiating key");
         let mut sessions = self.sessions.clone();
         let key_timeout = self.config.client_key_timeout;
 
         tokio::spawn(async move {
-            let remote_addr = stream.get_ref().0.peer_addr()?;
+            let remote_addr = stream.get_peer_addr()?;
             let mut connection = ClientMessageStream::new(stream);
 
             let key = connection.wait_for_key(key_timeout).await;
@@ -120,9 +119,7 @@ impl Server {
                 return Err(Error::msg("session is not valid to join"));
             }
 
-            connection
-                .write(ServerMessage::KeyAccepted)
-                .await?;
+            connection.write(ServerMessage::KeyAccepted).await?;
 
             debug!("key accepted");
             let connection = Connection {
