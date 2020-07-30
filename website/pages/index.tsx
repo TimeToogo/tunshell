@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Head from "next/head";
 import dynamic from "next/dynamic";
 import { TunshellClient } from "../services/tunshell-client";
+import { TerminalEmulator } from "../services/wasm/tunshell_client";
+import { Term } from "../components/term";
 
 interface SessionKeys {
   hostKey: string;
@@ -51,7 +53,19 @@ const InBrowserClient = dynamic({
     // Import the wasm module
     const client = await new TunshellClient().init();
     // Return a React component that calls the add_one method on the wasm module
-    return ({ sessionKey, encryptionKey } : any) => <pre>{JSON.stringify(client)}</pre>;
+    return ({ sessionKey, encryptionKey }: any) => {
+      const [emulator, setEmulator] = useState<TerminalEmulator>();
+
+      useEffect(() => {
+        if (!emulator) {
+          return;
+        }
+
+        client.connect(sessionKey, encryptionKey.key, emulator);
+      }, [sessionKey, encryptionKey, emulator]);
+
+      return <Term onEmulator={setEmulator} />;
+    };
   },
 });
 
@@ -173,7 +187,9 @@ export default function Home() {
                 <TargetHostScript host={targetHost} sessionKey={sessionKeys.hostKey} encryptionKey={encryptionKey} />
                 <div>
                   {getOptions(TargetHost).map(([k, v]) => (
-                    <button onClick={() => setTargetHost(k as any)}>{v}</button>
+                    <button key={k} onClick={() => setTargetHost(k as any)}>
+                      {v}
+                    </button>
                   ))}
                 </div>
               </li>
@@ -183,7 +199,9 @@ export default function Home() {
                 <ClientHostScript host={clientHost} sessionKey={sessionKeys.clientKey} encryptionKey={encryptionKey} />
                 <div>
                   {getOptions(ClientHost).map(([k, v]) => (
-                    <button onClick={() => setClientHost(k as any)}>{v}</button>
+                    <button key={k} onClick={() => setClientHost(k as any)}>
+                      {v}
+                    </button>
                   ))}
                 </div>
               </li>

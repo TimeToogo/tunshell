@@ -1,7 +1,7 @@
-use tunshell_client::{Client, Config};
 use env_logger;
 use log::error;
 use std::process::exit;
+use tunshell_client::{Client, Config, HostShell};
 
 #[tokio::main]
 async fn main() -> () {
@@ -9,7 +9,9 @@ async fn main() -> () {
 
     let config = Config::new_from_env();
 
-    let result = Client::new(config).start_session().await;
+    let result = Client::new(config, HostShell::new().unwrap())
+        .start_session()
+        .await;
 
     match result {
         Ok(code) => exit(code as i32),

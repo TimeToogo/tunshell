@@ -1,4 +1,6 @@
-use crate::{AesStream, ClientMode, Config, RelayStream, ServerStream, ShellKey, TunnelStream};
+use crate::{
+    AesStream, ClientMode, Config, HostShell, RelayStream, ServerStream, ShellKey, TunnelStream,
+};
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
 use log::*;
@@ -11,33 +13,38 @@ pub type ClientMessageStream = MessageStream<ClientMessage, ServerMessage, Compa
 
 pub struct Client {
     config: Config,
+    host_shell: Option<HostShell>,
 }
 
 impl Client {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn new(config: Config, host_shell: HostShell) -> Self {
+        Self { config, host_shell: Some(host_shell) }
+    }
+
+    fn println(&self, line: &str) {
+        self.host_shell.as_ref().unwrap().println(line);
     }
 
     pub async fn start_session(&mut self) -> Result<u8> {
-        println!("Connecting to relay server...");
+        self.println("Connecting to relay server...");
         let relay_socket = ServerStream::connect(&self.config).await?;
 
         let mut message_stream = ClientMessageStream::new(relay_socket.compat());
 
         self.send_key(&mut message_stream).await?;
 
-        println!("Waiting for peer to join...");
+        self.println("Waiting for peer to join...");
         let mut peer_info = self.wait_for_peer_to_join(&mut message_stream).await?;
-        println!("{} joined the session", peer_info.peer_ip_address);
+        self.println(&format!("{} joined the session", peer_info.peer_ip_address));
 
-        println!("Negotiating connection...");
+        self.println("Negotiating connection...");
         let peer_socket = self
             .negotiate_peer_connection(message_stream, &mut peer_info, self.config.is_target())
             .await?;
 
         let exit_code = match self.config.mode() {
             ClientMode::Target => self.start_shell_server(peer_socket).await?,
-            ClientMode::Local => self.start_shell_client(peer_socket).await?
+            ClientMode::Local => self.start_shell_client(peer_socket).await?,
         };
 
         Ok(exit_code)
@@ -98,7 +105,7 @@ impl Client {
                         .await?
                     {
                         Some(direct_stream) => {
-                            println!("Direct connection to peer established");
+                            self.println("Direct connection to peer established");
                             break direct_stream;
                         }
                         None => {
@@ -129,7 +136,7 @@ impl Client {
             self.config.encryption_key().as_bytes(),
         );
 
-        println!("Falling back to relayed connection");
+        self.println("Falling back to relayed connection");
         Ok(Box::new(stream))
     }
 
@@ -143,10 +150,10 @@ impl Client {
     ) -> Result<Option<Box<dyn TunnelStream>>> {
         use crate::p2p::{self, P2PConnection};
 
-        println!(
+        self.println(format!(
             "Attempting direct connection to {}",
             peer_info.peer_ip_address
-        );
+        ));
 
         // Initialise and bind sockets
         let mut tcp = p2p::tcp::TcpConnection::new(peer_info.clone(), connection_info.clone());
@@ -200,7 +207,8 @@ impl Client {
         connection_info: &AttemptDirectConnectPayload,
         master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
-        Err(Error::msg("not supported"))
+        // Does not support direct connection when running in browser
+        Ok(None)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -216,8 +224,8 @@ impl Client {
         unreachable!()
     }
 
-    async fn start_shell_client(&self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
-        crate::ShellClient::new()?
+    async fn start_shell_client(&mut self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
+        crate::ShellClient::new(self.host_shell.take().unwrap())?
             .connect(peer_socket, ShellKey::new(self.config.encryption_key()))
             .await
     }
@@ -237,7 +245,7 @@ mod tests {
             5000,
             "test",
         );
-        let mut client = Client::new(&config);
+        let mut client = Client::new(&config, HostShell::new().unwrap());
 
         let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
 
@@ -253,7 +261,7 @@ mod tests {
             5000,
             "test",
         );
-        let mut client = Client::new(config);
+        let mut client = Client::new(config, HostShell::new().unwrap());
 
         let result = Runtime::new().unwrap().block_on(client.start_session());
 

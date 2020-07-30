@@ -41,16 +41,24 @@ wee_alloc = "0.4.5"
 wasm-bindgen = "0.2.65"
 wasm-bindgen-futures = "0.4.15"
 console_error_panic_hook = "0.1.6"
+console_log = "0.2.0"
+js-sys = "0.3.44"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.42"
 features = [
     "console",
-    "WebSocket",
     "Crypto",
     "SubtleCrypto",
     "CryptoKey",
-    "Pbkdf2Params"
+    "Pbkdf2Params",
+    "BinaryType",
+    "Blob",
+    "ErrorEvent",
+    "FileReader",
+    "MessageEvent",
+    "ProgressEvent",
+    "WebSocket",
 ]
 
 [dev-dependencies]

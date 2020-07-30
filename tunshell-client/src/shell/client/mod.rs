@@ -12,20 +12,22 @@ use tokio_util::compat::*;
 cfg_if::cfg_if! {
     if #[cfg(not(target_arch = "wasm32"))] {
         mod shell;
-        use shell::*;
+        pub use shell::*;
     } else {
         mod xtermjs;
-        use xtermjs::*;
+        pub use xtermjs::*;
     }
 }
 
-pub struct ShellClient {}
+pub struct ShellClient {
+    host_shell: HostShell
+}
 
 type ShellStream = ShellClientStream<Compat<Box<dyn TunnelStream>>>;
 
 impl ShellClient {
-    pub(crate) fn new() -> Result<ShellClient> {
-        Ok(ShellClient {})
+    pub(crate) fn new(host_shell: HostShell) -> Result<ShellClient> {
+        Ok(ShellClient { host_shell })
     }
 
     pub(crate) async fn connect(self, stream: Box<dyn TunnelStream>, key: ShellKey) -> Result<u8> {
@@ -39,21 +41,18 @@ impl ShellClient {
 
         info!("shell client authenticated");
 
-        info!("configuring host shell");
-        let host_shell = HostShell::new().with_context(|| "Failed to configure host shell")?;
-
         debug!("requesting shell from server pty");
         stream
             .write(&ShellClientMessage::StartShell(StartShellPayload {
-                term: host_shell.term().unwrap_or("".to_owned()),
-                size: WindowSize::from(host_shell.size()?),
+                term: self.host_shell.term().unwrap_or("".to_owned()),
+                size: WindowSize::from(self.host_shell.size()?),
             }))
             .await?;
 
         info!("shell requested");
         info!("starting shell stream");
 
-        let exit_code = self.stream_shell_io(host_shell, &mut stream).await?;
+        let exit_code = self.stream_shell_io(&mut stream).await?;
 
         info!("session finished");
 
@@ -86,11 +85,11 @@ impl ShellClient {
         }
     }
 
-    async fn stream_shell_io(&self, host_shell: HostShell, stream: &mut ShellStream) -> Result<u8> {
+    async fn stream_shell_io(&self, stream: &mut ShellStream) -> Result<u8> {
         let mut buff = [0u8; 1024];
-        let mut stdin = host_shell.stdin()?;
-        let mut stdout = host_shell.stdout()?;
-        let mut resize_watcher = host_shell.resize_watcher()?;
+        let mut stdin = self.host_shell.stdin()?;
+        let mut stdout = self.host_shell.stdout()?;
+        let mut resize_watcher = self.host_shell.resize_watcher()?;
 
         loop {
             info!("waiting for shell message");
@@ -148,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_new_shell_client() {
-        ShellClient::new().unwrap();
+        ShellClient::new(HostShell::new().unwrap()).unwrap();
     }
 
     #[test]
@@ -166,7 +165,7 @@ mod tests {
 
             let mock_stream = Cursor::new(mock_data).compat();
 
-            ShellClient::new()
+            ShellClient::new(HostShell::new().unwrap())
                 .unwrap()
                 .connect(Box::new(mock_stream), ShellKey::new("MyKey"))
                 .await
@@ -183,7 +182,7 @@ mod tests {
 
             timeout(
                 Duration::from_millis(5000),
-                ShellClient::new()
+                ShellClient::new(HostShell::new().unwrap())
                     .unwrap()
                     .connect(Box::new(mock_stream), ShellKey::new("CorrectKey")),
             )
@@ -210,7 +209,7 @@ mod tests {
 
             timeout(
                 Duration::from_millis(5000),
-                ShellClient::new()
+                ShellClient::new(HostShell::new().unwrap())
                     .unwrap()
                     .connect(Box::new(mock_stream), ShellKey::new("CorrectKey")),
             )

@@ -6,22 +6,28 @@ use log::*;
 use std::io::{Read, Write};
 use std::thread;
 use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex};
+use crate::TerminalEmulator;
 
 pub struct HostShellStdin {
+    term: Arc<Mutex<TerminalEmulator>>
 }
 
 pub struct HostShellStdout {
+    term: Arc<Mutex<TerminalEmulator>>
 }
 
 pub struct HostShellResizeWatcher {
+    term: Arc<Mutex<TerminalEmulator>>
 }
 
-pub struct HostShell {}
+pub struct HostShell {
+    term: Arc<Mutex<TerminalEmulator>>
+}
 
 impl HostShellStdin {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-        })
+    pub fn new(term: Arc<Mutex<TerminalEmulator>>) -> Result<Self> {
+        Ok(Self { term })
     }
 
     pub async fn read(&mut self, buff: &mut [u8]) -> Result<usize> {
@@ -30,8 +36,8 @@ impl HostShellStdin {
 }
 
 impl HostShellStdout {
-    pub fn new() -> Result<Self> {
-        todo!()
+    pub fn new(term: Arc<Mutex<TerminalEmulator>>) -> Result<Self> {
+        Ok(Self { term })
     }
 
     pub fn write(&mut self, buff: &[u8]) -> Result<()> {
@@ -40,8 +46,8 @@ impl HostShellStdout {
 }
 
 impl HostShellResizeWatcher {
-    pub fn new() -> Result<Self> {
-        todo!()
+    pub fn new(term: Arc<Mutex<TerminalEmulator>>) -> Result<Self> {
+        Ok(Self { term })
     }
 
     pub async fn next(&mut self) -> Result<(u16, u16)> {
@@ -50,33 +56,44 @@ impl HostShellResizeWatcher {
 }
 
 impl HostShell {
-    pub fn new() -> Result<Self> {
-        Ok(Self {})
+    pub fn new(term: TerminalEmulator) -> Result<Self> {
+        Ok(Self { 
+            term: Arc::new(Mutex::new(term))
+         })
+    }
+
+    pub fn println(&self, output: &str) {
+        let term = self.term.lock().unwrap();
+        term.write(output.as_bytes());
+        term.write("\r\n".as_bytes());
     }
 
     pub fn stdin(&self) -> Result<HostShellStdin> {
-        HostShellStdin::new()
+        HostShellStdin::new(Arc::clone(&self.term))
     }
 
     pub fn stdout(&self) -> Result<HostShellStdout> {
-        HostShellStdout::new()
+        HostShellStdout::new(Arc::clone(&self.term))
     }
 
     pub fn resize_watcher(&self) -> Result<HostShellResizeWatcher> {
-        HostShellResizeWatcher::new()
+        HostShellResizeWatcher::new(Arc::clone(&self.term))
     }
 
     pub fn term(&self) -> Result<String> {
-        Ok("xterm".to_owned())
+        Ok("xterm-256color".to_owned())
     }
 
     pub fn size(&self) -> Result<(u16, u16)> {
-        todo!()
+        let term = self.term.lock().unwrap();
+        
+        let size = term.size();
+
+        if size.len() == 2 {
+            Ok((size[0], size[1]))
+        } else {
+            Err(Error::msg(format!("invalid vec received from js: {:?}", size)))
+        }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    // use super::*;
-    // use tokio::runtime::Runtime;
-}

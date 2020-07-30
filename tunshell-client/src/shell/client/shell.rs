@@ -185,6 +185,10 @@ impl HostShell {
         Ok(Self {})
     }
 
+    pub fn println(&self, output: &str) {
+        println!("{}\r", output);
+    }
+
     pub fn stdin(&self) -> Result<HostShellStdin> {
         HostShellStdin::new()
     }
