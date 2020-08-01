@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
 import { TerminalEmulator } from "../../services/wasm/tunshell_client";
-import { resolve } from "path";
 
 export interface TerminalEmulatorProps {
   onEmulator: (emulator: TerminalEmulator) => void;

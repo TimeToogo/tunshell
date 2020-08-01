@@ -9,7 +9,7 @@ export class TunshellClient {
   constructor() {}
 
   init = async () => {
-    let module = await import("./wasm/tunshell_client");
+    let module = await import("./wasm/tunshell_client").catch(console.error);
     this.module = module;
     return this;
   };
