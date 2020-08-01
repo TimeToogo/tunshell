@@ -17,4 +17,5 @@ cat Cargo.toml | sed 's/.*\#no-wasm/\#/g' > Cargo.toml.new
 mv Cargo.toml.new Cargo.toml
 
 wasm-pack build
+mkdir -p ../website/services/wasm/
 cp -aR pkg/* ../website/services/wasm/
