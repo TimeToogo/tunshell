@@ -91,6 +91,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream for Messa
     type Item = Result<O>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        debug!("message_stream: poll_next");
         if self.err_if_closed().is_err() {
             return Poll::Ready(None);
         }
@@ -207,6 +208,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
             }
         }
 
+        self.inner.flush().await?;
         debug!("sent message: {:?}", message);
 
         Ok(())

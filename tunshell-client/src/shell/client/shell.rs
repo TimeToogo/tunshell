@@ -21,7 +21,9 @@ pub struct HostShellResizeWatcher {
     receiver: UnboundedReceiver<(u16, u16)>,
 }
 
-pub struct HostShell {}
+pub struct HostShell {
+    initial_size: Result<(u16, u16)>
+}
 
 impl HostShellStdin {
     pub fn new() -> Result<Self> {
@@ -124,7 +126,7 @@ impl HostShellStdout {
         (tx, thread)
     }
 
-    pub fn write(&mut self, buff: &[u8]) -> Result<()> {
+    pub async fn write(&mut self, buff: &[u8]) -> Result<()> {
         self.sender.unbounded_send(Vec::from(buff))?;
 
         Ok(())
@@ -182,10 +184,12 @@ impl HostShellResizeWatcher {
 impl HostShell {
     pub fn new() -> Result<Self> {
         crossterm::terminal::enable_raw_mode()?;
-        Ok(Self {})
+        Ok(Self {
+            initial_size: crossterm::terminal::size().map_err(Error::new)
+        })
     }
 
-    pub fn println(&self, output: &str) {
+    pub async fn println(&self, output: &str) {
         println!("{}\r", output);
     }
 
@@ -208,11 +212,8 @@ impl HostShell {
         }
     }
 
-    pub fn size(&self) -> Result<(u16, u16)> {
-        match crossterm::terminal::size() {
-            Ok(size) => Ok(size),
-            Err(err) => Err(Error::new(err)),
-        }
+    pub fn initial_size(&self) -> Result<(u16, u16)> {
+        self.initial_size
     }
 }
 

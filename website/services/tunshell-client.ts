@@ -4,6 +4,7 @@ type ClientModule = typeof import("./wasm/tunshell_client");
 
 export class TunshellClient {
   private module: ClientModule;
+  private terminateCallback: () => void | undefined;
 
   constructor() {}
 
@@ -14,7 +15,17 @@ export class TunshellClient {
   };
 
   connect = (sessionKey: string, encryptionKey: string, emulator: TerminalEmulator) => {
-    const config = new this.module.BrowserConfig(sessionKey, encryptionKey, emulator);
+    let terminatePromise = new Promise((resolve) => {
+      this.terminateCallback = resolve;
+    });
+
+    const config = new this.module.BrowserConfig(sessionKey, encryptionKey, emulator, terminatePromise);
     this.module.tunshell_init_client(config);
+  };
+
+  terminate = () => {
+    if (this.terminateCallback) {
+      this.terminateCallback();
+    }
   };
 }

@@ -16,6 +16,8 @@ pub use shell::*;
 mod stream;
 pub use stream::*;
 
+pub mod util;
+
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
         mod wasm;

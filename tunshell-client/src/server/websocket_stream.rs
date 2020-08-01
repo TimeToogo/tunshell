@@ -13,7 +13,6 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{ErrorEvent, MessageEvent, WebSocket};
 use log::*;
-use tokio::sync::mpsc::{Sender, Receiver, self};
 use futures::future::poll_fn;
 
 pub struct ServerStream {
@@ -120,7 +119,7 @@ impl ServerStream {
         // Closed
         {
             let state = Arc::clone(&state);
-            let callback = Closure::wrap(Box::new(move |e: ErrorEvent| {
+            let callback = Closure::wrap(Box::new(move |_e: ErrorEvent| {
                 let mut state = state.lock().unwrap();
                 state.con_state = ConnectionState::Closed;
                 state.wake_close();
@@ -196,6 +195,8 @@ impl ServerStream {
                     Poll::Ready(())
                 }).await;
 
+                debug!("closing socket");
+                
                 match ws.close() {
                     Ok(_) => debug!("successfully closed websocket"),
                     Err(err) => debug!("error while closing websocket: {:?}", err),
@@ -216,7 +217,7 @@ impl ServerStream {
 
 impl AsyncRead for ServerStream {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
@@ -240,8 +241,8 @@ impl AsyncRead for ServerStream {
 
 impl AsyncWrite for ServerStream {
     fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         let mut state = self.state.lock().unwrap();
@@ -256,12 +257,12 @@ impl AsyncWrite for ServerStream {
         Poll::Ready(Ok(buf.len()))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
 
     fn poll_shutdown(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
         debug!("shutting down websocket");
@@ -272,6 +273,21 @@ impl AsyncWrite for ServerStream {
             return Poll::Pending;
         }
 
+        state.con_state = ConnectionState::Closing;
+        state.wake_close();
         Poll::Ready(Ok(()))
+    }
+}
+
+impl Drop for ServerStream {
+    fn drop(&mut self) {
+        let mut state = self.state.lock().unwrap();
+
+        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed {
+            return;
+        }
+
+        state.con_state = ConnectionState::Closing;
+        state.wake_close();
     }
 }

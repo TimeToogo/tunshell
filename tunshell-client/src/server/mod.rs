@@ -22,7 +22,6 @@ mod tests {
             "relay.tunshell.com",
             5000,
             "test",
-            "test",
         );
 
         let result = Runtime::new()

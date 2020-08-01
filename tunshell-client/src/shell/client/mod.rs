@@ -1,26 +1,25 @@
 use super::{
     ShellClientMessage, ShellClientStream, ShellServerMessage, StartShellPayload, WindowSize,
 };
-use crate::{ShellKey, TunnelStream};
+use crate::{util::delay::delay_for, ShellKey, TunnelStream};
 use anyhow::{Context, Error, Result};
 use futures::stream::StreamExt;
 use log::*;
 use std::time::Duration;
-use tokio::time;
 use tokio_util::compat::*;
 
-cfg_if::cfg_if! {
-    if #[cfg(not(target_arch = "wasm32"))] {
-        mod shell;
-        pub use shell::*;
-    } else {
-        mod xtermjs;
-        pub use xtermjs::*;
-    }
-}
+// cfg_if::cfg_if! {
+//     if #[cfg(not(target_arch = "wasm32"))] {
+//         mod shell;
+//         pub use shell::*;
+//     } else {
+mod xtermjs;
+pub use xtermjs::*;
+//     }
+// }
 
 pub struct ShellClient {
-    host_shell: HostShell
+    pub(crate) host_shell: HostShell,
 }
 
 type ShellStream = ShellClientStream<Compat<Box<dyn TunnelStream>>>;
@@ -30,7 +29,11 @@ impl ShellClient {
         Ok(ShellClient { host_shell })
     }
 
-    pub(crate) async fn connect(self, stream: Box<dyn TunnelStream>, key: ShellKey) -> Result<u8> {
+    pub(crate) async fn connect(
+        &mut self,
+        stream: Box<dyn TunnelStream>,
+        key: ShellKey,
+    ) -> Result<u8> {
         info!("connecting to shell server");
         let mut stream = ShellStream::new(stream.compat());
 
@@ -41,11 +44,11 @@ impl ShellClient {
 
         info!("shell client authenticated");
 
-        debug!("requesting shell from server pty");
+        debug!("requesting shell from server");
         stream
             .write(&ShellClientMessage::StartShell(StartShellPayload {
                 term: self.host_shell.term().unwrap_or("".to_owned()),
-                size: WindowSize::from(self.host_shell.size()?),
+                size: WindowSize::from(self.host_shell.initial_size()?),
             }))
             .await?;
 
@@ -61,6 +64,7 @@ impl ShellClient {
 
     async fn authenticate(&self, stream: &mut ShellStream, key: ShellKey) -> Result<()> {
         stream.write(&ShellClientMessage::Key(key.key)).await?;
+        debug!("sent shell key to peer");
 
         let response = tokio::select! {
             message = stream.next() => match message {
@@ -68,7 +72,7 @@ impl ShellClient {
                 Some(Err(err)) => return Err(Error::from(err).context("shell server returned invalid response")),
                 None => return Err(Error::msg("did not receive authentication response"))
             },
-            _ = time::delay_for(Duration::from_millis(3000)) =>  return Err(Error::msg("timed out while waiting for authentication"))
+            _ = delay_for(Duration::from_millis(3000)) =>  return Err(Error::msg("timed out while waiting for authentication"))
         };
 
         match response {
@@ -85,7 +89,7 @@ impl ShellClient {
         }
     }
 
-    async fn stream_shell_io(&self, stream: &mut ShellStream) -> Result<u8> {
+    async fn stream_shell_io(&mut self, stream: &mut ShellStream) -> Result<u8> {
         let mut buff = [0u8; 1024];
         let mut stdin = self.host_shell.stdin()?;
         let mut stdout = self.host_shell.stdout()?;
@@ -95,23 +99,23 @@ impl ShellClient {
             info!("waiting for shell message");
             tokio::select! {
                 result = stdin.read(&mut buff) => match result {
-                   Ok(read) => {
-                    info!("read {} bytes from stdin", read);
-                    if read == 0 {
-                        return Err(Error::msg("stdin closed"));
+                    Ok(read) => {
+                        info!("read {} bytes from stdin", read);
+                        if read == 0 {
+                            return Err(Error::msg("stdin closed"));
+                        }
+                        stream.write(&ShellClientMessage::Stdin(buff[..read].to_vec())).await?;
+                        info!("sent {} bytes to remote shell", read);
+                    },
+                    Err(err) => {
+                        error!("error while reading from stdin: {}", err);
+                        return Err(err);
                     }
-                    stream.write(&ShellClientMessage::Stdin(buff[..read].to_vec())).await?;
-                    info!("sent {} bytes to remote shell", read);
-                   },
-                   Err(err) => {
-                       error!("error while reading from stdin: {}", err);
-                       return Err(err);
-                   }
                 },
                 message = stream.next() => match message {
                     Some(Ok(ShellServerMessage::Stdout(payload))) => {
                         info!("received {} bytes from remote shell", payload.len());
-                        stdout.write(payload.as_slice())?;
+                        stdout.write(payload.as_slice()).await?;
                     }
                     Some(Ok(ShellServerMessage::Exited(code))) => {
                         info!("remote shell exited with code {}", code);

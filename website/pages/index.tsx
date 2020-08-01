@@ -62,6 +62,10 @@ const InBrowserClient = dynamic({
         }
 
         client.connect(sessionKey, encryptionKey.key, emulator);
+
+        return () => {
+          client.terminate();
+        };
       }, [sessionKey, encryptionKey, emulator]);
 
       return <Term onEmulator={setEmulator} />;

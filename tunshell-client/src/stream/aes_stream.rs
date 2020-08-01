@@ -1,7 +1,7 @@
 use super::{crypto::*, TunnelStream};
-use anyhow::Result;
+use anyhow::{Context as AnyhowContext, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use futures::Stream;
+use futures::{future::BoxFuture, FutureExt, Stream};
 use io::prelude::*;
 use log::*;
 use std::cmp;
@@ -58,19 +58,31 @@ type AesMessageStream<S> = MessageStream<EncryptedMessage, EncryptedMessage, S>;
 
 pub struct AesStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> {
     inner: AesMessageStream<S>,
-    key: Key,
+    decrypt: CryptoState<Vec<u8>>,
+    encrypt: CryptoState<EncryptedMessage>,
     read_buff: Vec<u8>,
     write_buff: Option<EncryptedMessage>,
 }
 
+enum CryptoState<R> {
+    Swapping,
+    Pending(Key),
+    Crypting(BoxFuture<'static, Result<(R, Key)>>),
+}
+
 impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AesStream<S> {
-    pub fn new(inner: S, salt: &[u8], key: &[u8]) -> Self {
-        Self {
+    pub async fn new(inner: S, salt: &[u8], key: &[u8]) -> Result<Self> {
+        let key = derive_key(salt, key)
+            .await
+            .with_context(|| "failed to derive encryption key")?;
+
+        Ok(Self {
             inner: AesMessageStream::new(inner),
-            key: derive_key(salt, key),
+            encrypt: CryptoState::Pending(key.clone()),
+            decrypt: CryptoState::Pending(key),
             read_buff: vec![],
             write_buff: None,
-        }
+        })
     }
 }
 
@@ -80,26 +92,46 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncRead for A
         cx: &mut Context<'_>,
         buff: &mut [u8],
     ) -> Poll<io::Result<usize>> {
+        debug!("reading from aes stream");
+
         while self.read_buff.len() == 0 {
-            let message = match Pin::new(&mut self.inner).poll_next(cx) {
-                Poll::Ready(Some(Ok(message))) => message,
-                Poll::Ready(Some(Err(err))) => {
-                    warn!("encountered error while reading from inner stream: {}", err);
-                    return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
-                }
-                Poll::Ready(None) => return Poll::Ready(Ok(0)),
-                Poll::Pending => return Poll::Pending,
-            };
+            match std::mem::replace(&mut self.decrypt, CryptoState::Swapping) {
+                CryptoState::Crypting(mut fut) => {
+                    let result = match fut.as_mut().poll(cx) {
+                        Poll::Ready(i) => i,
+                        Poll::Pending => {
+                            self.decrypt = CryptoState::Crypting(fut);
+                            return Poll::Pending;
+                        }
+                    };
 
-            let decrypted = match decrypt(message, &self.key) {
-                Ok(data) => data,
-                Err(err) => {
-                    warn!("failed to decrypt message: {}", err);
-                    return Poll::Ready(Err(io::Error::from(io::ErrorKind::InvalidData)));
-                }
-            };
+                    if let Err(err) = result {
+                        warn!("failed to decrypt message: {}", err);
+                        return Poll::Ready(Err(io::Error::from(io::ErrorKind::InvalidData)));
+                    }
 
-            self.read_buff.extend_from_slice(decrypted.as_slice());
+                    let (plaintext, key) = result.unwrap();
+                    self.read_buff.extend_from_slice(plaintext.as_slice());
+                    self.decrypt = CryptoState::Pending(key);
+                }
+                CryptoState::Pending(key) => {
+                    let message = match Pin::new(&mut self.inner).poll_next(cx) {
+                        Poll::Ready(Some(Ok(message))) => message,
+                        Poll::Ready(Some(Err(err))) => {
+                            warn!("encountered error while reading from inner stream: {}", err);
+                            return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
+                        }
+                        Poll::Ready(None) => return Poll::Ready(Ok(0)),
+                        Poll::Pending => {
+                            self.decrypt = CryptoState::Pending(key);
+                            return Poll::Pending;
+                        }
+                    };
+
+                    self.decrypt = CryptoState::Crypting(decrypt(message, key).boxed());
+                }
+                CryptoState::Swapping => unreachable!(),
+            }
         }
 
         let read = cmp::min(buff.len(), self.read_buff.len());
@@ -117,56 +149,74 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
         cx: &mut Context<'_>,
         buff: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        assert!(buff.len() > 0);
+        if buff.len() > 0 {
+            debug!("sending {} bytes", buff.len());
+        }
 
-        let mut written = 0;
-        loop {
-            let message = match self.write_buff.take() {
-                Some(message) => message,
-                None => {
-                    written += buff.len();
-                    encrypt(buff, &self.key)
-                }
-            };
+        let mut poll = Poll::Pending;
 
-            match Pin::new(&mut self.inner).poll_write(cx, &message) {
-                Poll::Ready(Ok(_)) => {
-                    if written > 0 {
-                        return Poll::Ready(Ok(written));
-                    } else {
-                        self.write_buff.replace(message);
-                    }
+        while self.write_buff.is_none() {
+            match std::mem::replace(&mut self.encrypt, CryptoState::Swapping) {
+                CryptoState::Pending(key) => {
+                    self.encrypt = CryptoState::Crypting(encrypt(buff.to_vec(), key).boxed());
+                    poll = Poll::Ready(Ok(buff.len()));
                 }
-                Poll::Ready(Err(err)) => {
-                    warn!("encountered error while writing to inner stream: {}", err);
-                    return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
-                }
-                Poll::Pending => {
-                    self.write_buff.replace(message);
-
-                    return if written > 0 {
-                        Poll::Ready(Ok(written))
-                    } else {
-                        Poll::Pending
+                CryptoState::Crypting(mut fut) => {
+                    let result = match fut.as_mut().poll(cx) {
+                        Poll::Ready(i) => i,
+                        Poll::Pending => {
+                            self.encrypt = CryptoState::Crypting(fut);
+                            return poll;
+                        }
                     };
+
+                    if let Err(err) = result {
+                        warn!("failed to encrypt message: {}", err);
+                        return Poll::Ready(Err(io::Error::from(io::ErrorKind::Other)));
+                    }
+
+                    let (encrypted, key) = result.unwrap();
+                    debug!("encrypted into {} bytes", encrypted.ciphertext.len());
+                    self.write_buff.replace(encrypted);
+                    self.encrypt = CryptoState::Pending(key);
                 }
+                CryptoState::Swapping => unreachable!(),
+            }
+        }
+
+        let message = self.write_buff.take().unwrap();
+        match Pin::new(&mut self.inner).poll_write(cx, &message) {
+            Poll::Ready(Ok(_)) => {
+                return if buff.len() == 0 {
+                    Poll::Ready(Ok(0))
+                } else {
+                    Poll::Pending
+                }
+            }
+            Poll::Ready(Err(err)) => {
+                warn!("encountered error while writing to inner stream: {}", err);
+                return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
+            }
+            Poll::Pending => {
+                self.write_buff.replace(message);
+                return poll;
             }
         }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        if let Some(message) = self.write_buff.take() {
-            match Pin::new(&mut self.inner).poll_write(cx, &message) {
-                Poll::Ready(Ok(_)) => {}
-                Poll::Ready(Err(err)) => {
-                    warn!("encountered error while writing to inner stream: {}", err);
-                    return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
-                }
-                Poll::Pending => {
-                    self.write_buff.replace(message);
-                    return Poll::Pending;
-                }
-            }
+        debug!("flushing aes stream");
+
+        let poll = if self.write_buff.is_some() {
+            Some(Pin::new(&mut *self.as_mut()).poll_write(cx, &[]))
+        } else if let CryptoState::Crypting(_) = &self.encrypt {
+            Some(Pin::new(&mut *self.as_mut()).poll_write(cx, &[]))
+        } else {
+            None
+        };
+
+        if let Some(Poll::Pending) = poll {
+            return Poll::Pending;
         }
 
         Pin::new(self.inner.inner_mut()).poll_flush(cx)
@@ -209,51 +259,53 @@ mod tests {
     }
 
     #[test]
-    fn test_derive_key() {
-        let key = derive_key(&[1, 2, 3], &[4, 5, 6]);
-
-        assert_eq!(key.algorithm(), &AES_256_GCM);
-    }
-
-    #[test]
     fn test_encrypt() {
-        let key = derive_key(&[1, 2, 3], &[4, 5, 6]);
+        Runtime::new().unwrap().block_on(async {
+            let key = derive_key(&[1, 2, 3], &[4, 5, 6]).await.unwrap();
 
-        let plaintext = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+            let plaintext = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        let message = encrypt(plaintext, &key);
+            let (message, _) = encrypt(plaintext.to_vec(), key.clone()).await.unwrap();
 
-        assert_eq!(message.nonce.len(), 12);
-        assert_eq!(message.ciphertext != plaintext, true);
+            assert_eq!(message.nonce.len(), 12);
+            assert_eq!(message.ciphertext != plaintext, true);
+        });
     }
 
     #[test]
     fn test_decrypt() {
-        let key = derive_key(&[1, 2, 3], &[4, 5, 6]);
+        Runtime::new().unwrap().block_on(async {
+            let key = derive_key(&[1, 2, 3], &[4, 5, 6]).await.unwrap();
 
-        let message = EncryptedMessage {
-            nonce: vec![189, 25, 240, 240, 29, 63, 100, 148, 64, 109, 40, 111],
-            ciphertext: vec![
-                136, 184, 73, 200, 170, 217, 131, 111, 107, 84, 98, 187, 208, 126, 250, 121, 133,
-                200, 18, 46, 89, 115, 196, 239, 53, 171,
-            ],
-        };
+            let message = EncryptedMessage {
+                nonce: vec![189, 25, 240, 240, 29, 63, 100, 148, 64, 109, 40, 111],
+                ciphertext: vec![
+                    136, 184, 73, 200, 170, 217, 131, 111, 107, 84, 98, 187, 208, 126, 250, 121,
+                    133, 200, 18, 46, 89, 115, 196, 239, 53, 171,
+                ],
+            };
 
-        let plaintext = decrypt(message, &key).unwrap();
+            let (plaintext, _) = decrypt(message, key.clone()).await.unwrap();
 
-        assert_eq!(plaintext, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+            assert_eq!(plaintext, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        });
     }
 
     #[test]
     fn test_decrypt_invalid() {
-        let key = derive_key(&[1, 2, 3], &[4, 5, 6]);
+        Runtime::new().unwrap().block_on(async {
+            let key = derive_key(&[1, 2, 3], &[4, 5, 6]).await.unwrap();
 
-        let message = EncryptedMessage {
-            nonce: vec![189, 25, 240, 240, 29, 63, 100, 148, 64, 109, 40, 111],
-            ciphertext: vec![2, 54, 65, 47, 54, 3, 35],
-        };
+            let message = EncryptedMessage {
+                nonce: vec![189, 25, 240, 240, 29, 63, 100, 148, 64, 109, 40, 111],
+                ciphertext: vec![2, 54, 65, 47, 54, 3, 35],
+            };
 
-        decrypt(message, &key).expect_err("decrypt should fail on garbage data");
+            decrypt(message, key)
+                .await
+                .map(|i| i.0)
+                .expect_err("decrypt should fail on garbage data");
+        });
     }
 
     #[test]
@@ -269,13 +321,15 @@ mod tests {
 
             let cursor = Cursor::new(message.serialise().unwrap().to_vec());
 
-            let mut stream = AesStream::new(cursor, &[1, 2, 3], &[4, 5, 6]);
+            let mut stream = AesStream::new(cursor, &[1, 2, 3], &[4, 5, 6])
+                .await
+                .unwrap();
 
             let mut buff = [0u8; 1024];
             let read = stream.read(&mut buff).await.unwrap();
 
             assert_eq!(&buff[..read], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        })
+        });
     }
 
     #[test]
@@ -283,7 +337,9 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let cursor = Cursor::new(vec![]);
 
-            let mut stream = AesStream::new(cursor, &[1, 2, 3], &[4, 5, 6]);
+            let mut stream = AesStream::new(cursor, &[1, 2, 3], &[4, 5, 6])
+                .await
+                .unwrap();
 
             let wrote = stream.write("hello world".as_bytes()).await.unwrap();
             stream.flush().await.unwrap();
@@ -292,7 +348,9 @@ mod tests {
 
             let mut cursor = stream.inner.inner().clone();
             cursor.set_position(0);
-            let mut stream = AesStream::new(cursor, &[1, 2, 3], &[4, 5, 6]);
+            let mut stream = AesStream::new(cursor, &[1, 2, 3], &[4, 5, 6])
+                .await
+                .unwrap();
 
             let mut buff = [0u8; 1024];
             let read = stream.read(&mut buff).await.unwrap();

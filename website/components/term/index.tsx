@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import { TerminalEmulator } from "../../services/wasm/tunshell_client";
+import { resolve } from "path";
 
 export interface TerminalEmulatorProps {
   onEmulator: (emulator: TerminalEmulator) => void;
@@ -8,18 +9,31 @@ export interface TerminalEmulatorProps {
 export const Term: React.SFC<TerminalEmulatorProps> = ({ onEmulator }) => {
   const ref = useRef<HTMLDivElement>();
   const [term, setTerm] = useState<import("xterm").Terminal>();
+  const [fitAddon, setFitAddon] = useState<import("xterm-addon-fit").FitAddon>();
 
   useEffect(() => {
-    if (!ref.current || term) {
-      return;
-    }
+    (async () => {
+      if (!ref.current || term) {
+        return;
+      }
 
-    console.log(`Creating terminal...`)
-    const xterm = require("xterm");
-    const newTerm = new xterm.Terminal();
-    newTerm.open(ref.current);
-    newTerm.writeln("Welcome to the tunshell terminal");
-    setTerm(newTerm);
+      console.log(`Creating terminal...`);
+
+      const [xterm, fit] = await Promise.all([
+        import("xterm").then((i) => i),
+        import("xterm-addon-fit").then((i) => i),
+      ]);
+
+      const newTerm = new xterm.Terminal({ logLevel: "debug" });
+      const fitAddon = new fit.FitAddon();
+      newTerm.loadAddon(fitAddon);
+      newTerm.open(ref.current);
+
+      await new Promise((r) => newTerm.writeln("Welcome to the tunshell terminal\r\n", r));
+
+      setTerm(newTerm);
+      setFitAddon(fitAddon);
+    })();
   }, [ref.current]);
 
   useEffect(() => {
@@ -27,13 +41,39 @@ export const Term: React.SFC<TerminalEmulatorProps> = ({ onEmulator }) => {
       return;
     }
 
-    onEmulator({
-      onData: (cb) => term.onData(cb),
-      onResize: (cb) => term.onResize((size) => cb(size.cols, size.rows)),
-      write: (data) => term.write(data),
+    const emulator = {
+      data: () =>
+        new Promise<string>((resolve) => {
+          const stop = term.onData((data) => {
+            resolve(data);
+            stop.dispose();
+          });
+        }),
+      resize: () =>
+        new Promise<Uint16Array>((resolve) => {
+          const stop = term.onResize((size) => {
+            resolve(new Uint16Array([size.cols, size.rows]));
+            stop.dispose();
+          });
+        }),
+      write: (data) => new Promise<void>((r) => term.write(data, r)),
       size: () => new Uint16Array([term.cols, term.rows]),
-    });
+      clone: () => ({ ...emulator }),
+    };
+
+    onEmulator(emulator);
   }, [term]);
 
-  return <div style={{width: '100%', height: '400px'}} ref={ref}></div>;
+  useEffect(() => {
+    if (!fitAddon || !ref.current) {
+      return;
+    }
+
+    fitAddon.fit();
+    window.addEventListener("resize", fitAddon.fit);
+
+    return () => window.removeEventListener("resize", fitAddon.fit);
+  }, [fitAddon, ref.current]);
+
+  return <div style={{ width: "100%", height: "400px" }} ref={ref}></div>;
 };

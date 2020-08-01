@@ -32,6 +32,7 @@ pub(super) struct WindowSize(pub(super) u16, pub(super) u16);
 
 pub(super) type ShellClientStream<S> = MessageStream<ShellClientMessage, ShellServerMessage, S>;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) type ShellServerStream<S> = MessageStream<ShellServerMessage, ShellClientMessage, S>;
 
 impl Message for ShellClientMessage {

@@ -5,7 +5,6 @@ use anyhow::{Error, Result};
 use futures::stream::StreamExt;
 use log::*;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_util::compat::*;
 use tunshell_shared::*;
 
@@ -18,26 +17,30 @@ pub struct Client {
 
 impl Client {
     pub fn new(config: Config, host_shell: HostShell) -> Self {
-        Self { config, host_shell: Some(host_shell) }
+        Self {
+            config,
+            host_shell: Some(host_shell),
+        }
     }
 
-    fn println(&self, line: &str) {
-        self.host_shell.as_ref().unwrap().println(line);
+    pub async fn println(&mut self, line: &str) {
+        self.host_shell.as_mut().unwrap().println(line).await;
     }
 
     pub async fn start_session(&mut self) -> Result<u8> {
-        self.println("Connecting to relay server...");
+        self.println("Connecting to relay server...").await;
         let relay_socket = ServerStream::connect(&self.config).await?;
 
         let mut message_stream = ClientMessageStream::new(relay_socket.compat());
 
         self.send_key(&mut message_stream).await?;
 
-        self.println("Waiting for peer to join...");
+        self.println("Waiting for peer to join...").await;
         let mut peer_info = self.wait_for_peer_to_join(&mut message_stream).await?;
-        self.println(&format!("{} joined the session", peer_info.peer_ip_address));
+        self.println(&format!("{} joined the session", peer_info.peer_ip_address))
+            .await;
 
-        self.println("Negotiating connection...");
+        self.println("Negotiating connection...").await;
         let peer_socket = self
             .negotiate_peer_connection(message_stream, &mut peer_info, self.config.is_target())
             .await?;
@@ -105,7 +108,7 @@ impl Client {
                         .await?
                     {
                         Some(direct_stream) => {
-                            self.println("Direct connection to peer established");
+                            self.println("Direct connection to peer established").await;
                             break direct_stream;
                         }
                         None => {
@@ -129,14 +132,16 @@ impl Client {
             }
         };
 
+        // todo!();
         assert!(peer_info.session_nonce.len() > 10);
         let stream = AesStream::new(
             stream.compat(),
             peer_info.session_nonce.as_bytes(),
             self.config.encryption_key().as_bytes(),
-        );
+        )
+        .await?;
 
-        self.println("Falling back to relayed connection");
+        self.println("Falling back to relayed connection").await;
         Ok(Box::new(stream))
     }
 
@@ -149,11 +154,16 @@ impl Client {
         master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
         use crate::p2p::{self, P2PConnection};
+        use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-        self.println(format!(
-            "Attempting direct connection to {}",
-            peer_info.peer_ip_address
-        ));
+        self.println(
+            format!(
+                "Attempting direct connection to {}",
+                peer_info.peer_ip_address
+            )
+            .as_str(),
+        )
+        .await;
 
         // Initialise and bind sockets
         let mut tcp = p2p::tcp::TcpConnection::new(peer_info.clone(), connection_info.clone());
@@ -203,9 +213,9 @@ impl Client {
     async fn attempt_direct_connection(
         &mut self,
         _message_stream: &mut ClientMessageStream,
-        peer_info: &mut PeerJoinedPayload,
-        connection_info: &AttemptDirectConnectPayload,
-        master_side: bool,
+        _peer_info: &mut PeerJoinedPayload,
+        _connection_info: &AttemptDirectConnectPayload,
+        _master_side: bool,
     ) -> Result<Option<Box<dyn TunnelStream>>> {
         // Does not support direct connection when running in browser
         Ok(None)
@@ -220,14 +230,18 @@ impl Client {
     }
 
     #[cfg(target_arch = "wasm32")]
-    async fn start_shell_server(&self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
+    async fn start_shell_server(&self, _peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
         unreachable!()
     }
 
     async fn start_shell_client(&mut self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
-        crate::ShellClient::new(self.host_shell.take().unwrap())?
+        let mut client = crate::ShellClient::new(self.host_shell.take().unwrap())?;
+        let result = client
             .connect(peer_socket, ShellKey::new(self.config.encryption_key()))
-            .await
+            .await;
+
+        self.host_shell.replace(client.host_shell);
+        result
     }
 }
 
@@ -235,22 +249,6 @@ impl Client {
 mod tests {
     use super::*;
     use tokio::runtime::Runtime;
-
-    #[test]
-    fn test_connect_to_relay_server() {
-        let config = Config::new(
-            ClientMode::Target,
-            "test",
-            "relay.tunshell.com",
-            5000,
-            "test",
-        );
-        let mut client = Client::new(&config, HostShell::new().unwrap());
-
-        let result = Runtime::new().unwrap().block_on(client.connect_to_relay());
-
-        result.unwrap();
-    }
 
     #[test]
     fn test_send_invalid_key() {

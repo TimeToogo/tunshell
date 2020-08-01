@@ -1,9 +1,8 @@
 mod client;
-pub(crate) use client::*;
+pub use client::*;
 
 cfg_if::cfg_if! {
     if #[cfg(not(target_arch = "wasm32"))] {
-
         mod server;
         pub(crate) use server::*;
     }
