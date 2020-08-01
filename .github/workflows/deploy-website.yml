@@ -10,9 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - uses: actions/setup-node@v1
       with:
         node-version: 12
+    - run: ./install-deps-wasm.sh
+      working-directory: tunshell-client/build
+      shell: bash
+      env:
+        TEMPDIR: /tmp
+    - run: ./compile-wasm.sh
+      working-directory: tunshell-client/build
+      shell: bash
+      env:
+        TEMPDIR: /tmp
+    - uses: actions/setup-node@v1
     - run: npm ci
       working-directory: website
     - run: npm run export

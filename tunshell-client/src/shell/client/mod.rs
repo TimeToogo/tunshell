@@ -8,15 +8,15 @@ use log::*;
 use std::time::Duration;
 use tokio_util::compat::*;
 
-// cfg_if::cfg_if! {
-//     if #[cfg(not(target_arch = "wasm32"))] {
-//         mod shell;
-//         pub use shell::*;
-//     } else {
-mod xtermjs;
-pub use xtermjs::*;
-//     }
-// }
+cfg_if::cfg_if! {
+    if #[cfg(not(target_arch = "wasm32"))] {
+        mod shell;
+        pub use shell::*;
+    } else {
+        mod xtermjs;
+        pub use xtermjs::*;
+    }
+}
 
 pub struct ShellClient {
     pub(crate) host_shell: HostShell,

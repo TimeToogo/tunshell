@@ -190,7 +190,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
                 return if buff.len() == 0 {
                     Poll::Ready(Ok(0))
                 } else {
-                    Poll::Pending
+                    return poll;
                 }
             }
             Poll::Ready(Err(err)) => {
@@ -334,6 +334,7 @@ mod tests {
 
     #[test]
     fn test_write_then_read_aes_stream() {
+        env_logger::init();
         Runtime::new().unwrap().block_on(async {
             let cursor = Cursor::new(vec![]);
 

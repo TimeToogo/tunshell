@@ -22,7 +22,7 @@ pub struct HostShellResizeWatcher {
 }
 
 pub struct HostShell {
-    initial_size: Result<(u16, u16)>
+    initial_size: (u16, u16)
 }
 
 impl HostShellStdin {
@@ -185,7 +185,7 @@ impl HostShell {
     pub fn new() -> Result<Self> {
         crossterm::terminal::enable_raw_mode()?;
         Ok(Self {
-            initial_size: crossterm::terminal::size().map_err(Error::new)
+            initial_size: crossterm::terminal::size().map_err(Error::new)?
         })
     }
 
@@ -213,7 +213,7 @@ impl HostShell {
     }
 
     pub fn initial_size(&self) -> Result<(u16, u16)> {
-        self.initial_size
+        Ok(self.initial_size)
     }
 }
 

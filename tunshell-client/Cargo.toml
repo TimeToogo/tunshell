@@ -5,7 +5,7 @@ authors = ["Elliot Levin <elliotlevin@hotmail.com>"]
 edition = "2018"
 
 [lib]
- crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 tunshell-shared = { path = "../tunshell-shared" }
@@ -27,7 +27,7 @@ cfg-if = "0.1.10"
 portable-pty = "0.3.0"
 
 [target.'cfg(unix)'.dependencies]
-# tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "dns", "time", "io-util", "tcp", "udp", "sync", "process", "macros"] } # no-wasm
+tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "dns", "time", "io-util", "tcp", "udp", "sync", "process", "macros"] } #no-wasm
 tokio-rustls = { version = "0.13.1", features=["dangerous_configuration"] }
 webpki = "0.21.2"
 webpki-roots = "0.19.0"
