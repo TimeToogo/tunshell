@@ -24,7 +24,6 @@ pub struct HostShell {
     stdin: Option<Receiver<JsValue>>,
     stdout: Option<Sender<Uint8Array>>,
     resize: Option<Receiver<JsValue>>,
-    initial_size: JsValue,
 }
 
 impl HostShellStdin {
@@ -104,7 +103,6 @@ impl HostShell {
         let (mut stdin_tx, stdin_rx) = mpsc::channel::<JsValue>(10);
         let (stdout_tx, mut stdout_rx) = mpsc::channel::<Uint8Array>(10);
         let (mut resize_tx, resize_rx) = mpsc::channel::<JsValue>(10);
-        let initial_size = term.size();
 
         {
             let term = term.clone();
@@ -138,7 +136,6 @@ impl HostShell {
             stdin: Some(stdin_rx),
             stdout: Some(stdout_tx),
             resize: Some(resize_rx),
-            initial_size,
         }
     }
 
@@ -148,6 +145,10 @@ impl HostShell {
 
         self.term.write(output).await;
         self.term.write(newline).await;
+    }
+
+    pub fn enable_raw_mode(&mut self) -> Result<()> {
+        Ok(())
     }
 
     pub fn stdin(&mut self) -> Result<HostShellStdin> {
@@ -166,8 +167,8 @@ impl HostShell {
         Ok("xterm-256color".to_owned())
     }
 
-    pub fn initial_size(&self) -> Result<(u16, u16)> {
-        convert_to_size(self.initial_size.clone())
+    pub async fn size(&self) -> Result<(u16, u16)> {
+        convert_to_size(self.term.size())
     }
 }
 

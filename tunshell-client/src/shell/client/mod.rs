@@ -48,7 +48,7 @@ impl ShellClient {
         stream
             .write(&ShellClientMessage::StartShell(StartShellPayload {
                 term: self.host_shell.term().unwrap_or("".to_owned()),
-                size: WindowSize::from(self.host_shell.initial_size()?),
+                size: WindowSize::from(self.host_shell.size().await?),
             }))
             .await?;
 
@@ -94,6 +94,8 @@ impl ShellClient {
         let mut stdin = self.host_shell.stdin()?;
         let mut stdout = self.host_shell.stdout()?;
         let mut resize_watcher = self.host_shell.resize_watcher()?;
+
+        self.host_shell.enable_raw_mode()?;
 
         loop {
             info!("waiting for shell message");

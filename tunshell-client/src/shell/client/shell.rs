@@ -21,9 +21,7 @@ pub struct HostShellResizeWatcher {
     receiver: UnboundedReceiver<(u16, u16)>,
 }
 
-pub struct HostShell {
-    initial_size: (u16, u16)
-}
+pub struct HostShell {}
 
 impl HostShellStdin {
     pub fn new() -> Result<Self> {
@@ -183,14 +181,16 @@ impl HostShellResizeWatcher {
 
 impl HostShell {
     pub fn new() -> Result<Self> {
-        crossterm::terminal::enable_raw_mode()?;
-        Ok(Self {
-            initial_size: crossterm::terminal::size().map_err(Error::new)?
-        })
+        Ok(Self {})
     }
 
     pub async fn println(&self, output: &str) {
         println!("{}\r", output);
+    }
+
+    pub fn enable_raw_mode(&mut self) -> Result<()> {
+        crossterm::terminal::enable_raw_mode()?;
+        Ok(())
     }
 
     pub fn stdin(&self) -> Result<HostShellStdin> {
@@ -212,8 +212,8 @@ impl HostShell {
         }
     }
 
-    pub fn initial_size(&self) -> Result<(u16, u16)> {
-        Ok(self.initial_size)
+    pub async fn size(&self) -> Result<(u16, u16)> {
+        crossterm::terminal::size().map_err(Error::new)
     }
 }
 
