@@ -12,9 +12,9 @@ tunshell todo:
     - [x] move logic to decide on target/client host to client binary
     - [x] relay server to generate session specific key which is concat to the client PSK
  - [x] basic rust-only shell fallback for limited envs without pty 
- - [ ] support in-browser terminal client
-    - [ ] tunshell-client wasm target
-    - [ ] extend relay server to support websocket connections and implement client in-browser
+ - [x] support in-browser terminal client
+    - [x] tunshell-client wasm target
+    - [x] extend relay server to support websocket connections and implement client in-browser
  - [ ] init scripts for multiple langs
     - [x] sh/bash
     - [x] cmd/powershell
