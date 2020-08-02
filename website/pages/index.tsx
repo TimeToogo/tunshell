@@ -20,6 +20,7 @@ enum TargetHost {
   Unix,
   Windows,
   Node,
+  Python3,
 }
 
 interface EncryptionKey {
@@ -119,6 +120,13 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
     case TargetHost.Node:
       return (
         <pre>{`require('https').get('https://lets.tunshell.com/init.js',r=>{let s="";r.setEncoding('utf8');r.on('data',(d)=>s+=d);r.on('end',()=>require('vm').runInNewContext(s,{require,args:['T','${sessionKey}','${encryptionKey.key}']}))});`}</pre>
+      );
+    case TargetHost.Python3:
+      return (
+        <pre>{
+`import requests
+py1 = requests.get('https://lets.tunshell.com/init.py').content
+exec(py1, {'p': ['T', '${sessionKey}', '${encryptionKey.key}']})`}</pre>
       );
   }
 };
