@@ -16,6 +16,7 @@ use tokio::{net::TcpStream, task::JoinHandle};
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
 use tunshell_shared::{ClientMessage, KeyPayload, MessageStream, ServerMessage};
+use warp::Filter;
 
 lazy_static! {
     static ref TCP_PORT_NUMBER: Mutex<u16> = Mutex::from(35555);
@@ -33,26 +34,32 @@ pub(super) fn init_port_numbers() -> (u16, u16) {
 
 pub(super) struct TerminableServer {
     tls_port: u16,
-    _ws_port: u16,
-    running: JoinHandle<Server>,
+    _api_port: u16,
+    running: JoinHandle<Server<warp::http::StatusCode>>,
     terminate: mpsc::Sender<()>,
 }
 
 impl TerminableServer {
-    pub(super) async fn stop(mut self) -> Result<Server> {
+    pub(super) async fn stop(mut self) -> Result<Server<warp::http::StatusCode>> {
         self.terminate.send(()).await?;
         self.running.await.map_err(Error::from)
     }
 }
 
 pub(super) async fn init_server(mut server_config: Config) -> TerminableServer {
-    let (tls_port, ws_port) = init_port_numbers();
+    let (tls_port, api_port) = init_port_numbers();
     server_config.tls_port = tls_port;
-    server_config.ws_port = ws_port;
+    server_config.api_port = api_port;
 
     let sessions = SessionStore::new(db::connect().await.unwrap());
 
-    let mut server = Server::new(server_config.clone(), sessions);
+    let mut server = Server::new(
+        server_config.clone(),
+        sessions,
+        warp::path("unused")
+            .map(|| warp::http::StatusCode::OK)
+            .boxed(),
+    );
     let (tx, rx) = mpsc::channel(1);
 
     let running = tokio::spawn(async move {
@@ -77,7 +84,7 @@ pub(super) async fn init_server(mut server_config: Config) -> TerminableServer {
 
     TerminableServer {
         tls_port: server_config.tls_port,
-        _ws_port: server_config.ws_port,
+        _api_port: server_config.api_port,
         running,
         terminate: tx,
     }

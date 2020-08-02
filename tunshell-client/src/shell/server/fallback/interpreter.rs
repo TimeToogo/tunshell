@@ -389,7 +389,7 @@ impl Interpreter {
                 token = self.state.read_input() => {
                     match token? {
                         Token::ControlC => {
-                            process.kill()?; // TODO: replace SIGTERM on unix
+                            process.kill()?; // TODO: replace with SIGTERM on unix
                             debug!("killed child process");
                         },
                         data @ _ => {

@@ -3,15 +3,15 @@ use crate::db;
 use anyhow::Result;
 use log::*;
 use std::sync::Arc;
-use warp::Filter;
+use warp::{filters::BoxedFilter, Filter, Reply};
 
-pub async fn start() -> Result<()> {
+pub async fn register() -> Result<BoxedFilter<(impl Reply + 'static,)>> {
     let config = Config::from_env()?;
     info!("starting api server on port {}", config.port);
 
     let db_client = Arc::new(db::connect().await?);
 
-    let router = warp::any()
+    let routes = warp::any()
         .and({
             warp::path("api").and(
                 // POST /api/sessions
@@ -22,7 +22,5 @@ pub async fn start() -> Result<()> {
         })
         .with(cors());
 
-    warp::serve(router).run(([0, 0, 0, 0], config.port)).await;
-
-    Ok(())
+    Ok(routes.boxed())
 }

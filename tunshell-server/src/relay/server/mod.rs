@@ -6,6 +6,7 @@ use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tunshell_shared::{ClientMessage, ServerMessage};
+use warp::{filters::BoxedFilter, Reply};
 
 mod connection;
 mod message_stream;
@@ -24,24 +25,26 @@ pub(self) use ws::*;
 #[cfg(test)]
 mod tests;
 
-pub(super) struct Server {
+pub(super) struct Server<R: Reply + 'static> {
     config: Config,
     sessions: SessionStore,
     connections: Connections,
+    routes: BoxedFilter<(R,)>,
 }
 
-impl Server {
-    pub(super) fn new(config: Config, sessions: SessionStore) -> Self {
+impl<R: Reply + 'static> Server<R> {
+    pub(super) fn new(config: Config, sessions: SessionStore, routes: BoxedFilter<(R,)>) -> Self {
         Self {
             config,
             sessions,
             connections: Connections::new(),
+            routes,
         }
     }
 
     pub(super) async fn start(&mut self, terminate_rx: Option<mpsc::Receiver<()>>) -> Result<()> {
         let mut tls_listener = TlsListener::bind(&self.config).await?;
-        let mut ws_listener = WebSocketListener::bind(&self.config).await?;
+        let mut ws_listener = WebSocketListener::bind(&self.config, self.routes.clone()).await?;
 
         // If the terminate channel is not supplied we create a default channel
         // that is never invoked

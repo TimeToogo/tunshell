@@ -20,15 +20,14 @@ services:
       - mongo
       - reverse_proxy
     ports:
+      - "443:3000"
       - "5000:3001"
-      - "5001:3002"
     volumes:
       - ./config/etc/letsencrypt/:/le-ssl
     environment:
       MONGO_CONNECTION_STRING: mongodb://relay:${MONGO_PASSWORD}@mongo:27017/relay
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_TLS_PORT: 3001
-      TUNSHELL_RELAY_WS_PORT: 3002
       TLS_RELAY_PRIVATE_KEY: /le-ssl/live/relay.tunshell.com/privkey.pem
       TLS_RELAY_CERT: /le-ssl/live/relay.tunshell.com/fullchain.pem
 

@@ -75,7 +75,7 @@ impl ServerStream {
         let state = State::new();
         let state = Arc::new(Mutex::new(state));
 
-        let url = format!("wss://{}:{}", config.relay_host(), config.relay_port());
+        let url = format!("wss://{}:{}/ws", config.relay_host(), config.relay_port());
         let ws = WebSocket::new(&url).unwrap();
 
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
