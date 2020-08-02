@@ -119,7 +119,8 @@ impl Client {
                     }
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => {
-                    break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))))
+                    self.println("Falling back to relayed connection").await;
+                    break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))));
                 }
                 Some(Ok(message)) => {
                     return Err(Error::msg(format!(
@@ -140,7 +141,6 @@ impl Client {
         )
         .await?;
 
-        self.println("Falling back to relayed connection").await;
         Ok(Box::new(stream))
     }
 
