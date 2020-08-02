@@ -23,7 +23,7 @@ tunshell todo:
     - [ ] C#
     - [ ] java
     - [ ] php
-    - [ ] docker
+    - [x] docker
  - [ ] migrate aws account to OU
  - [ ] docs / website
 
