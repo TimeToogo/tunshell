@@ -13,6 +13,7 @@ interface SessionKeys {
 enum ClientHost {
   Unix,
   Windows,
+  Docker,
   Browser,
 }
 
@@ -89,6 +90,12 @@ const ClientHostScript = ({ host, sessionKey, encryptionKey }) => {
           $([scriptblock]::Create((New-Object
           System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) L {sessionKey}{" "}
           {encryptionKey.key}
+        </pre>
+      );
+    case ClientHost.Docker:
+      return (
+        <pre>
+          docker run --rm -it timetoogo/tunshell L {sessionKey} {encryptionKey.key}
         </pre>
       );
     case ClientHost.Browser:

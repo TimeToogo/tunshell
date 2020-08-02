@@ -15,13 +15,15 @@ tunshell todo:
  - [x] support in-browser terminal client
     - [x] tunshell-client wasm target
     - [x] extend relay server to support websocket connections and implement client in-browser
- - [ ] init scripts for multiple langs
+ - [ ] init scripts for multiple langs/envs
     - [x] sh/bash
     - [x] cmd/powershell
     - [x] node
     - [ ] python
     - [ ] C#
     - [ ] java
+    - [ ] php
+    - [x] docker
  - [ ] migrate aws account to OU
  - [ ] docs / website
 

@@ -16,8 +16,9 @@ use tokio::{
     task::JoinHandle,
 };
 use warp::{
+    filters::BoxedFilter,
     ws::{Message, WebSocket},
-    Filter,
+    Filter, Reply,
 };
 
 pub(super) struct WebSocketStream {
@@ -140,9 +141,13 @@ pub(super) struct WebSocketListener {
 }
 
 impl WebSocketListener {
-    pub(super) async fn bind(config: &Config) -> Result<Self> {
+    pub(super) async fn bind(
+        config: &Config,
+        routes: BoxedFilter<(impl Reply + 'static,)>,
+    ) -> Result<Self> {
         let (terminate_tx, terminate_rx) = mpsc::channel(1);
-        let (_listener, con_rx) = Self::listen_for_connections(config.clone(), terminate_rx);
+        let (_listener, con_rx) =
+            Self::listen_for_connections(config.clone(), routes, terminate_rx);
 
         Ok(Self {
             _listener,
@@ -153,11 +158,12 @@ impl WebSocketListener {
 
     fn listen_for_connections(
         config: Config,
+        routes: BoxedFilter<(impl Reply + 'static,)>,
         mut terminate_rx: Receiver<()>,
     ) -> (JoinHandle<()>, Receiver<WebSocketStream>) {
         let (con_tx, con_rx) = mpsc::channel(128);
 
-        let routes = warp::any()
+        let routes = routes.or(warp::path("ws")
             .and(warp::ws()) //
             .and(warp::addr::remote())
             .map(move |ws: warp::ws::Ws, addr: Option<SocketAddr>| {
@@ -175,13 +181,13 @@ impl WebSocketListener {
                         error!("failed to send websocket: {}", err);
                     }
                 })
-            });
+            }));
 
         let server = warp::serve(routes)
             .tls()
             .cert_path(config.tls_cert_path)
             .key_path(config.tls_key_path)
-            .run(([0, 0, 0, 0], config.ws_port));
+            .run(([0, 0, 0, 0], config.api_port));
 
         let task = tokio::spawn(async move {
             tokio::select! {
@@ -245,8 +251,14 @@ mod tests {
     }
 
     async fn init_server(config: &mut Config) -> WebSocketListener {
-        config.ws_port = init_port_number();
-        let server = WebSocketListener::bind(&config).await;
+        config.api_port = init_port_number();
+        let server = WebSocketListener::bind(
+            &config,
+            warp::path("unused")
+                .map(|| warp::http::StatusCode::OK)
+                .boxed(),
+        )
+        .await;
 
         delay_for(Duration::from_millis(100)).await;
 
@@ -270,7 +282,7 @@ mod tests {
         let tcp = TcpStream::connect(addr).await.unwrap();
         let local_addr = tcp.local_addr().unwrap();
 
-        let url = format!("wss://localhost:{}", port.to_string().as_str());
+        let url = format!("wss://localhost:{}/ws", port.to_string().as_str());
 
         let (ws, _) =
             client_async_tls_with_connector(url.as_str(), tcp.compat(), Some(client_config.into()))
@@ -285,7 +297,7 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mut config = Config::from_env().unwrap();
             let mut listener = init_server(&mut config).await;
-            let (addr, mut client_con) = init_connection(config.ws_port).await;
+            let (addr, mut client_con) = init_connection(config.api_port).await;
 
             let mut server_con = listener.accept().await.unwrap();
 
@@ -315,8 +327,8 @@ mod tests {
             let mut config = Config::from_env().unwrap();
             let mut listener = init_server(&mut config).await;
             let ((addr1, _client_con1), (addr2, _client_con2)) = futures::join!(
-                init_connection(config.ws_port),
-                init_connection(config.ws_port)
+                init_connection(config.api_port),
+                init_connection(config.api_port)
             );
 
             let server_con1 = listener.accept().await.unwrap();

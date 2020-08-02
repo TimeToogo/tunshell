@@ -88,7 +88,7 @@ pub fn tunshell_init_client(config: BrowserConfig) {
         ClientMode::Local,
         &config.client_key,
         "relay.tunshell.com",
-        5001,
+        443,
         &config.encryption_key,
     );
 

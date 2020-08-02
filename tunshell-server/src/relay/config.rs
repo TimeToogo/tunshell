@@ -12,7 +12,7 @@ const DEFAULT_CONNECTED_CONNECTION_EXPIRY_MS: u64 = 3600_000;
 #[derive(Clone)]
 pub(super) struct Config {
     pub(super) tls_port: u16,
-    pub(super) ws_port: u16,
+    pub(super) api_port: u16,
     pub(super) tls_config: Arc<ServerConfig>,
     pub(super) tls_key_path: String,
     pub(super) tls_cert_path: String,
@@ -25,7 +25,7 @@ pub(super) struct Config {
 impl Config {
     pub(super) fn from_env() -> Result<Config> {
         let tls_port = env::var("TUNSHELL_RELAY_TLS_PORT")?.parse::<u16>()?;
-        let ws_port = env::var("TUNSHELL_RELAY_WS_PORT")?.parse::<u16>()?;
+        let api_port = env::var("TUNSHELL_API_PORT")?.parse::<u16>()?;
 
         let tls_cert_path = env::var("TLS_RELAY_CERT")?;
         let tls_key_path = env::var("TLS_RELAY_PRIVATE_KEY")?;
@@ -39,7 +39,7 @@ impl Config {
 
         Ok(Config {
             tls_port,
-            ws_port,
+            api_port,
             tls_config,
             tls_cert_path,
             tls_key_path,
@@ -77,20 +77,20 @@ mod tests {
     #[test]
     fn test_config_from_env() {
         env::remove_var("TUNSHELL_RELAY_TLS_PORT");
-        env::remove_var("TUNSHELL_RELAY_WS_PORT");
+        env::remove_var("TUNSHELL_API_PORT");
         env::remove_var("TLS_RELAY_CERT");
         env::remove_var("TLS_RELAY_PRIVATE_KEY");
 
         assert!(Config::from_env().is_err());
 
         env::set_var("TUNSHELL_RELAY_TLS_PORT", "1234");
-        env::set_var("TUNSHELL_RELAY_WS_PORT", "1235");
+        env::set_var("TUNSHELL_API_PORT", "1235");
         env::set_var("TLS_RELAY_CERT", "certs/development.cert");
         env::set_var("TLS_RELAY_PRIVATE_KEY", "certs/development.key");
 
         let config = Config::from_env().unwrap();
 
         assert_eq!(config.tls_port, 1234);
-        assert_eq!(config.ws_port, 1235);
+        assert_eq!(config.api_port, 1235);
     }
 }
