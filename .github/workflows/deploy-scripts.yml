@@ -18,6 +18,13 @@ jobs:
       run: ./build.sh
       working-directory: scripts/netcore
       
+    - uses: actions/setup-java@v1
+      with:
+        java-version: '10'
+    - name: Compile Java init JAR
+      run: ./build.sh
+      working-directory: scripts/java
+      
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3
       run: aws s3 sync --delete --exclude="$PWD/*/*" ./ s3://lets.tunshell.com/ --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE 

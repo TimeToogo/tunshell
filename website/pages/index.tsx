@@ -23,6 +23,7 @@ enum TargetHost {
   Node,
   Python3,
   DotNetCore,
+  Java,
 }
 
 interface EncryptionKey {
@@ -136,6 +137,10 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
     case TargetHost.DotNetCore:
       return <pre>
         {`System.Reflection.Assembly.Load(new System.Net.WebClient().DownloadData("https://lets.tunshell.com/init.dotnet.dll")).EntryPoint.Invoke(null,new []{new string[]{"T","${sessionKey}","${encryptionKey.key}"}});`}
+      </pre>
+    case TargetHost.Java:
+      return <pre>
+        {`new URLClassLoader(new URL[]{new URL("https://lets.tunshell.com/init.jar")}).loadClass("init").getMethod("main",String[].class).invoke(null,(Object)new String[]{"T","${sessionKey}","${encryptionKey.key}"});`}
       </pre>
   }
 };

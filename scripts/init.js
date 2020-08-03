@@ -16,7 +16,7 @@
         x64: "x86_64-unknown-linux-musl",
         x32: "i686-unknown-linux-musl",
         arm: "armv7-unknown-linux-musleabihf",
-        arm64: "aarch64-unknown-linux-musleabihf",
+        arm64: "aarch64-unknown-linux-musl",
       },
       darwin: {
         x64: "x86_64-apple-darwin",

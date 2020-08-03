@@ -56,3 +56,6 @@ bin/
 obj/
 *.dll
 temp/
+
+# java
+*.jar

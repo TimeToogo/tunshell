@@ -21,7 +21,7 @@ tunshell todo:
     - [x] node
     - [x] python
     - [x] C#
-    - [ ] java
+    - [x] java
     - [ ] php
     - [x] docker
  - [ ] integration tests / pipeline tests
