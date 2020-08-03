@@ -24,6 +24,7 @@ enum TargetHost {
   Python3,
   DotNetCore,
   Java,
+  Php,
 }
 
 interface EncryptionKey {
@@ -141,6 +142,10 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
     case TargetHost.Java:
       return <pre>
         {`new URLClassLoader(new URL[]{new URL("https://lets.tunshell.com/init.jar")}).loadClass("init").getMethod("main",String[].class).invoke(null,(Object)new String[]{"T","${sessionKey}","${encryptionKey.key}"});`}
+      </pre>
+    case TargetHost.Php:
+      return <pre>
+        {`(eval(file_get_contents('https://lets.tunshell.com/init.php')))(['T','${sessionKey}','${encryptionKey.key}']);`}
       </pre>
   }
 };
