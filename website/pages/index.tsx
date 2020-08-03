@@ -22,6 +22,7 @@ enum TargetHost {
   Windows,
   Node,
   Python3,
+  DotNetCore,
 }
 
 interface EncryptionKey {
@@ -132,6 +133,10 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
       return (
         <pre>{`import urllib.request;r=urllib.request.urlopen('https://lets.tunshell.com/init.py') ;exec(r.read().decode('utf-8'),{'p':['T','${sessionKey}','${encryptionKey.key}']})`}</pre>
       );
+    case TargetHost.DotNetCore:
+      return <pre>
+        {`System.Reflection.Assembly.Load(new System.Net.WebClient().DownloadData("https://lets.tunshell.com/init.dotnet.dll")).EntryPoint.Invoke(null,new []{new string[]{"T","${sessionKey}","${encryptionKey.key}"}});`}
+      </pre>
   }
 };
 

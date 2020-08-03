@@ -7,6 +7,9 @@ case "$(uname -s):$(uname -m)" in
 Linux:x86_64*)     
     TARGET="x86_64-unknown-linux-musl"
     ;;
+Linux:arm64*)     
+    TARGET="aarch64-unknown-linux-musl"
+    ;;
 Linux:arm*)     
     TARGET="armv7-unknown-linux-musleabihf"
     ;;
@@ -20,10 +23,10 @@ Darwin:x86_64*)
     TARGET="x86_64-apple-darwin"
     ;;
 WindowsNT:x86_64*)    
-    TARGET="x86_64-pc-windows-msvc"
+    TARGET="x86_64-pc-windows-msvc.exe"
     ;;
 WindowsNT:i686*)    
-    TARGET="i686-pc-windows-msvc"
+    TARGET="i686-pc-windows-msvc.exe"
     ;;
 *)          
     echo "Unsupported system ($(uname))"

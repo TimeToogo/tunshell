@@ -11,11 +11,11 @@ export const Term: React.SFC<TerminalEmulatorProps> = ({ onEmulator }) => {
   const [fitAddon, setFitAddon] = useState<import("xterm-addon-fit").FitAddon>();
 
   useEffect(() => {
-    (async () => {
-      if (!ref.current || term) {
-        return;
-      }
+    if (!ref.current || term) {
+      return;
+    }
 
+    (async () => {
       console.log(`Creating terminal...`);
 
       const [xterm, fit] = await Promise.all([

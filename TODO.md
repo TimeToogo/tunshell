@@ -19,15 +19,16 @@ tunshell todo:
     - [x] sh/bash
     - [x] cmd/powershell
     - [x] node
-    - [ ] python
-    - [ ] C#
+    - [x] python
+    - [x] C#
     - [ ] java
     - [ ] php
     - [x] docker
- - [ ] migrate aws account to OU
+ - [ ] integration tests / pipeline tests
+ - [ ] migrate aws account to OU / investigate hosting options
  - [ ] docs / website
 
 future scope:
 
- - [ ] integrate with https://github.com/uutils/coreutils for enhanced fallback shell
- - [ ] 
+ - [ ] integrate with https://github.com/uutils/coreutils / busybox for enhanced fallback shell
+ - [ ] socket forwarding / file copying

@@ -50,3 +50,9 @@ tunshell-client/pkg
 
 # logs
 *.log
+
+# .net core
+bin/
+obj/
+*.dll
+temp/

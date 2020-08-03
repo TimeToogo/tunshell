@@ -10,8 +10,9 @@ def get_target():
     targets = {
       'Linux': {
         'x86_64': 'x86_64-unknown-linux-musl',
-        'arm': 'armv7-unknown-linux-musleabihf',
         'i686': 'i686-unknown-linux-musl',
+        'arm': 'armv7-unknown-linux-musleabihf',
+        'arm64': 'aarch64-unknown-linux-musl',
       },
       'Darwin': {
         'x86_64': 'x86_64-apple-darwin',
@@ -20,7 +21,7 @@ def get_target():
         'x86_64': 'x86_64-pc-windows-msvc',
         'i686': 'i686-pc-windows-msvc',
       },
-    };
+    }
 
     system = platform.system()
     arch = platform.machine()

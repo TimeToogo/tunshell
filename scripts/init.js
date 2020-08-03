@@ -14,16 +14,16 @@
     const targets = {
       linux: {
         x64: "x86_64-unknown-linux-musl",
-        arm: "armv7-unknown-linux-musleabihf",
-        arm64: "armv7-unknown-linux-musleabihf",
         x32: "i686-unknown-linux-musl",
+        arm: "armv7-unknown-linux-musleabihf",
+        arm64: "aarch64-unknown-linux-musleabihf",
       },
       darwin: {
         x64: "x86_64-apple-darwin",
       },
       win32: {
-        x64: "x86_64-pc-windows-msvc",
-        x32: "i686-pc-windows-msvc",
+        x64: "x86_64-pc-windows-msvc.exe",
+        x32: "i686-pc-windows-msvc.exe",
       },
     };
 
