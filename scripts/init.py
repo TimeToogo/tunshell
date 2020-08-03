@@ -1,11 +1,10 @@
 # === TUNSHELL PYTHON3 SCRIPT ===
 import platform
 import tempfile
-import requests
+import urllib.request
 import os
 import sys
 import subprocess
-
 
 def get_target():
     targets = {
@@ -39,9 +38,8 @@ def run():
     target = get_target()
 
     with tempfile.NamedTemporaryFile() as tmp:
-        r = requests.get(f'https://artifacts.tunshell.com/client-{target}', allow_redirects=True)
-        tmp.write(r.content)
-
+        r = urllib.request.urlopen(f'https://artifacts.tunshell.com/client-{target}')
+        tmp.write(r.read())
         os.chmod(tmp.name, 0o755)
         subprocess.run([tmp.name] + p)
 
