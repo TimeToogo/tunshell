@@ -130,10 +130,7 @@ const TargetHostScript = ({ host, sessionKey, encryptionKey }) => {
       );
     case TargetHost.Python3:
       return (
-        <pre>{
-`import requests
-py1 = requests.get('https://lets.tunshell.com/init.py').content
-exec(py1, {'p': ['T', '${sessionKey}', '${encryptionKey.key}']})`}</pre>
+        <pre>{`import urllib.request;r=urllib.request.urlopen('https://lets.tunshell.com/init.py') ;exec(r.read().decode('utf-8'),{'p':['T','${sessionKey}','${encryptionKey.key}']})`}</pre>
       );
   }
 };
