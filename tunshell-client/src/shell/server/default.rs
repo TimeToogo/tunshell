@@ -84,7 +84,7 @@ pub(super) fn get_default_shell(shell: Option<&str>) -> Result<DefaultShell> {
                 }
             })?);
 
-    if !shell.parse::<PathBuf>()?.exists() || shell == "nologin" || shell.ends_with("/nologin") {
+    if !shell.parse::<PathBuf>()?.exists() || shell == "nologin" || shell.ends_with("/nologin") || shell.ends_with("/busybox") {
         shell = "/bin/sh".to_owned();
     }
 
