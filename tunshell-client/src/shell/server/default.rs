@@ -84,13 +84,13 @@ pub(super) fn get_default_shell(shell: Option<&str>) -> Result<DefaultShell> {
                 }
             })?);
 
-    if !shell.parse::<PathBuf>()?.exists() || shell == "nologin" || shell.ends_with("/nologin") || shell.ends_with("/busybox") {
+    if !shell.parse::<PathBuf>()?.exists() || shell == "nologin" || shell.ends_with("/nologin") {
         shell = "/bin/sh".to_owned();
     }
 
-    shell = fs::canonicalize(shell.parse::<PathBuf>()?)?
-        .to_string_lossy()
-        .to_string();
+//     shell = fs::canonicalize(shell.parse::<PathBuf>()?)?
+//         .to_string_lossy()
+//         .to_string();
 
     let mut cmd = DefaultShell::new(shell.clone());
 
