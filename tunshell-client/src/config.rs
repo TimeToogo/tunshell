@@ -7,6 +7,7 @@ pub struct Config {
     encryption_key: String,
     relay_host: String,
     relay_port: u16,
+    dangerous_disable_relay_server_verification: bool,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -40,6 +41,7 @@ impl Config {
             relay_host: "relay.tunshell.com".to_owned(),
             relay_port: 5000,
             encryption_key,
+            dangerous_disable_relay_server_verification: false,
         }
     }
 
@@ -56,6 +58,7 @@ impl Config {
             relay_host: relay_host.to_owned(),
             relay_port,
             encryption_key: encryption_key.to_owned(),
+            dangerous_disable_relay_server_verification: false,
         }
     }
 
@@ -81,6 +84,15 @@ impl Config {
 
     pub fn encryption_key(&self) -> &str {
         &self.encryption_key[..]
+    }
+
+    pub fn dangerous_disable_relay_server_verification(&self) -> bool {
+        self.dangerous_disable_relay_server_verification
+    }
+
+    pub fn set_dangerous_disable_relay_server_verification(&mut self, flag: bool) {
+        log::warn!("disabling TLS cert verification for relay server");
+        self.dangerous_disable_relay_server_verification = flag;
     }
 }
 

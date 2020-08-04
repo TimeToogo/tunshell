@@ -5,6 +5,7 @@
     "export": "next build && next export"
   },
   "dependencies": {
+    "base-x": "^3.0.8",
     "next": "9.3.6",
     "react": "16.13.1",
     "react-dom": "16.13.1",

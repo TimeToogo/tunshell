@@ -1,4 +1,3 @@
-mod config;
 mod routes;
 mod cors;
 

@@ -26,8 +26,7 @@ impl ServerStream {
             .root_store
             .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
-        #[cfg(insecure)]
-        {
+        if config.dangerous_disable_relay_server_verification() {
             use tokio_rustls::rustls;
 
             struct NullCertVerifier {}
@@ -44,7 +43,8 @@ impl ServerStream {
                 }
             }
 
-            config
+            log::warn!("disabling TLS verification");
+            tls_config
                 .dangerous()
                 .set_certificate_verifier(Arc::new(NullCertVerifier {}));
         }
@@ -53,17 +53,7 @@ impl ServerStream {
 
         let relay_dns_name = DNSNameRef::try_from_ascii_str(config.relay_host())?;
 
-        #[cfg(not(insecure))]
         let relay_addr = (config.relay_host(), config.relay_port())
-            .to_socket_addrs()?
-            .next()
-            .unwrap();
-
-        #[cfg(insecure)]
-        let relay_addr = (
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-            3001,
-        )
             .to_socket_addrs()?
             .next()
             .unwrap();

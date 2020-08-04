@@ -134,6 +134,7 @@ impl Client {
         };
 
         assert!(peer_info.session_nonce.len() > 10);
+        
         let stream = AesStream::new(
             stream.compat(),
             peer_info.session_nonce.as_bytes(),

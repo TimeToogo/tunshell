@@ -73,7 +73,7 @@ impl ShellServer {
         }
     }
 
-    async fn start_shell(&self, stream: &mut ShellStream) -> Result<Box<dyn Shell>> {
+    async fn start_shell(&self, stream: &mut ShellStream) -> Result<Box<dyn Shell + Send>> {
         let request = tokio::select! {
             message = stream.next() => match message {
                 Some(Ok(ShellClientMessage::StartShell(request))) => request,
@@ -105,7 +105,7 @@ impl ShellServer {
     async fn steam_shell_io<'a>(
         &self,
         stream: &mut ShellStream,
-        mut shell: Box<dyn Shell + 'a>,
+        mut shell: Box<dyn Shell + Send + 'a>,
     ) -> Result<()> {
         let mut buff = [0u8; 1024];
 

@@ -10,20 +10,20 @@ const DEFAULT_WAITING_CONNECTION_EXPIRY_MS: u64 = 3600_000;
 const DEFAULT_CONNECTED_CONNECTION_EXPIRY_MS: u64 = 3600_000;
 
 #[derive(Clone)]
-pub(super) struct Config {
-    pub(super) tls_port: u16,
-    pub(super) api_port: u16,
-    pub(super) tls_config: Arc<ServerConfig>,
-    pub(super) tls_key_path: String,
-    pub(super) tls_cert_path: String,
-    pub(super) client_key_timeout: Duration,
-    pub(super) expired_connection_clean_interval: Duration,
-    pub(super) waiting_connection_expiry: Duration,
-    pub(super) paired_connection_expiry: Duration,
+pub struct Config {
+    pub tls_port: u16,
+    pub api_port: u16,
+    pub tls_config: Arc<ServerConfig>,
+    pub tls_key_path: String,
+    pub tls_cert_path: String,
+    pub client_key_timeout: Duration,
+    pub expired_connection_clean_interval: Duration,
+    pub waiting_connection_expiry: Duration,
+    pub paired_connection_expiry: Duration,
 }
 
 impl Config {
-    pub(super) fn from_env() -> Result<Config> {
+    pub fn from_env() -> Result<Config> {
         let tls_port = env::var("TUNSHELL_RELAY_TLS_PORT")?.parse::<u16>()?;
         let api_port = env::var("TUNSHELL_API_PORT")?.parse::<u16>()?;
 

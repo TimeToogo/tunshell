@@ -1,4 +1,4 @@
-use super::{config::Config, cors::cors, routes};
+use super::{cors::cors, routes};
 use crate::db;
 use anyhow::Result;
 use log::*;
@@ -6,8 +6,7 @@ use std::sync::Arc;
 use warp::{filters::BoxedFilter, Filter, Reply};
 
 pub async fn register() -> Result<BoxedFilter<(impl Reply + 'static,)>> {
-    let config = Config::from_env()?;
-    info!("starting api server on port {}", config.port);
+    info!("registering api server routes");
 
     let db_client = Arc::new(db::connect().await?);
 

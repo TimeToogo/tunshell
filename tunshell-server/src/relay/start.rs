@@ -4,9 +4,7 @@ use anyhow::Result;
 use log::*;
 use warp::{filters::BoxedFilter, Reply};
 
-pub async fn start(routes: BoxedFilter<(impl Reply + 'static,)>) -> Result<()> {
-    let config = Config::from_env()?;
-
+pub async fn start(config: Config, routes: BoxedFilter<(impl Reply + 'static,)>) -> Result<()> {
     let sessions = db::SessionStore::new(db::connect().await?);
 
     info!(
