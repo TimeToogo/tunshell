@@ -24,6 +24,7 @@ tunshell todo:
     - [x] java
     - [x] php
     - [x] docker
+ - [x] improve port binding logic
  - [ ] integration tests / pipeline tests
  - [ ] docs / website
  - [ ] migrate aws account to OU / investigate hosting options
@@ -32,3 +33,4 @@ future scope:
 
  - [ ] integrate with https://github.com/uutils/coreutils / busybox for enhanced fallback shell
  - [ ] socket forwarding / file copying
+ - [ ] replace AES encryption scheme TLS using 256bit ECDH key pairs (public keys become session keys)

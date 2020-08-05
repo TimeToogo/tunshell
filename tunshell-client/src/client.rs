@@ -1,8 +1,10 @@
+#[cfg(not(target_arch = "wasm32"))]
+use crate::p2p;
 use crate::{
     AesStream, ClientMode, Config, HostShell, RelayStream, ServerStream, ShellKey, TunnelStream,
 };
 use anyhow::{Error, Result};
-use futures::stream::StreamExt;
+use futures::{future, stream::StreamExt, FutureExt};
 use log::*;
 use std::sync::{Arc, Mutex};
 use tokio_util::compat::*;
@@ -89,22 +91,43 @@ impl Client {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     async fn negotiate_peer_connection(
         &mut self,
         mut message_stream: ClientMessageStream,
         peer_info: &mut PeerJoinedPayload,
         master_side: bool,
     ) -> Result<Box<dyn TunnelStream>> {
+        let mut bound = None;
+
         let stream = loop {
             match message_stream.next().await {
-                Some(Ok(ServerMessage::AttemptDirectConnect(payload))) => {
+                Some(Ok(ServerMessage::BindForDirectConnect)) => {
+                    match self.bind_direct_connection(peer_info).await {
+                        Some((tcp, udp, ports)) => {
+                            message_stream
+                                .write(&ClientMessage::DirectConnectBound(ports))
+                                .await?;
+
+                            bound = Some((tcp, udp));
+                        }
+                        None => {
+                            message_stream
+                                .write(&ClientMessage::DirectConnectFailed)
+                                .await?
+                        }
+                    }
+                }
+                Some(Ok(ServerMessage::AttemptDirectConnect(ports))) => {
+                    if bound.is_none() {
+                        return Err(Error::msg(
+                            "server attempted direct connection before binding",
+                        ));
+                    }
+
+                    let bound = std::mem::replace(&mut bound, None).unwrap();
                     match self
-                        .attempt_direct_connection(
-                            &mut message_stream,
-                            peer_info,
-                            &payload,
-                            master_side,
-                        )
+                        .attempt_direct_connection(bound.0, bound.1, ports, master_side)
                         .await?
                     {
                         Some(direct_stream) => {
@@ -134,7 +157,7 @@ impl Client {
         };
 
         assert!(peer_info.session_nonce.len() > 10);
-        
+
         let stream = AesStream::new(
             stream.compat(),
             peer_info.session_nonce.as_bytes(),
@@ -146,15 +169,20 @@ impl Client {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    async fn attempt_direct_connection(
+    async fn bind_direct_connection(
         &mut self,
-        _message_stream: &mut ClientMessageStream,
         peer_info: &mut PeerJoinedPayload,
-        connection_info: &AttemptDirectConnectPayload,
-        master_side: bool,
-    ) -> Result<Option<Box<dyn TunnelStream>>> {
-        use crate::p2p::{self, P2PConnection};
-        use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    ) -> Option<(
+        Option<p2p::tcp::TcpConnection>,
+        Option<p2p::udp_adaptor::UdpConnectionAdaptor>,
+        PortBindings,
+    )> {
+        use crate::p2p::P2PConnection;
+
+        if !self.config.enable_direct_connection() {
+            debug!("direct connections are disabled");
+            return None;
+        }
 
         self.println(
             format!(
@@ -165,60 +193,119 @@ impl Client {
         )
         .await;
 
-        // Initialise and bind sockets
-        let mut tcp = p2p::tcp::TcpConnection::new(peer_info.clone(), connection_info.clone());
-        let mut udp =
-            p2p::udp_adaptor::UdpConnectionAdaptor::new(peer_info.clone(), connection_info.clone());
+        debug!("binding ports for direct connection");
 
-        tokio::try_join!(tcp.bind(), udp.bind())?;
+        let mut tcp = p2p::tcp::TcpConnection::new(peer_info.clone());
+        let mut udp = p2p::udp_adaptor::UdpConnectionAdaptor::new(peer_info.clone());
 
-        let current_timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        let sleep_duration = if connection_info.connect_at < current_timestamp {
-            0
-        } else {
-            connection_info.connect_at - current_timestamp
+        let (tcp_port, udp_port) = future::join(tcp.bind(), udp.bind()).await;
+
+        let ports = PortBindings {
+            tcp_port: tcp_port.ok(),
+            udp_port: udp_port.ok(),
         };
 
-        std::thread::sleep(Duration::from_millis(sleep_duration));
+        debug!("direct connection ports: {:?}", ports);
 
-        let stream: Option<Box<dyn TunnelStream>> = tokio::select! {
-            result = tcp.connect(master_side) => match result {
-                Ok(_) => Some(Box::new(tcp)),
-                Err(err) => {
-                    warn!("Error while establishing TCP connection: {}", err);
-                    None
-                }
-            },
-            result = udp.connect(master_side) => match result {
-                Ok(_) => Some(Box::new(udp)),
-                Err(err) => {
-                    warn!("Error while establishing UDP connection: {}", err);
-                    None
-                }
+        let tcp = ports.tcp_port.map(move |_| tcp);
+        let udp = ports.udp_port.map(move |_| udp);
+
+        Some((tcp, udp, ports))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn attempt_direct_connection(
+        &mut self,
+        mut tcp: Option<p2p::tcp::TcpConnection>,
+        mut udp: Option<p2p::udp_adaptor::UdpConnectionAdaptor>,
+        peer_ports: PortBindings,
+        master_side: bool,
+    ) -> Result<Option<Box<dyn TunnelStream>>> {
+        use crate::p2p::P2PConnection;
+
+        let tcp_connection = match (&mut tcp, &peer_ports) {
+            (
+                Some(tcp),
+                PortBindings {
+                    tcp_port: Some(peer_port),
+                    ..
+                },
+            ) => tcp.connect(*peer_port, master_side).boxed(),
+            _ => future::pending().boxed(),
+        };
+
+        let udp_connection = match (&mut udp, &peer_ports) {
+            (
+                Some(udp),
+                PortBindings {
+                    udp_port: Some(peer_port),
+                    ..
+                },
+            ) => udp.connect(*peer_port, master_side).boxed(),
+            _ => future::pending().boxed(),
+        };
+
+        let timeout = self.config.direct_connection_timeout();
+
+        let attempt_connection = future::join(
+            tokio::time::timeout(timeout, tcp_connection),
+            tokio::time::timeout(timeout, udp_connection),
+        );
+
+        let stream: Option<Box<dyn TunnelStream>> = match attempt_connection.await {
+            (Ok(Ok(_)), _) => {
+                info!("direct TCP connection established with peer");
+                Some(Box::new(tcp.unwrap()))
             }
+            (_, Ok(Ok(_))) => {
+                info!("direct UDP connection established with peer");
+                Some(Box::new(udp.unwrap()))
+            }
+            _ => None,
         };
 
-        let stream = match stream {
-            Some(stream) => stream,
-            None => return Ok(None),
-        };
-
-        Ok(Some(stream))
+        Ok(stream)
     }
 
     #[cfg(target_arch = "wasm32")]
-    async fn attempt_direct_connection(
+    async fn negotiate_peer_connection(
         &mut self,
-        _message_stream: &mut ClientMessageStream,
-        _peer_info: &mut PeerJoinedPayload,
-        _connection_info: &AttemptDirectConnectPayload,
+        mut message_stream: ClientMessageStream,
+        peer_info: &mut PeerJoinedPayload,
         _master_side: bool,
-    ) -> Result<Option<Box<dyn TunnelStream>>> {
-        // Does not support direct connection when running in browser
-        Ok(None)
+    ) -> Result<Box<dyn TunnelStream>> {
+        let stream = loop {
+            match message_stream.next().await {
+                Some(Ok(ServerMessage::BindForDirectConnect)) => {
+                    message_stream
+                        .write(&ClientMessage::DirectConnectFailed)
+                        .await?
+                }
+                Some(Ok(ServerMessage::StartRelayMode)) => {
+                    self.println("Falling back to relayed connection").await;
+                    break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))));
+                }
+                Some(Ok(message)) => {
+                    return Err(Error::msg(format!(
+                        "Unexpected response returned by server: {:?}",
+                        message
+                    )))
+                }
+                Some(Err(err)) => return Err(err),
+                None => return Err(Error::msg("Connection closed unexpectedly")),
+            }
+        };
+
+        assert!(peer_info.session_nonce.len() > 10);
+
+        let stream = AesStream::new(
+            stream.compat(),
+            peer_info.session_nonce.as_bytes(),
+            self.config.encryption_key().as_bytes(),
+        )
+        .await?;
+
+        Ok(Box::new(stream))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -258,6 +345,7 @@ mod tests {
             "relay.tunshell.com",
             5000,
             "test",
+            true,
         );
         let mut client = Client::new(config, HostShell::new().unwrap());
 

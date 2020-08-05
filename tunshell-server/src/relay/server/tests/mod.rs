@@ -8,7 +8,9 @@ use tokio::{
     time::{delay_for, timeout},
 };
 use tokio_util::compat::*;
-use tunshell_shared::{ClientMessage, PeerJoinedPayload, RelayPayload, ServerMessage};
+use tunshell_shared::{
+    ClientMessage, PeerJoinedPayload, PortBindings, RelayPayload, ServerMessage,
+};
 
 mod utils;
 
@@ -319,7 +321,41 @@ fn test_direct_connection() {
         let message_client = con_client.next().await.unwrap().unwrap();
 
         match (message_host, message_client) {
-            (ServerMessage::AttemptDirectConnect(_), ServerMessage::AttemptDirectConnect(_)) => {}
+            (ServerMessage::BindForDirectConnect, ServerMessage::BindForDirectConnect) => {}
+            msgs @ _ => panic!(
+                "expected to receive bind for direct connect messages but received: {:?}",
+                msgs
+            ),
+        }
+        con_host
+            .write(&ClientMessage::DirectConnectBound(PortBindings {
+                udp_port: Some(1111),
+                tcp_port: Some(2222),
+            }))
+            .await
+            .unwrap();
+        con_client
+            .write(&ClientMessage::DirectConnectBound(PortBindings {
+                udp_port: Some(3333),
+                tcp_port: Some(4444),
+            }))
+            .await
+            .unwrap();
+
+        let message_host = con_host.next().await.unwrap().unwrap();
+        let message_client = con_client.next().await.unwrap().unwrap();
+
+        match (message_host, message_client) {
+            (
+                ServerMessage::AttemptDirectConnect(PortBindings {
+                    udp_port: Some(3333),
+                    tcp_port: Some(4444),
+                }),
+                ServerMessage::AttemptDirectConnect(PortBindings {
+                    udp_port: Some(1111),
+                    tcp_port: Some(2222),
+                }),
+            ) => {}
             msgs @ _ => panic!(
                 "expected to receive attempt direct connect messages but received: {:?}",
                 msgs
@@ -401,9 +437,9 @@ fn test_relayed_connection() {
         let message_client = con_client.next().await.unwrap().unwrap();
 
         match (message_host, message_client) {
-            (ServerMessage::AttemptDirectConnect(_), ServerMessage::AttemptDirectConnect(_)) => {}
+            (ServerMessage::BindForDirectConnect, ServerMessage::BindForDirectConnect) => {}
             msgs @ _ => panic!(
-                "expected to receive attempt direct connect messages but received: {:?}",
+                "expected to receive bind for direct connect messages but received: {:?}",
                 msgs
             ),
         }
@@ -512,9 +548,9 @@ fn test_clean_up_paired_connection() {
         let message_client = con_client.next().await.unwrap().unwrap();
 
         match (message_host, message_client) {
-            (ServerMessage::AttemptDirectConnect(_), ServerMessage::AttemptDirectConnect(_)) => {}
+            (ServerMessage::BindForDirectConnect, ServerMessage::BindForDirectConnect) => {}
             msgs @ _ => panic!(
-                "expected to receive attempt direct connect messages but received: {:?}",
+                "expected to receive bind for direct connect messages but received: {:?}",
                 msgs
             ),
         }

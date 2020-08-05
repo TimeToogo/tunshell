@@ -1,5 +1,7 @@
 use anyhow::Error;
-use std::{convert::TryFrom, env};
+use std::{convert::TryFrom, env, time::Duration};
+
+const DEFAULT_DIRECT_CONNECT_TIMEOUT: u64 = 3000; // ms
 
 pub struct Config {
     mode: ClientMode,
@@ -7,6 +9,8 @@ pub struct Config {
     encryption_key: String,
     relay_host: String,
     relay_port: u16,
+    direct_connection_timeout: Duration,
+    enable_direct_connection: bool,
     dangerous_disable_relay_server_verification: bool,
 }
 
@@ -41,6 +45,8 @@ impl Config {
             relay_host: "relay.tunshell.com".to_owned(),
             relay_port: 5000,
             encryption_key,
+            direct_connection_timeout: Duration::from_millis(DEFAULT_DIRECT_CONNECT_TIMEOUT),
+            enable_direct_connection: true,
             dangerous_disable_relay_server_verification: false,
         }
     }
@@ -51,6 +57,7 @@ impl Config {
         relay_host: &str,
         relay_port: u16,
         encryption_key: &str,
+        enable_direct_connection: bool,
     ) -> Self {
         Self {
             mode,
@@ -58,6 +65,8 @@ impl Config {
             relay_host: relay_host.to_owned(),
             relay_port,
             encryption_key: encryption_key.to_owned(),
+            direct_connection_timeout: Duration::from_millis(DEFAULT_DIRECT_CONNECT_TIMEOUT),
+            enable_direct_connection,
             dangerous_disable_relay_server_verification: false,
         }
     }
@@ -84,6 +93,14 @@ impl Config {
 
     pub fn encryption_key(&self) -> &str {
         &self.encryption_key[..]
+    }
+
+    pub fn direct_connection_timeout(&self) -> Duration {
+        self.direct_connection_timeout
+    }
+
+    pub fn enable_direct_connection(&self) -> bool {
+        self.enable_direct_connection
     }
 
     pub fn dangerous_disable_relay_server_verification(&self) -> bool {

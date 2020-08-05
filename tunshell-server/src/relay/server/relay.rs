@@ -5,9 +5,7 @@ use log::*;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
-use tunshell_shared::{
-    AttemptDirectConnectPayload, ClientMessage, PeerJoinedPayload, ServerMessage,
-};
+use tunshell_shared::{ClientMessage, PeerJoinedPayload, PortBindings, ServerMessage};
 
 pub(super) fn pair_connections(
     mut con1: Connection,
@@ -38,6 +36,7 @@ pub(super) fn pair_connections(
         let direct_connection = attempt_direct_connection(&mut con1, &mut con2).await;
 
         if let Err(err) = direct_connection {
+            warn!("error during attempting direct connection: {}", err);
             return Err(err.context("establishing direct connection"));
         }
 
@@ -102,27 +101,60 @@ fn generate_secure_nonce() -> String {
 }
 
 async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection) -> Result<bool> {
-    // TODO: Improve port selection
-    let (port1, port2) = {
-        let mut rng = thread_rng();
-        (rng.gen_range(20000, 40000), rng.gen_range(20000, 40000))
+    tokio::try_join!(
+        con1.stream.write(ServerMessage::BindForDirectConnect),
+        con2.stream.write(ServerMessage::BindForDirectConnect)
+    )
+    .context("sending bind for direct connection command")?;
+
+    let (result1, result2) = tokio::try_join!(con1.stream.next(), con2.stream.next())
+        .context("waiting for direct connection binding response")?;
+
+    let (ports1, ports2) = match (result1, result2) {
+        (ClientMessage::DirectConnectBound(ports1), ClientMessage::DirectConnectBound(ports2)) => {
+            (ports1, ports2)
+        }
+        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectBound(_)) => return Ok(false),
+        (ClientMessage::DirectConnectBound(_), ClientMessage::DirectConnectFailed) => return Ok(false),
+        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectFailed) => return Ok(false),
+        msgs @ _ => {
+            return Err(Error::msg(format!(
+                "unexpected message while attempting to bind for direct connection: {:?}",
+                msgs
+            )))
+        }
     };
 
+    let supports_matching_protocols = match (&ports1, &ports2) {
+        (
+            PortBindings {
+                tcp_port: Some(_), ..
+            },
+            PortBindings {
+                tcp_port: Some(_), ..
+            },
+        ) => true,
+        (
+            PortBindings {
+                udp_port: Some(_), ..
+            },
+            PortBindings {
+                udp_port: Some(_), ..
+            },
+        ) => true,
+        _ => false,
+    };
+
+    if !supports_matching_protocols {
+        debug!("cannot attempt direct connection due to mismatch of port binding protocols");
+        return Ok(false);
+    }
+
     tokio::try_join!(
-        con1.stream.write(ServerMessage::AttemptDirectConnect(
-            AttemptDirectConnectPayload {
-                connect_at: 0,
-                self_listen_port: port1,
-                peer_listen_port: port2,
-            }
-        )),
-        con2.stream.write(ServerMessage::AttemptDirectConnect(
-            AttemptDirectConnectPayload {
-                connect_at: 0,
-                self_listen_port: port2,
-                peer_listen_port: port1,
-            }
-        ))
+        con1.stream
+            .write(ServerMessage::AttemptDirectConnect(ports2)),
+        con2.stream
+            .write(ServerMessage::AttemptDirectConnect(ports1))
     )
     .context("sending direct connection command")?;
 

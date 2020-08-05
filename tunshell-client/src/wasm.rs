@@ -90,6 +90,7 @@ pub fn tunshell_init_client(config: BrowserConfig) {
         "relay.tunshell.com",
         443,
         &config.encryption_key,
+        false
     );
 
     wasm_bindgen_futures::spawn_local(async move {

@@ -12,11 +12,10 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::delay_for;
-use tunshell_shared::{AttemptDirectConnectPayload, PeerJoinedPayload};
+use tunshell_shared::PeerJoinedPayload;
 
 pub struct TcpConnection {
     peer_info: PeerJoinedPayload,
-    connection_info: AttemptDirectConnectPayload,
     listener: Option<TcpListener>,
     socket: Option<TcpStream>,
 }
@@ -59,28 +58,24 @@ impl TunnelStream for TcpConnection {}
 
 #[async_trait]
 impl P2PConnection for TcpConnection {
-    fn new(peer_info: PeerJoinedPayload, connection_info: AttemptDirectConnectPayload) -> Self {
+    fn new(peer_info: PeerJoinedPayload) -> Self {
         Self {
             peer_info,
-            connection_info,
             listener: None,
             socket: None,
         }
     }
 
-    async fn bind(&mut self) -> Result<()> {
-        let listener = TcpListener::bind(SocketAddr::from((
-            [0, 0, 0, 0],
-            self.connection_info.self_listen_port,
-        )))
-        .await?;
+    async fn bind(&mut self) -> Result<u16> {
+        let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0))).await?;
+        let port = listener.local_addr()?.port();
 
         self.listener.replace(listener);
 
-        Ok(())
+        Ok(port)
     }
 
-    async fn connect(&mut self, _master_side: bool) -> Result<()> {
+    async fn connect(&mut self, peer_port: u16, _master_side: bool) -> Result<()> {
         assert!(self.listener.is_some());
 
         info!(
@@ -88,10 +83,7 @@ impl P2PConnection for TcpConnection {
             self.peer_info.peer_ip_address
         );
 
-        let peer_addr = (
-            self.peer_info.peer_ip_address.as_str(),
-            self.connection_info.peer_listen_port,
-        )
+        let peer_addr = (self.peer_info.peer_ip_address.as_str(), peer_port)
             .to_socket_addrs()
             .unwrap()
             .next()
@@ -146,21 +138,17 @@ mod tests {
                 .await
                 .expect("failed listen for connection");
 
-            let mut connection1 = TcpConnection::new(
-                PeerJoinedPayload {
-                    peer_ip_address: "127.0.0.1".to_owned(),
-                    peer_key: "test".to_owned(),
-                    session_nonce: "nonce".to_owned(),
-                },
-                AttemptDirectConnectPayload {
-                    connect_at: 1,
-                    peer_listen_port: 22335,
-                    self_listen_port: 22334,
-                },
-            );
+            let mut connection1 = TcpConnection::new(PeerJoinedPayload {
+                peer_ip_address: "127.0.0.1".to_owned(),
+                peer_key: "test".to_owned(),
+                session_nonce: "nonce".to_owned(),
+            });
 
             connection1.bind().await.expect("failed to bind");
-            connection1.connect(false).await.expect("failed to connect");
+            connection1
+                .connect(22335, false)
+                .await
+                .expect("failed to connect");
 
             let (mut socket, _) = listener
                 .accept()
@@ -202,23 +190,16 @@ mod tests {
                 peer_key: "test".to_owned(),
                 session_nonce: "nonce".to_owned(),
             };
-            let mut connection1 = TcpConnection::new(
-                peer_info.clone(),
-                AttemptDirectConnectPayload {
-                    connect_at: 1,
-                    peer_listen_port: 22444,
-                    self_listen_port: 22445,
-                },
-            );
+            let mut connection1 = TcpConnection::new(peer_info.clone());
 
-            connection1.bind().await.expect("failed to bind");
+            let port = connection1.bind().await.expect("failed to bind");
 
             let socket = delay_for(Duration::from_millis(100))
-                .then(|_| TcpStream::connect("127.0.0.1:22445"))
+                .then(|_| TcpStream::connect(format!("127.0.0.1:{}", port)))
                 .or_else(|err| futures::future::err(Error::new(err)));
 
             let (_, mut socket) =
-                futures::try_join!(connection1.connect(false), socket).expect("failed to connect");
+                futures::try_join!(connection1.connect(22444, false), socket).expect("failed to connect");
 
             socket.write("hello".as_bytes()).await.unwrap();
 
@@ -243,84 +224,16 @@ mod tests {
                 peer_key: "test".to_owned(),
                 session_nonce: "nonce".to_owned(),
             };
-            let mut connection1 = TcpConnection::new(
-                peer_info.clone(),
-                AttemptDirectConnectPayload {
-                    connect_at: 1,
-                    peer_listen_port: 22554,
-                    self_listen_port: 22555,
-                },
-            );
+            let mut connection1 = TcpConnection::new(peer_info.clone());
 
             connection1.bind().await.expect("failed to bind");
 
             let (_, result) = futures::join!(
                 delay_for(Duration::from_millis((DIRECT_CONNECT_TIMEOUT + 100) as u64)),
-                connection1.connect(false)
+                connection1.connect(22554, false)
             );
 
             assert!(result.is_err());
         });
     }
-
-    // #[test]
-    // fn test_connect_simultaneous_open() {
-    //     Runtime::new().unwrap().block_on(async {
-    //         let peer_info = PeerJoinedPayload {
-    //             peer_ip_address: "127.0.0.1".to_owned(),
-    //             peer_key: "test".to_owned(),
-    //             session_nonce: "nonce".to_owned(),
-    //         };
-
-    //         let mut connection1 = TcpConnection::new(
-    //             peer_info.clone(),
-    //             AttemptDirectConnectPayload {
-    //                 connect_at: 1,
-    //                 peer_listen_port: 22664,
-    //                 self_listen_port: 22665,
-    //             },
-    //         );
-
-    //         let mut connection2 = TcpConnection::new(
-    //             peer_info.clone(),
-    //             AttemptDirectConnectPayload {
-    //                 connect_at: 1,
-    //                 peer_listen_port: 22665,
-    //                 self_listen_port: 22664,
-    //             },
-    //         );
-
-    //         connection1.bind().await.expect("failed to bind");
-    //         connection2.bind().await.expect("failed to bind");
-
-    //         futures::try_join!(connection1.connect(false), connection2.connect(false))
-    //             .expect("failed to connect");
-
-    //         connection1.write("hello from 1".as_bytes()).await.unwrap();
-    //         connection1.flush().await.unwrap();
-
-    //         delay_for(Duration::from_millis(50)).await;
-
-    //         let mut buff = [0; 1024];
-    //         let read = connection2.read(&mut buff).await.unwrap();
-
-    //         assert_eq!(
-    //             String::from_utf8(buff[..read].to_vec()).unwrap(),
-    //             "hello from 1"
-    //         );
-
-    //         connection2.write("hello from 2".as_bytes()).await.unwrap();
-    //         connection2.flush().await.unwrap();
-
-    //         delay_for(Duration::from_millis(50)).await;
-
-    //         let mut buff = [0; 1024];
-    //         let read = connection1.read(&mut buff).await.unwrap();
-
-    //         assert_eq!(
-    //             String::from_utf8(buff[..read].to_vec()).unwrap(),
-    //             "hello from 2"
-    //         );
-    //     });
-    // }
 }

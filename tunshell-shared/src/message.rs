@@ -25,7 +25,8 @@ pub enum ServerMessage {
     AlreadyJoined,
     PeerJoined(PeerJoinedPayload),
     PeerLeft,
-    AttemptDirectConnect(AttemptDirectConnectPayload),
+    BindForDirectConnect,
+    AttemptDirectConnect(PortBindings),
     StartRelayMode,
     Relay(RelayPayload),
 }
@@ -34,6 +35,7 @@ pub enum ServerMessage {
 pub enum ClientMessage {
     Close,
     Key(KeyPayload),
+    DirectConnectBound(PortBindings),
     DirectConnectSucceeded,
     DirectConnectFailed,
     Relay(RelayPayload),
@@ -47,10 +49,9 @@ pub struct PeerJoinedPayload {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct AttemptDirectConnectPayload {
-    pub connect_at: u64,
-    pub peer_listen_port: u16,
-    pub self_listen_port: u16,
+pub struct PortBindings {
+    pub udp_port: Option<u16>,
+    pub tcp_port: Option<u16>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -102,9 +103,10 @@ impl Message for ServerMessage {
             Self::AlreadyJoined => 3,
             Self::PeerJoined(_) => 4,
             Self::PeerLeft => 5,
-            Self::AttemptDirectConnect(_) => 6,
-            Self::StartRelayMode => 7,
-            Self::Relay(_) => 8,
+            Self::BindForDirectConnect => 6,
+            Self::AttemptDirectConnect(_) => 7,
+            Self::StartRelayMode => 8,
+            Self::Relay(_) => 9,
         }
     }
 
@@ -118,6 +120,7 @@ impl Message for ServerMessage {
             Self::AlreadyJoined => vec![],
             Self::PeerJoined(payload) => serde_json::to_vec(&payload)?,
             Self::PeerLeft => vec![],
+            Self::BindForDirectConnect => vec![],
             Self::AttemptDirectConnect(payload) => serde_json::to_vec(&payload)?,
             Self::StartRelayMode => vec![],
             Self::Relay(payload) => payload.data.clone(),
@@ -161,15 +164,20 @@ impl Message for ServerMessage {
             RawMessage {
                 type_id: 6,
                 length: _,
+                data: _,
+            } => Ok(Self::BindForDirectConnect),
+            RawMessage {
+                type_id: 7,
+                length: _,
                 data,
             } => Ok(Self::AttemptDirectConnect(serde_json::from_slice(data)?)),
             RawMessage {
-                type_id: 7,
+                type_id: 8,
                 length: 0,
                 data: _,
             } => Ok(Self::StartRelayMode),
             RawMessage {
-                type_id: 8,
+                type_id: 9,
                 length: _,
                 data,
             } => Ok(Self::Relay(RelayPayload { data: data.clone() })),
@@ -183,9 +191,10 @@ impl Message for ClientMessage {
         match self {
             Self::Close => 0,
             Self::Key(_) => 1,
-            Self::DirectConnectSucceeded => 2,
-            Self::DirectConnectFailed => 3,
-            Self::Relay(_) => 4,
+            Self::DirectConnectBound(_) => 2,
+            Self::DirectConnectSucceeded => 3,
+            Self::DirectConnectFailed => 4,
+            Self::Relay(_) => 5,
         }
     }
 
@@ -195,6 +204,7 @@ impl Message for ClientMessage {
         let data: Vec<u8> = match self {
             Self::Close => vec![],
             Self::Key(payload) => serde_json::to_vec(&payload)?,
+            Self::DirectConnectBound(payload) => serde_json::to_vec(&payload)?,
             Self::DirectConnectSucceeded => vec![],
             Self::DirectConnectFailed => vec![],
             Self::Relay(payload) => payload.data.clone(),
@@ -217,16 +227,21 @@ impl Message for ClientMessage {
             } => Ok(Self::Key(serde_json::from_slice(data)?)),
             RawMessage {
                 type_id: 2,
-                length: 0,
-                data: _,
-            } => Ok(Self::DirectConnectSucceeded),
+                length: _,
+                data,
+            } => Ok(Self::DirectConnectBound(serde_json::from_slice(data)?)),
             RawMessage {
                 type_id: 3,
                 length: 0,
                 data: _,
-            } => Ok(Self::DirectConnectFailed),
+            } => Ok(Self::DirectConnectSucceeded),
             RawMessage {
                 type_id: 4,
+                length: 0,
+                data: _,
+            } => Ok(Self::DirectConnectFailed),
+            RawMessage {
+                type_id: 5,
                 length: _,
                 data,
             } => Ok(Self::Relay(RelayPayload { data: data.clone() })),
@@ -322,21 +337,48 @@ mod tests {
     }
 
     #[test]
-    fn test_server_serialise_attempt_direct_connect() {
-        let message = ServerMessage::AttemptDirectConnect(AttemptDirectConnectPayload {
-            connect_at: 12345,
-            peer_listen_port: 12,
-            self_listen_port: 123,
-        });
+    fn test_server_serialise_bind_for_direct_connect() {
+        let message = ServerMessage::BindForDirectConnect;
 
         let raw_message = message.serialise().unwrap();
 
         assert_eq!(raw_message.type_id, 6);
+        assert_eq!(raw_message.data.len(), 0);
+        assert_eq!(raw_message.length, 0);
+    }
+
+    #[test]
+    fn test_server_serialise_attempt_direct_connect() {
+        let message = ServerMessage::AttemptDirectConnect(PortBindings {
+            tcp_port: Some(1234),
+            udp_port: Some(2222),
+        });
+
+        let raw_message = message.serialise().unwrap();
+
+        assert_eq!(raw_message.type_id, 7);
         assert_eq!(
-            String::from_utf8(raw_message.data).unwrap(),
-            r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#
+            String::from_utf8(raw_message.data.clone()).unwrap(),
+            r#"{"udp_port":2222,"tcp_port":1234}"#
         );
-        assert_eq!(raw_message.length, 65);
+        assert_eq!(raw_message.length, raw_message.data.len() as u16);
+    }
+
+    #[test]
+    fn test_server_serialise_attempt_direct_connect_with_nulls() {
+        let message = ServerMessage::AttemptDirectConnect(PortBindings {
+            tcp_port: None,
+            udp_port: None,
+        });
+
+        let raw_message = message.serialise().unwrap();
+
+        assert_eq!(raw_message.type_id, 7);
+        assert_eq!(
+            String::from_utf8(raw_message.data.clone()).unwrap(),
+            r#"{"udp_port":null,"tcp_port":null}"#
+        );
+        assert_eq!(raw_message.length, raw_message.data.len() as u16);
     }
 
     #[test]
@@ -345,7 +387,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 7);
+        assert_eq!(raw_message.type_id, 8);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -358,7 +400,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 8);
+        assert_eq!(raw_message.type_id, 9);
         assert_eq!(raw_message.data, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
         assert_eq!(raw_message.length, 9);
     }
@@ -428,29 +470,35 @@ mod tests {
     }
 
     #[test]
+    fn test_server_deserialise_bind_for_direct_connect() {
+        let raw_message = RawMessage::new(6, vec![]);
+
+        let message = ServerMessage::deserialise(&raw_message).unwrap();
+
+        assert_eq!(message, ServerMessage::BindForDirectConnect)
+    }
+
+    #[test]
     fn test_server_deserialise_attempt_direct_connect() {
         let raw_message = RawMessage::new(
-            6,
-            Vec::from(
-                r#"{"connect_at":12345,"peer_listen_port":12,"self_listen_port":123}"#.as_bytes(),
-            ),
+            7,
+            Vec::from(r#"{"tcp_port":12345,"udp_port":123}"#.as_bytes()),
         );
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
         assert_eq!(
             message,
-            ServerMessage::AttemptDirectConnect(AttemptDirectConnectPayload {
-                connect_at: 12345,
-                peer_listen_port: 12,
-                self_listen_port: 123,
+            ServerMessage::AttemptDirectConnect(PortBindings {
+                tcp_port: Some(12345),
+                udp_port: Some(123),
             })
         )
     }
 
     #[test]
     fn test_server_deserialise_start_relay_mode() {
-        let raw_message = RawMessage::new(7, vec![]);
+        let raw_message = RawMessage::new(8, vec![]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -459,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_relay() {
-        let raw_message = RawMessage::new(8, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let raw_message = RawMessage::new(9, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -496,12 +544,29 @@ mod tests {
     }
 
     #[test]
+    fn test_client_serialise_direct_connect_bound() {
+        let message = ClientMessage::DirectConnectBound(PortBindings {
+            udp_port: Some(4444),
+            tcp_port: Some(5555),
+        });
+
+        let raw_message = message.serialise().unwrap();
+
+        assert_eq!(raw_message.type_id, 2);
+        assert_eq!(
+            raw_message.data,
+            Vec::from(r#"{"udp_port":4444,"tcp_port":5555}"#.as_bytes())
+        );
+        assert_eq!(raw_message.length, raw_message.data.len() as u16);
+    }
+
+    #[test]
     fn test_client_serialise_direct_connect_succeeded() {
         let message = ClientMessage::DirectConnectSucceeded;
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 2);
+        assert_eq!(raw_message.type_id, 3);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -512,7 +577,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 3);
+        assert_eq!(raw_message.type_id, 4);
         assert_eq!(raw_message.data.len(), 0);
         assert_eq!(raw_message.length, 0);
     }
@@ -525,7 +590,7 @@ mod tests {
 
         let raw_message = message.serialise().unwrap();
 
-        assert_eq!(raw_message.type_id, 4);
+        assert_eq!(raw_message.type_id, 5);
         assert_eq!(raw_message.data, vec![1, 2, 3, 4, 5]);
         assert_eq!(raw_message.length, 5);
     }
@@ -554,8 +619,26 @@ mod tests {
     }
 
     #[test]
+    fn test_client_deserialise_direct_contact_bound() {
+        let raw_message = RawMessage::new(
+            2,
+            Vec::from(r#"{"tcp_port":null,"udp_port":2222}"#.as_bytes()),
+        );
+
+        let message = ClientMessage::deserialise(&raw_message).unwrap();
+
+        assert_eq!(
+            message,
+            ClientMessage::DirectConnectBound(PortBindings {
+                tcp_port: None,
+                udp_port: Some(2222)
+            })
+        );
+    }
+
+    #[test]
     fn test_client_deserialise_direct_contact_succeeded() {
-        let raw_message = RawMessage::new(2, vec![]);
+        let raw_message = RawMessage::new(3, vec![]);
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -564,7 +647,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_direct_contact_failed() {
-        let raw_message = RawMessage::new(3, vec![]);
+        let raw_message = RawMessage::new(4, vec![]);
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -573,7 +656,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_relay() {
-        let raw_message = RawMessage::new(4, vec![1, 2, 3, 4, 5]);
+        let raw_message = RawMessage::new(5, vec![1, 2, 3, 4, 5]);
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 

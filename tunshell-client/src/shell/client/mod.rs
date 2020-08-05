@@ -9,12 +9,15 @@ use std::time::Duration;
 use tokio_util::compat::*;
 
 cfg_if::cfg_if! {
-    if #[cfg(not(target_arch = "wasm32"))] {
-        mod shell;
-        pub use shell::*;
-    } else {
+    if #[cfg(target_arch = "wasm32")] {
         mod xtermjs;
         pub use xtermjs::*;
+    } else if #[cfg(integration_test)] {
+        mod test;
+        pub use test::*;
+    } else {
+        mod shell;
+        pub use shell::*;
     }
 }
 

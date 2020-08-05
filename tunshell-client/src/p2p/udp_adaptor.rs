@@ -10,11 +10,10 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::delay_for;
-use tunshell_shared::{AttemptDirectConnectPayload, PeerJoinedPayload};
+use tunshell_shared::PeerJoinedPayload;
 
 pub struct UdpConnectionAdaptor {
     peer_info: PeerJoinedPayload,
-    connection_info: AttemptDirectConnectPayload,
     con: UdpConnection,
 }
 
@@ -56,29 +55,25 @@ impl TunnelStream for UdpConnectionAdaptor {}
 
 #[async_trait]
 impl P2PConnection for UdpConnectionAdaptor {
-    fn new(peer_info: PeerJoinedPayload, connection_info: AttemptDirectConnectPayload) -> Self {
+    fn new(peer_info: PeerJoinedPayload) -> Self {
         let config = UdpConnectionConfig::default()
-            .with_bind_addr(SocketAddr::from((
-                [0, 0, 0, 0],
-                connection_info.self_listen_port,
-            )))
+            .with_bind_addr(SocketAddr::from(([0, 0, 0, 0], 0)))
             .with_connect_timeout(Duration::from_millis(DIRECT_CONNECT_TIMEOUT as u64));
 
         Self {
             peer_info,
-            connection_info,
             con: UdpConnection::new(config),
         }
     }
 
-    async fn bind(&mut self) -> Result<()> {
+    async fn bind(&mut self) -> Result<u16> {
         self.con.bind().await
     }
 
-    async fn connect(&mut self, master_side: bool) -> Result<()> {
+    async fn connect(&mut self, peer_port: u16, master_side: bool) -> Result<()> {
         let connect_future = self.con.connect(UdpConnectParams {
             ip: self.peer_info.peer_ip_address.parse::<IpAddr>().unwrap(),
-            suggested_port: self.connection_info.peer_listen_port,
+            suggested_port: peer_port,
             master_side,
         });
 
@@ -108,20 +103,13 @@ mod tests {
                 peer_key: "test".to_owned(),
                 session_nonce: "nonce".to_owned(),
             };
-            let mut connection1 = UdpConnectionAdaptor::new(
-                peer_info.clone(),
-                AttemptDirectConnectPayload {
-                    connect_at: 1,
-                    peer_listen_port: 22554,
-                    self_listen_port: 22555,
-                },
-            );
+            let mut connection1 = UdpConnectionAdaptor::new(peer_info.clone());
 
             connection1.bind().await.expect("failed to bind");
 
             let (_, result) = futures::join!(
                 delay_for(Duration::from_millis((DIRECT_CONNECT_TIMEOUT + 100) as u64)),
-                connection1.connect(true)
+                connection1.connect(22554, true)
             );
 
             assert!(result.is_err());
@@ -137,29 +125,18 @@ mod tests {
                 session_nonce: "nonce".to_owned(),
             };
 
-            let mut connection1 = UdpConnectionAdaptor::new(
-                peer_info.clone(),
-                AttemptDirectConnectPayload {
-                    connect_at: 1,
-                    peer_listen_port: 22664,
-                    self_listen_port: 22665,
-                },
-            );
+            let mut connection1 = UdpConnectionAdaptor::new(peer_info.clone());
 
-            let mut connection2 = UdpConnectionAdaptor::new(
-                peer_info.clone(),
-                AttemptDirectConnectPayload {
-                    connect_at: 1,
-                    peer_listen_port: 22665,
-                    self_listen_port: 22664,
-                },
-            );
+            let mut connection2 = UdpConnectionAdaptor::new(peer_info.clone());
 
-            connection1.bind().await.expect("failed to bind");
-            connection2.bind().await.expect("failed to bind");
+            let port1 = connection1.bind().await.expect("failed to bind");
+            let port2 = connection2.bind().await.expect("failed to bind");
 
-            futures::try_join!(connection1.connect(true), connection2.connect(false))
-                .expect("failed to connect");
+            futures::try_join!(
+                connection1.connect(port2, true),
+                connection2.connect(port1, false)
+            )
+            .expect("failed to connect");
 
             connection1.write("hello from 1".as_bytes()).await.unwrap();
             connection1.flush().await.unwrap();

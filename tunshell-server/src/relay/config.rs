@@ -90,6 +90,8 @@ mod tests {
 
         let config = Config::from_env().unwrap();
 
+        std::io::stdin().lock();
+
         assert_eq!(config.tls_port, 1234);
         assert_eq!(config.api_port, 1235);
     }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use env_logger;
 use tokio;
-use tunshell_server::{api, relay};
+use tunshell_server::relay;
 
 #[tokio::main]
 async fn main() -> Result<()> {

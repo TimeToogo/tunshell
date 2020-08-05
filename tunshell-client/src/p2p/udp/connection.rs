@@ -93,13 +93,13 @@ impl UdpConnection {
     }
 
     /// Bind the connection to the UDP socket
-    pub async fn bind(&mut self) -> Result<()> {
+    pub async fn bind(&mut self) -> Result<u16> {
         if !self.is_new() {
             return Err(Error::msg("Connection must be in NEW state"));
         }
 
         match self.do_bind().await {
-            Ok(_) => Ok(()),
+            Ok(port) => Ok(port),
             Err((config, err)) => {
                 debug!("UDP bind failed: {}", err);
                 self.state = State::New(config);
@@ -108,7 +108,7 @@ impl UdpConnection {
         }
     }
 
-    async fn do_bind(&mut self) -> Result<(), (UdpConnectionConfig, Error)> {
+    async fn do_bind(&mut self) -> Result<u16, (UdpConnectionConfig, Error)> {
         assert!(self.is_new());
 
         let config = match mem::replace(&mut self.state, State::Binding) {
@@ -119,10 +119,14 @@ impl UdpConnection {
         let socket = UdpSocket::bind(config.bind_addr())
             .await
             .map_err(|err| (config.clone(), Error::from(err)))?;
+        let port = socket
+            .local_addr()
+            .map_err(|err| (config.clone(), Error::from(err)))?
+            .port();
 
         self.state = State::Bound(config, socket);
 
-        Ok(())
+        Ok(port)
     }
 
     /// Attempts to make a connection with the peer as specified in the UdpConnectParams.
@@ -133,7 +137,7 @@ impl UdpConnection {
         }
 
         if !self.is_bound() {
-            self.bind().await?
+            self.bind().await.map(|_| ())?
         }
 
         match self.do_connect(params).await {

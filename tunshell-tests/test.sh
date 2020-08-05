@@ -5,5 +5,7 @@ export MONGO_CONNECTION_STRING="mongodb://relay:password@localhost:27017/relay"
 export TLS_RELAY_PRIVATE_KEY="$PWD/../tunshell-server/certs/development.key"
 export TLS_RELAY_CERT="$PWD/../tunshell-server//certs/development.cert"
 export STATIC_DIR="$PWD/../tunshell-server/static"
+export RUSTFLAGS="--cfg integration_test"
+export CARGO_TARGET_DIR="$PWD/target"
 
 cargo test $@
