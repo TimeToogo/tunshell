@@ -1,0 +1,6 @@
+[build.env]
+passthrough = [
+    "RUST_LOG",
+    "CI",
+    "RUST_TEST_THREADS",
+]
