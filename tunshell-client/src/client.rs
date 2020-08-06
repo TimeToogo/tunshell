@@ -67,12 +67,7 @@ impl Client {
             Some(Ok(ServerMessage::KeyRejected)) => {
                 Err(Error::msg("The session key has expired or is invalid"))
             }
-            Some(Ok(message)) => Err(Error::msg(format!(
-                "Unexpected response returned by server: {:?}",
-                message
-            ))),
-            Some(Err(err)) => return Err(err),
-            None => return Err(Error::msg("Connection closed unexpectedly")),
+            result @ _ => Err(self.handle_unexpected_message(result)),
         }
     }
 
@@ -87,7 +82,7 @@ impl Client {
                 ))
             }
             Some(Ok(ServerMessage::PeerJoined(payload))) => Ok(payload),
-            _ => Err(Error::msg("Unexpected response returned by server")),
+            result @ _ => Err(self.handle_unexpected_message(result)),
         }
     }
 
@@ -145,14 +140,7 @@ impl Client {
                     self.println("Falling back to relayed connection").await;
                     break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))));
                 }
-                Some(Ok(message)) => {
-                    return Err(Error::msg(format!(
-                        "Unexpected response returned by server: {:?}",
-                        message
-                    )))
-                }
-                Some(Err(err)) => return Err(err),
-                None => return Err(Error::msg("Connection closed unexpectedly")),
+                result @ _ => return Err(self.handle_unexpected_message(result)),
             }
         };
 
@@ -285,14 +273,7 @@ impl Client {
                     self.println("Falling back to relayed connection").await;
                     break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))));
                 }
-                Some(Ok(message)) => {
-                    return Err(Error::msg(format!(
-                        "Unexpected response returned by server: {:?}",
-                        message
-                    )))
-                }
-                Some(Err(err)) => return Err(err),
-                None => return Err(Error::msg("Connection closed unexpectedly")),
+                result @ _ => return Err(self.handle_unexpected_message(result)),
             }
         };
 
@@ -329,6 +310,19 @@ impl Client {
 
         self.host_shell.replace(client.host_shell);
         result
+    }
+
+    fn handle_unexpected_message(&self, message: Option<Result<ServerMessage>>) -> Error {
+        match message {
+            Some(Ok(message)) => {
+                return Error::msg(format!(
+                    "Unexpected response returned by server: {:?}",
+                    message
+                ))
+            }
+            Some(Err(err)) => return err,
+            None => return Error::msg("Connection closed unexpectedly"),
+        }
     }
 }
 
