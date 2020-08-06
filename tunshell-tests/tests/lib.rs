@@ -2,9 +2,9 @@ use std::sync::Once;
 
 static INIT: Once = Once::new();
 
-/// Setup function that is only run once, even if called multiple times.
 #[test]
 fn setup() {
+    // TODO: ensure runs before all other tests
     INIT.call_once(env_logger::init);
 }
 

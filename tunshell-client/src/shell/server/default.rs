@@ -127,10 +127,15 @@ pub(super) fn get_default_shell(shell: Option<&str>) -> Result<DefaultShell> {
 #[cfg(unix)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     #[cfg(not(alpine))]
     fn test_new_shell_bash() {
+        if !Path::new("/bin/bash").exists() {
+            return;
+        }
+
         let cmd = get_default_shell(Some("/bin/bash")).unwrap();
 
         assert_eq!(
@@ -152,8 +157,11 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(alpine))]
     fn test_new_shell_zsh() {
+        if !Path::new("/bin/zsh").exists() {
+            return;
+        }
+
         let cmd = get_default_shell(Some("/bin/zsh")).unwrap();
 
         assert_eq!(
@@ -167,6 +175,10 @@ mod tests {
 
     #[test]
     fn test_new_shell_sh() {
+        if !Path::new("/bin/sh").exists() {
+            return;
+        }
+
         let cmd = get_default_shell(Some("/bin/sh")).unwrap();
 
         assert_eq!(
@@ -184,8 +196,11 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(alpine))]
     fn test_bash_can_delegate() {
+        if !Path::new("/bin/bash").exists() {
+            return;
+        }
+
         let cmd = get_default_shell(Some("/bin/bash")).unwrap();
 
         assert_eq!(cmd.can_delegate(), true);
@@ -199,8 +214,11 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(alpine))]
     fn test_bash_get_execute_command_args() {
+        if !Path::new("/bin/bash").exists() {
+            return;
+        }
+
         let cmd = get_default_shell(Some("/bin/bash")).unwrap();
 
         assert_eq!(
@@ -211,8 +229,11 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(alpine))]
     fn test_bash_get_execute_command_args_in_usr_dir() {
+        if !Path::new("/usr/bin/bash").exists() {
+            return;
+        }
+
         let cmd = DefaultShell::new("/usr/bin/bash".to_owned());
 
         assert_eq!(
