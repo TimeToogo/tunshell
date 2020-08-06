@@ -124,10 +124,12 @@ pub(super) fn get_default_shell(shell: Option<&str>) -> Result<DefaultShell> {
 }
 
 #[cfg(test)]
+#[cfg(unix)]
 mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(alpine))]
     fn test_new_shell_bash() {
         let cmd = get_default_shell(Some("/bin/bash")).unwrap();
 
@@ -150,6 +152,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(alpine))]
     fn test_new_shell_zsh() {
         let cmd = get_default_shell(Some("/bin/zsh")).unwrap();
 
@@ -181,6 +184,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(alpine))]
     fn test_bash_can_delegate() {
         let cmd = get_default_shell(Some("/bin/bash")).unwrap();
 
@@ -195,6 +199,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(alpine))]
     fn test_bash_get_execute_command_args() {
         let cmd = get_default_shell(Some("/bin/bash")).unwrap();
 
@@ -206,6 +211,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(alpine))]
     fn test_bash_get_execute_command_args_in_usr_dir() {
         let cmd = DefaultShell::new("/usr/bin/bash".to_owned());
 

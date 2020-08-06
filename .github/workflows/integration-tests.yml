@@ -6,7 +6,7 @@ on:
       - master
 
 jobs:
-  build_and_deploy:
+  run_tests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -14,4 +14,6 @@ jobs:
     - run: ./test.sh
       working-directory: tunshell-tests
       shell: bash
+      env:
+        RUST_TEST_THREADS: 1
 

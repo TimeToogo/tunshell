@@ -14,26 +14,33 @@ jobs:
           # Linux
           - platform: ubuntu-latest
             target: x86_64-unknown-linux-musl
+            tests: true
           - platform: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
           - platform: ubuntu-latest
             target: aarch64-unknown-linux-musl
+            tests: true
           - platform: ubuntu-latest
             target: arm-unknown-linux-musleabi
+            tests: true
           - platform: ubuntu-latest
             target: arm-linux-androideabi
           - platform: ubuntu-latest
             target: i686-unknown-linux-musl
+            tests: true
           - platform: ubuntu-latest
             target: i586-unknown-linux-musl
+            tests: true
           # Apple
           - platform: macos-latest
             target: x86_64-apple-darwin
+            tests: true
           - platform: macos-latest
             target: x86_64-apple-ios
           # Windows
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            tests: true
           - platform: windows-latest
             target: i686-pc-windows-msvc
     runs-on: ${{ matrix.platform }}
@@ -51,8 +58,9 @@ jobs:
       working-directory: tunshell-client/build
       shell: bash
       env:
-        TEMPDIR: /tmp
-        RUN_TESTS: true
+        RUN_TESTS: ${{ matrix.tests }}
+        RUST_TEST_THREADS: 1
+        CI: true
 
     - uses: chrislennon/action-aws-cli@v1.1
 

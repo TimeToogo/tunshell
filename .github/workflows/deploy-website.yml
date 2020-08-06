@@ -14,14 +14,10 @@ jobs:
     - run: ./install-deps-wasm.sh
       working-directory: tunshell-client/build
       shell: bash
-      env:
-        TEMPDIR: /tmp
     
     - run: ./compile-wasm.sh
       working-directory: tunshell-client/build
       shell: bash
-      env:
-        TEMPDIR: /tmp
     
     - uses: actions/setup-node@v1
       with:

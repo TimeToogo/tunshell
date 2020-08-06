@@ -2,6 +2,8 @@ FROM rust:alpine AS build
 
 ARG RUN_TESTS
 
+ENV RUSTFLAGS="--cfg alpine"
+
 RUN apk add --no-cache musl-dev
 RUN mkdir /app/
 

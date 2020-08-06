@@ -568,6 +568,10 @@ mod tests {
 
     #[test]
     fn test_interrupt_running_process() {
+        if std::env::var("CI").is_ok() {
+            return;
+        }
+
         Runtime::new().unwrap().block_on(async {
             let mut state = init_interpreter();
 

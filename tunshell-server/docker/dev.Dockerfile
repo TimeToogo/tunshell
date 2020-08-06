@@ -1,5 +1,7 @@
 FROM rust:alpine
 
+ENV RUSTFLAGS="--cfg alpine"
+
 RUN apk add --no-cache musl-dev openssl-dev
 RUN cargo install cargo-watch
 

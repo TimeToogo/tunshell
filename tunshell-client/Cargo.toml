@@ -65,3 +65,10 @@ features = [
 
 [dev-dependencies]
 lazy_static = "1.4.0"
+
+[build.env]
+passthrough = [
+    "RUST_LOG",
+    "CI",
+    "RUST_TEST_THREADS",
+]

@@ -323,6 +323,7 @@ mod tests {
     use std::time::Duration;
 
     #[test]
+    #[cfg(unix)]
     fn test_shell_pty_exit_on_error() {
         Runtime::new().unwrap().block_on(async {
             let mut pty: PtyShell = PtyShell::new("", Some("/bin/bash"), WindowSize(80, 80))
