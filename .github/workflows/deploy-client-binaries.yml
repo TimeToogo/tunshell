@@ -6,7 +6,7 @@ on:
       - master
 
 jobs:
-  build_and_deploy:
+  build_test_deploy:
     continue-on-error: true
     strategy:
       matrix:
@@ -49,6 +49,7 @@ jobs:
       shell: bash
       env:
         TEMPDIR: /tmp
+        RUN_TESTS: true
     # Deploy artifact to https://artifacts.tunshell.com
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3

@@ -22,5 +22,11 @@ mkdir -p $SCRIPT_DIR/artifacts
 echo "Compiling tunshell-client for $TARGET..."
 cd $SCRIPT_DIR/../../
 rustup target add $TARGET
+
+if [[ ! -z "$RUN_TESTS" ]];
+then
+   cross test -p tunshell-client --target $TARGET
+fi
+
 cross build -p tunshell-client --release --target $TARGET
 cp $SCRIPT_DIR/../../target/$TARGET/release/client $SCRIPT_DIR/artifacts/client-$TARGET

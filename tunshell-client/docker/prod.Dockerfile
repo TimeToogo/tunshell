@@ -1,13 +1,15 @@
 FROM rust:alpine AS build
 
-RUN apk add --no-cache musl-dev
+ARG RUN_TESTS
 
+RUN apk add --no-cache musl-dev
 RUN mkdir /app/
 
 COPY . /app/
 
 WORKDIR /app/tunshell-client
 
+RUN [[ -v RUN_TESTS ]] && cargo test
 RUN cargo build --release
 
 FROM alpine:latest

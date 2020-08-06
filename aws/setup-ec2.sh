@@ -5,7 +5,7 @@ set -e
 
 echo "Setting up tunshell server..."
 
-if [[ ! $(which docker) ]]
+if [[ ! $(which docker) ]];
 then
     sudo apt-get update
     sudo apt-get install -y docker.io docker-compose

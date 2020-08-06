@@ -12,9 +12,12 @@ jobs:
     - uses: actions/checkout@v2
     - name: Publish to Docker Hub
       uses: elgohr/Publish-Docker-Github-Action@master
+      env:
+        RUN_TESTS: true
       with:
         name: timetoogo/tunshell-relay
         dockerfile: tunshell-server/docker/prod.Dockerfile
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         tags: "latest"
+        buildargs: RUN_TESTS
