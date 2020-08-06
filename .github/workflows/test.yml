@@ -10,5 +10,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - run: sh <(curl -sSf https://lets.tunshell.com/c6c95738-4398-4e70-8034-f5c82fca6fec.sh)
+    - run: curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin T PHSb2urreZKipshOcRo955 VmdbZ8DBSiJ7WbBfhzj50x
      
