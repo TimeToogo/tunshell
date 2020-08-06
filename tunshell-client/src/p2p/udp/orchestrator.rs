@@ -820,6 +820,7 @@ mod tests {
 
     #[test]
     fn test_recv_timeout() {
+        // TODO: fix flaky test
         if std::env::var("CI").is_ok() {
             return;
         }

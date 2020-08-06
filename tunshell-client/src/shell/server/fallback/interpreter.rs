@@ -568,6 +568,7 @@ mod tests {
 
     #[test]
     fn test_interrupt_running_process() {
+        // TODO: fix flaky test
         if std::env::var("CI").is_ok() {
             return;
         }
