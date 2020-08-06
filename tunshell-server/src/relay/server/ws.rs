@@ -222,7 +222,7 @@ mod tests {
     use async_tungstenite::{
         async_tls::client_async_tls_with_connector, WebSocketStream as ClientWebSocketStream,
     };
-    use futures::{SinkExt, StreamExt};
+    use futures::{SinkExt, StreamExt, FutureExt};
     use lazy_static::lazy_static;
     use std::{
         net::{Ipv4Addr, SocketAddr},
@@ -328,7 +328,7 @@ mod tests {
             let mut listener = init_server(&mut config).await;
             let ((addr1, _client_con1), (addr2, _client_con2)) = futures::join!(
                 init_connection(config.api_port),
-                init_connection(config.api_port)
+                delay_for(Duration::from_millis(100)).then(|_| init_connection(config.api_port))
             );
 
             let server_con1 = listener.accept().await.unwrap();

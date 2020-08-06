@@ -111,11 +111,13 @@ async fn accept_tls_connection(
 mod tests {
     use super::*;
     use crate::relay::server::tests::insecure_tls_config;
+    use futures::FutureExt;
     use lazy_static::lazy_static;
     use std::{net::SocketAddr, sync::Mutex};
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         runtime::Runtime,
+        time::delay_for
     };
     use tokio_rustls::{client, TlsConnector};
 
@@ -190,7 +192,7 @@ mod tests {
             let mut listener = init_server(&mut config).await;
             let (client_con1, client_con2) = futures::join!(
                 init_connection(config.tls_port),
-                init_connection(config.tls_port)
+                delay_for(Duration::from_millis(100)).then(|_| init_connection(config.tls_port))
             );
 
             let server_con1 = listener.accept().await.unwrap();
