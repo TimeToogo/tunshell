@@ -61,6 +61,7 @@ jobs:
         RUN_TESTS: ${{ matrix.tests }}
         RUST_TEST_THREADS: 1
         CI: true
+        RUST_LOG: debug
 
     - uses: chrislennon/action-aws-cli@v1.1
 

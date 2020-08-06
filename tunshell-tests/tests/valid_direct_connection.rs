@@ -9,7 +9,6 @@ use tunshell_server as server;
 #[test]
 fn test() {
     Runtime::new().unwrap().block_on(async {
-        env_logger::init();
         let mut config = server::relay::Config::from_env().unwrap();
         config.tls_port = 20003;
         config.api_port = 20004;
