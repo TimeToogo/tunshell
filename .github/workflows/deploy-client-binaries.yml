@@ -37,27 +37,33 @@ jobs:
           - platform: windows-latest
             target: i686-pc-windows-msvc
     runs-on: ${{ matrix.platform }}
+
     steps:
     - uses: actions/checkout@v2
+
     - run: ./install-deps.sh
       working-directory: tunshell-client/build
       shell: bash
       env:
         TEMPDIR: /tmp
+
     - run: ./compile.sh ${{ matrix.target }}
       working-directory: tunshell-client/build
       shell: bash
       env:
         TEMPDIR: /tmp
         RUN_TESTS: true
-    # Deploy artifact to https://artifacts.tunshell.com
+
     - uses: chrislennon/action-aws-cli@v1.1
+
+    # Deploy artifact to https://artifacts.tunshell.com
     - name: Deploy to S3
       run: aws s3 cp --recursive artifacts/ s3://artifacts.tunshell.com/ --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
       working-directory: tunshell-client/build
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
+
     - name: Invalidate CloudFront
       run: aws cloudfront create-invalidation --distribution-id=E3UKYOV4DA9TM1 --paths '/*'
       env:

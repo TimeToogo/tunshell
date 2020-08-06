@@ -1,0 +1,17 @@
+name: Run Integration Tests
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - run: ./test.sh
+      working-directory: tunshell-tests
+      shell: bash
+

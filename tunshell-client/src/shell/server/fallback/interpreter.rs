@@ -573,12 +573,12 @@ mod tests {
 
             write_input(&mut state, "/bin/sh\r".as_bytes());
 
-            delay_for(Duration::from_millis(100)).await;
+            delay_for(Duration::from_millis(1000)).await;
 
             // Send interrupt to process
             write_input(&mut state, Token::ControlC.to_bytes());
 
-            delay_for(Duration::from_millis(100)).await;
+            delay_for(Duration::from_millis(1000)).await;
 
             write_input(&mut state, "exit\r".as_bytes());
 

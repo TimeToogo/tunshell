@@ -26,7 +26,7 @@ cfg-if = "0.1.10"
 [target.'cfg(all(not(target_os = "ios"), not(target_os = "android"), not(target_arch = "wasm32")))'.dependencies]
 portable-pty = "0.3.0"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "dns", "time", "io-util", "tcp", "udp", "sync", "process", "macros"] } #no-wasm
 tokio-rustls = { version = "0.13.1", features=["dangerous_configuration"] }
 webpki = "0.21.2"

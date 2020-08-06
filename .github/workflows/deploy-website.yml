@@ -10,36 +10,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    
     - run: ./install-deps-wasm.sh
       working-directory: tunshell-client/build
       shell: bash
       env:
         TEMPDIR: /tmp
+    
     - run: ./compile-wasm.sh
       working-directory: tunshell-client/build
       shell: bash
       env:
         TEMPDIR: /tmp
+    
     - uses: actions/setup-node@v1
       with:
         node-version: 12
+    
     - run: npm ci
       working-directory: website
+    
     - run: npm run export
       working-directory: website
+    
     - uses: chrislennon/action-aws-cli@v1.1
+    
     - name: Deploy to S3
       run: aws s3 sync --delete --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell.com/ 
       working-directory: website
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
+    
     - name: Deploy to S3 (wasm)
       run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --recursive --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell.com/
       working-directory: website
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
+    
     - name: Invalidate CloudFront
       run: aws cloudfront create-invalidation --distribution-id=E34DDIH79LWROV --paths '/*'
       env:
