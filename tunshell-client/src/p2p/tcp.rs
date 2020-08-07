@@ -1,4 +1,4 @@
-use crate::p2p::{P2PConnection, DIRECT_CONNECT_TIMEOUT};
+use crate::p2p::P2PConnection;
 use crate::TunnelStream;
 use anyhow::{Error, Result};
 use async_trait::async_trait;
@@ -8,10 +8,8 @@ use log::*;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::time::delay_for;
 use tunshell_shared::PeerJoinedPayload;
 
 pub struct TcpConnection {
@@ -102,10 +100,6 @@ impl P2PConnection for TcpConnection {
         let result = tokio::select! {
             result = connect_future => result.map(|socket| (socket, peer_addr)),
             result = listen_future => result,
-            _ = delay_for(Duration::from_millis(DIRECT_CONNECT_TIMEOUT as u64)) => {
-                info!("timed out while attempting TCP connection");
-                return Err(Error::msg("TCP connection timed out"));
-            }
         };
 
         if let Ok((socket, peer_addr)) = result {
@@ -198,8 +192,8 @@ mod tests {
                 .then(|_| TcpStream::connect(format!("127.0.0.1:{}", port)))
                 .or_else(|err| futures::future::err(Error::new(err)));
 
-            let (_, mut socket) =
-                futures::try_join!(connection1.connect(22444, false), socket).expect("failed to connect");
+            let (_, mut socket) = futures::try_join!(connection1.connect(22444, false), socket)
+                .expect("failed to connect");
 
             socket.write("hello".as_bytes()).await.unwrap();
 
@@ -213,27 +207,6 @@ mod tests {
             let read = socket.read(&mut buff).await.unwrap();
 
             assert_eq!(String::from_utf8(buff[..read].to_vec()).unwrap(), "hi");
-        });
-    }
-
-    #[test]
-    fn test_connect_timeout() {
-        Runtime::new().unwrap().block_on(async {
-            let peer_info = PeerJoinedPayload {
-                peer_ip_address: "127.0.0.1".to_owned(),
-                peer_key: "test".to_owned(),
-                session_nonce: "nonce".to_owned(),
-            };
-            let mut connection1 = TcpConnection::new(peer_info.clone());
-
-            connection1.bind().await.expect("failed to bind");
-
-            let (_, result) = futures::join!(
-                delay_for(Duration::from_millis((DIRECT_CONNECT_TIMEOUT + 100) as u64)),
-                connection1.connect(22554, false)
-            );
-
-            assert!(result.is_err());
         });
     }
 }

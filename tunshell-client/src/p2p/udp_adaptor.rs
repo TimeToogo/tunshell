@@ -1,15 +1,12 @@
 use super::udp::{UdpConnectParams, UdpConnection, UdpConnectionConfig};
-use crate::p2p::{P2PConnection, DIRECT_CONNECT_TIMEOUT};
+use crate::p2p::P2PConnection;
 use crate::TunnelStream;
-use anyhow::{Error, Result};
+use anyhow::Result;
 use async_trait::async_trait;
-use log::*;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::time::delay_for;
 use tunshell_shared::PeerJoinedPayload;
 
 pub struct UdpConnectionAdaptor {
@@ -56,9 +53,8 @@ impl TunnelStream for UdpConnectionAdaptor {}
 #[async_trait]
 impl P2PConnection for UdpConnectionAdaptor {
     fn new(peer_info: PeerJoinedPayload) -> Self {
-        let config = UdpConnectionConfig::default()
-            .with_bind_addr(SocketAddr::from(([0, 0, 0, 0], 0)))
-            .with_connect_timeout(Duration::from_millis(DIRECT_CONNECT_TIMEOUT as u64));
+        let config =
+            UdpConnectionConfig::default().with_bind_addr(SocketAddr::from(([0, 0, 0, 0], 0)));
 
         Self {
             peer_info,
@@ -77,15 +73,7 @@ impl P2PConnection for UdpConnectionAdaptor {
             master_side,
         });
 
-        let result = tokio::select! {
-            result = connect_future => result,
-            _ = delay_for(Duration::from_millis(DIRECT_CONNECT_TIMEOUT as u64)) => {
-                info!("timed out while attempting UDP connection");
-                return Err(Error::msg("UDP connection timed out"));
-            }
-        };
-
-        result
+        connect_future.await
     }
 }
 
@@ -94,27 +82,6 @@ mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;
-
-    #[test]
-    fn test_connect_timeout() {
-        Runtime::new().unwrap().block_on(async {
-            let peer_info = PeerJoinedPayload {
-                peer_ip_address: "127.0.0.1".to_owned(),
-                peer_key: "test".to_owned(),
-                session_nonce: "nonce".to_owned(),
-            };
-            let mut connection1 = UdpConnectionAdaptor::new(peer_info.clone());
-
-            connection1.bind().await.expect("failed to bind");
-
-            let (_, result) = futures::join!(
-                delay_for(Duration::from_millis((DIRECT_CONNECT_TIMEOUT + 100) as u64)),
-                connection1.connect(22554, true)
-            );
-
-            assert!(result.is_err());
-        });
-    }
 
     #[test]
     fn test_connect_simultaneous_open() {

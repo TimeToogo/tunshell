@@ -35,7 +35,7 @@ Tunshell is comprised of 3 main components:
 
 The process is kicked off using [tunshell.com](https://tunshell.com). One can generate the install a pair of install scripts for their local and target environments.
 
-A sample install script pair for a tunshell session is broken into the following components.
+The below sample install script pair for a tunshell session is broken into the following components;
 
 ![Install Script](https://app.lucidchart.com/publicSegments/view/8ad48e9c-299b-4d55-8c95-2d1aa07475c6/image.png)
 

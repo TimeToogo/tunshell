@@ -2,7 +2,7 @@ use super::MAX_PACKET_SIZE;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-const DEFAULT_CONNECT_TIMEOUT: u64 = 3000; // ms
+const DEFAULT_CONNECT_TIMEOUT: u64 = 5000; // ms
 const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 15000; // ms
 const DEFAULT_INITIAL_TRANSIT_WINDOW: u32 = 102400; // bytes
 const DEFAULT_RECV_WINDOW: u32 = 102400; // bytes

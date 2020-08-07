@@ -7,8 +7,6 @@ pub mod tcp;
 pub mod udp;
 pub mod udp_adaptor;
 
-pub(super) const DIRECT_CONNECT_TIMEOUT: u32 = 3000; // ms
-
 #[async_trait]
 pub trait P2PConnection: TunnelStream {
     fn new(peer_info: PeerJoinedPayload) -> Self
