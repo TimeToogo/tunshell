@@ -28,7 +28,7 @@ Tunshell could also be used as an exploitation tool to gain unauthorized access 
 Tunshell is comprised of 3 main components:
 
 - [Relay Server](./tunshell-server): a server which is able to coordinate with clients to establish connectivity
-- [Client Binary](./tunshell-client): a portable binary which is able to downloaded an run on two hosts acting as a shell server or client.
+- [Client Binary](./tunshell-client): a portable binary acting as a shell server or client.
 - [Website](./website): The user interface for configuring a remote shell session with the relay server and providing install scripts for the client.
 
 ### Install Script
@@ -54,19 +54,19 @@ There are three networking models supported that are attempted and used in the f
 
 1. **TCP:** The clients will attempt to connect to the peer over TCP directly. If both clients are behind a firewall or NAT device, this will likely fail.
 
-![TCP](https://app.lucidchart.com/publicSegments/view/26e86773-55e4-4927-8487-525fde329006/image.png)
+![TCP](https://app.lucidchart.com/publicSegments/view/26e86773-55e4-4927-8487-525fde329006/image.png?)
 
 2. **UDP:** The implementation also contains thin [TCP-like protocol built on UDP](./tunshell-client/src/p2p/udp). In some cases this can help establish direct UDP connections at least of the clients are behind a more permissive NAT device.
 
-![UDP](https://app.lucidchart.com/publicSegments/view/bd4afe42-a282-45d5-8a67-378ae31ad219/image.png)
+![UDP](https://app.lucidchart.com/publicSegments/view/bd4afe42-a282-45d5-8a67-378ae31ad219/image.png?)
 
 3. **Relayed:** In the case where no direct connection succeeds, the clients will fallback to a proxying data through the relay server. The relay server will traffic packets between the clients using the existing TLS connections initiated by each client.
 
-![Relayed](https://app.lucidchart.com/publicSegments/view/055838d6-6aeb-4a8c-8196-3eadf4653f53/image.png)
+![Relayed](https://app.lucidchart.com/publicSegments/view/055838d6-6aeb-4a8c-8196-3eadf4653f53/image.png?)
 
 The relayed connection is also used for connections where the client is running in the users web browser. In which case a Web Socket is used between the client and the relay server in place of raw TLS.
 
-![Relayed + WS](https://app.lucidchart.com/publicSegments/view/d8f71cde-9585-4811-9fd2-21a81dda061a/image.png)
+![Relayed + WS](https://app.lucidchart.com/publicSegments/view/d8f71cde-9585-4811-9fd2-21a81dda061a/image.png?)
 
 ### In-built Shell
 

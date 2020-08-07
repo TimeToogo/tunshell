@@ -120,10 +120,10 @@ impl P2PConnection for TcpConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::FutureExt;
-    use futures::TryFutureExt;
+    use std::time::Duration;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::runtime::Runtime;
+    use tokio::{runtime::Runtime, time::delay_for};
+    use futures::FutureExt;
 
     #[test]
     fn test_connect_via_connect() {
