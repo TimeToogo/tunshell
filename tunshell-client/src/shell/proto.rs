@@ -55,7 +55,7 @@ impl Message for ShellClientMessage {
             Self::Error(payload) => payload.as_bytes().to_vec(),
         };
 
-        Ok(RawMessage::new(self.type_id(), buff))
+        RawMessage::new(self.type_id(), buff)
     }
 
     fn deserialise(raw_message: &RawMessage) -> Result<Self> {
@@ -97,7 +97,7 @@ impl Message for ShellServerMessage {
             Self::Error(payload) => payload.as_bytes().to_vec(),
         };
 
-        Ok(RawMessage::new(self.type_id(), buff))
+        RawMessage::new(self.type_id(), buff)
     }
 
     fn deserialise(raw_message: &RawMessage) -> Result<Self> {
@@ -137,7 +137,7 @@ mod tests {
         let message = ShellClientMessage::Key("key".to_owned());
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(1, "key".as_bytes().to_vec()));
+        assert_eq!(serialised, RawMessage::new(1, "key".as_bytes().to_vec()).unwrap());
 
         let deserialised = ShellClientMessage::deserialise(&serialised).unwrap();
 
@@ -170,7 +170,7 @@ mod tests {
         let message = ShellClientMessage::Stdin(vec![1, 2, 3, 4, 5]);
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(3, vec![1, 2, 3, 4, 5]));
+        assert_eq!(serialised, RawMessage::new(3, vec![1, 2, 3, 4, 5]).unwrap());
 
         let deserialised = ShellClientMessage::deserialise(&serialised).unwrap();
 
@@ -197,7 +197,7 @@ mod tests {
         let message = ShellServerMessage::KeyAccepted;
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(1, vec![]));
+        assert_eq!(serialised, RawMessage::new(1, vec![]).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 
@@ -209,7 +209,7 @@ mod tests {
         let message = ShellServerMessage::KeyRejected;
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(2, vec![]));
+        assert_eq!(serialised, RawMessage::new(2, vec![]).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
         
@@ -221,7 +221,7 @@ mod tests {
         let message = ShellServerMessage::Stdout(vec![1, 2, 3, 4, 5]);
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(3, vec![1, 2, 3, 4, 5]));
+        assert_eq!(serialised, RawMessage::new(3, vec![1, 2, 3, 4, 5]).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 
@@ -233,7 +233,7 @@ mod tests {
         let message = ShellServerMessage::Exited(5);
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(4, vec![5]));
+        assert_eq!(serialised, RawMessage::new(4, vec![5]).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 
@@ -245,7 +245,7 @@ mod tests {
         let message = ShellServerMessage::Error("test".to_owned());
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(255, "test".as_bytes().to_vec()));
+        assert_eq!(serialised, RawMessage::new(255, "test".as_bytes().to_vec()).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 

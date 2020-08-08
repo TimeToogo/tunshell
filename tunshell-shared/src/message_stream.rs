@@ -138,15 +138,23 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream for Messa
                 .collect(),
         );
 
+        if let Err(err) = raw_message {
+            debug!("Could not parse message {:?}", err);
+            self.closed = true;
+
+            return Poll::Ready(Some(Err(err)));
+        }
+
         self.read_buff.drain(..3 + message_length);
 
-        let result = match O::deserialise(&raw_message) {
+        let result = match O::deserialise(&raw_message.unwrap()) {
             Ok(message) => {
                 debug!("Received message {:?}", message);
                 Ok(message)
             }
             Err(err) => {
                 debug!("Error while deserialised received message {:?}", err);
+                self.closed = true;
                 Err(err)
             }
         };
@@ -230,6 +238,7 @@ mod tests {
     use super::*;
     use futures::executor;
     use futures::io::Cursor;
+    use std::io::Read;
 
     #[test]
     fn test_read_empty_stream() {
@@ -408,5 +417,43 @@ mod tests {
 
         assert_eq!(result.is_none(), true);
         assert_eq!(stream.closed, true);
+    }
+
+    #[test]
+    fn test_fuzz_corpus() {
+        let corpus_dir = std::path::Path::new(&std::env::current_exe().unwrap())
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("tunshell-shared/fuzz/corpus");
+
+        let files = std::fs::read_dir(corpus_dir)
+            .unwrap()
+            .map(|i| i.unwrap().path())
+            .filter(|i| i.is_file());
+
+        for path in files {
+            let mut file = std::fs::File::open(path).unwrap();
+            let mut input = Vec::<u8>::new();
+            file.read_to_end(&mut input).unwrap();
+
+            // Ensure no crashes while parsing
+            let input = Cursor::new(input);
+
+            let stream_server =
+                MessageStream::<ClientMessage, ServerMessage, Cursor<Vec<u8>>>::new(input.clone());
+            let stream_client =
+                MessageStream::<ServerMessage, ClientMessage, Cursor<Vec<u8>>>::new(input);
+
+            let _ =
+                executor::block_on_stream(stream_server).collect::<Vec<Result<ServerMessage>>>();
+            let _ =
+                executor::block_on_stream(stream_client).collect::<Vec<Result<ClientMessage>>>();
+        }
     }
 }

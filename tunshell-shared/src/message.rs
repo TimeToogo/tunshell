@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -65,14 +65,21 @@ pub struct RelayPayload {
 }
 
 impl RawMessage {
-    pub fn new(type_id: u8, data: Vec<u8>) -> Self {
+    pub fn new(type_id: u8, data: Vec<u8>) -> Result<Self> {
+        if data.len() > i16::MAX as usize {
+            return Err(Error::msg(format!(
+                "message length ({}) cannot be greater than {}",
+                data.len(),
+                i16::MAX
+            )));
+        }
         assert!(data.len() <= i16::MAX as usize);
 
-        Self {
+        Ok(Self {
             type_id,
             length: data.len() as u16,
             data,
-        }
+        })
     }
 
     pub fn type_id(&self) -> u8 {
@@ -125,8 +132,8 @@ impl Message for ServerMessage {
             Self::StartRelayMode => vec![],
             Self::Relay(payload) => payload.data.clone(),
         };
-
-        Ok(RawMessage::new(type_id, data))
+        
+        RawMessage::new(type_id, data)
     }
 
     fn deserialise(raw_message: &RawMessage) -> Result<Self> {
@@ -210,7 +217,7 @@ impl Message for ClientMessage {
             Self::Relay(payload) => payload.data.clone(),
         };
 
-        Ok(RawMessage::new(type_id, data))
+        RawMessage::new(type_id, data)
     }
 
     fn deserialise(raw_message: &RawMessage) -> Result<Self> {
@@ -256,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_raw_message_to_vec() {
-        let raw_message = RawMessage::new(0, vec![1, 2, 3]);
+        let raw_message = RawMessage::new(0, vec![1, 2, 3]).unwrap();
 
         let vec = raw_message.to_vec();
 
@@ -407,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_close() {
-        let raw_message = RawMessage::new(0, vec![]);
+        let raw_message = RawMessage::new(0, vec![]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -416,7 +423,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_key_accepted() {
-        let raw_message = RawMessage::new(1, vec![]);
+        let raw_message = RawMessage::new(1, vec![]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -425,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_key_rejected() {
-        let raw_message = RawMessage::new(2, vec![]);
+        let raw_message = RawMessage::new(2, vec![]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -434,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_already_joined() {
-        let raw_message = RawMessage::new(3, vec![]);
+        let raw_message = RawMessage::new(3, vec![]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -446,7 +453,7 @@ mod tests {
         let raw_message = RawMessage::new(
             4,
             Vec::from(r#"{"peer_key": "key", "peer_ip_address": "123.123.123.123", "session_nonce": "nonce"}"#.as_bytes()),
-        );
+        ).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -462,7 +469,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_peer_left() {
-        let raw_message = RawMessage::new(5, vec![]);
+        let raw_message = RawMessage::new(5, vec![]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -471,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_bind_for_direct_connect() {
-        let raw_message = RawMessage::new(6, vec![]);
+        let raw_message = RawMessage::new(6, vec![]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -483,7 +490,8 @@ mod tests {
         let raw_message = RawMessage::new(
             7,
             Vec::from(r#"{"tcp_port":12345,"udp_port":123}"#.as_bytes()),
-        );
+        )
+        .unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -498,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_start_relay_mode() {
-        let raw_message = RawMessage::new(8, vec![]);
+        let raw_message = RawMessage::new(8, vec![]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -507,7 +515,7 @@ mod tests {
 
     #[test]
     fn test_server_deserialise_relay() {
-        let raw_message = RawMessage::new(9, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let raw_message = RawMessage::new(9, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
 
         let message = ServerMessage::deserialise(&raw_message).unwrap();
 
@@ -597,7 +605,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_close() {
-        let raw_message = RawMessage::new(0, vec![]);
+        let raw_message = RawMessage::new(0, vec![]).unwrap();
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -606,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_key() {
-        let raw_message = RawMessage::new(1, Vec::from(r#"{"key":"key"}"#.as_bytes()));
+        let raw_message = RawMessage::new(1, Vec::from(r#"{"key":"key"}"#.as_bytes())).unwrap();
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -623,7 +631,8 @@ mod tests {
         let raw_message = RawMessage::new(
             2,
             Vec::from(r#"{"tcp_port":null,"udp_port":2222}"#.as_bytes()),
-        );
+        )
+        .unwrap();
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -638,7 +647,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_direct_contact_succeeded() {
-        let raw_message = RawMessage::new(3, vec![]);
+        let raw_message = RawMessage::new(3, vec![]).unwrap();
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -647,7 +656,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_direct_contact_failed() {
-        let raw_message = RawMessage::new(4, vec![]);
+        let raw_message = RawMessage::new(4, vec![]).unwrap();
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 
@@ -656,7 +665,7 @@ mod tests {
 
     #[test]
     fn test_client_deserialise_relay() {
-        let raw_message = RawMessage::new(5, vec![1, 2, 3, 4, 5]);
+        let raw_message = RawMessage::new(5, vec![1, 2, 3, 4, 5]).unwrap();
 
         let message = ClientMessage::deserialise(&raw_message).unwrap();
 

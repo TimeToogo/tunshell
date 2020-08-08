@@ -36,7 +36,7 @@ impl Message for EncryptedMessage {
             .unwrap();
         cursor.write(self.ciphertext.as_slice()).unwrap();
 
-        Ok(RawMessage::new(self.type_id(), cursor.into_inner()))
+        RawMessage::new(self.type_id(), cursor.into_inner())
     }
 
     fn deserialise(raw_message: &RawMessage) -> Result<Self> {
