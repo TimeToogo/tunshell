@@ -52,10 +52,11 @@ tunshell-client/pkg
 *.log
 
 # .net core
-bin/
+scripts/netcore/bin/
 obj/
 *.dll
 temp/
 
 # java
+scripts/java/bin/
 *.jar

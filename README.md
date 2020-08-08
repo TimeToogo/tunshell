@@ -7,9 +7,9 @@ The project is predominately written in [Rust](https://www.rust-lang.org/).
 
 ## Why?
 
-> Why would I use this when I am already able to use my well-established SSH client?
+> Why would I use this over my well-established SSH client?
 
-Good question, you wouldn't! The use case for tunshell is predominantly quick, ad-hoc remote access to hosts which you may not have SSH access to, or not even the ability to install an SSH daemon at all. The beauty of tunshell is that it's client is a statically-linked, pre-compiled binary which can be installed by simply downloading it via a one-liner script. This makes it ideal to quickly debug environments you normally wouldn't have shell access to, some examples:
+Good question, you wouldn't! The use case for tunshell is predominantly quick, ad-hoc remote access to hosts which you may not have SSH access to, or even the ability to install an SSH daemon at all. The beauty of tunshell is that it's client is a statically-linked, pre-compiled binary which can be installed by simply downloading it via a one-liner script. This makes it ideal to quickly debug environments you normally wouldn't have shell access to, some examples:
 
 ### Debugging Deployment Pipelines
 
@@ -21,7 +21,7 @@ Tunshell even supports extremely limited environments such as AWS Lambda or Goog
 
 ### Unsavoury Use-cases
 
-Tunshell could also be used as an exploitation tool to gain unauthorized access to remote hosts. Personally, I hope that this tool is not misused for nefarious purposes. If it becomes apparent that tunshell is helping malicious actors go about their activities, the free service will be deactivated.
+Tunshell could also be used as an exploitation tool to gain unauthorized access to remote hosts. Personally, I hope that this tool is not misused for nefarious purposes. If it becomes apparent that tunshell is helping malicious actors go about their activities, the free service will be discontinued.
 
 ## How does it work?
 
