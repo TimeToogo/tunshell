@@ -11,7 +11,7 @@ COPY . /app/
 
 WORKDIR /app/tunshell-client
 
-RUN [ -n "${RUN_TESTS}" ] && cargo test
+RUN ([ -n "${RUN_TESTS}" ] && cargo test) || true
 RUN cargo build --release
 
 FROM alpine:latest
