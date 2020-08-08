@@ -137,7 +137,10 @@ mod tests {
         let message = ShellClientMessage::Key("key".to_owned());
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(1, "key".as_bytes().to_vec()).unwrap());
+        assert_eq!(
+            serialised,
+            RawMessage::new(1, "key".as_bytes().to_vec()).unwrap()
+        );
 
         let deserialised = ShellClientMessage::deserialise(&serialised).unwrap();
 
@@ -158,6 +161,7 @@ mod tests {
                 2,
                 "{\"term\":\"test\",\"size\":[100,50]}".as_bytes().to_vec()
             )
+            .unwrap()
         );
 
         let deserialised = ShellClientMessage::deserialise(&serialised).unwrap();
@@ -184,7 +188,7 @@ mod tests {
 
         assert_eq!(
             serialised,
-            RawMessage::new(4, "[50,100]".as_bytes().to_vec())
+            RawMessage::new(4, "[50,100]".as_bytes().to_vec()).unwrap()
         );
 
         let deserialised = ShellClientMessage::deserialise(&serialised).unwrap();
@@ -212,7 +216,7 @@ mod tests {
         assert_eq!(serialised, RawMessage::new(2, vec![]).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
-        
+
         assert_eq!(message, deserialised);
     }
 
@@ -245,7 +249,10 @@ mod tests {
         let message = ShellServerMessage::Error("test".to_owned());
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(255, "test".as_bytes().to_vec()).unwrap());
+        assert_eq!(
+            serialised,
+            RawMessage::new(255, "test".as_bytes().to_vec()).unwrap()
+        );
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 
