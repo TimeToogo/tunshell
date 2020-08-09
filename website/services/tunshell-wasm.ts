@@ -2,7 +2,7 @@ import { TerminalEmulator } from "./wasm/tunshell_client";
 
 type ClientModule = typeof import("./wasm/tunshell_client");
 
-export class TunshellClient {
+export class TunshellWasm {
   private module: ClientModule;
   private terminateCallback: () => void | undefined;
 

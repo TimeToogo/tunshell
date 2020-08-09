@@ -9,7 +9,7 @@ The project is predominately written in [Rust](https://www.rust-lang.org/).
 
 > Why would I use this over my well-established SSH client?
 
-Good question, you wouldn't! The use case for tunshell is predominantly quick, ad-hoc remote access to hosts which you may not have SSH access to, or even the ability to install an SSH daemon at all. The beauty of tunshell is that it's client is a statically-linked, pre-compiled binary which can be installed by simply downloading it via a one-liner script. This makes it ideal to quickly debug environments you normally wouldn't have shell access to, some examples:
+Good question, you wouldn't! The use case for tunshell is predominantly quick, ad-hoc remote access to hosts which you may not have SSH access to, or even the ability to install an SSH daemon at all. The beauty of tunshell is that it's client is a statically-linked, pre-compiled binary which can be installed by downloading it with a one-liner script. This makes it ideal to debug environments you normally wouldn't have shell access to, some examples:
 
 ### Debugging Deployment Pipelines
 
@@ -35,7 +35,7 @@ Tunshell is comprised of 3 main components:
 
 The process is kicked off using [tunshell.com](https://tunshell.com). One can generate the install a pair of install scripts for their local and target environments.
 
-The below sample install script pair for a tunshell session is broken into the following components;
+The below sample install script pair for a tunshell session is broken into the following components.
 
 ![Install Script](https://app.lucidchart.com/publicSegments/view/8ad48e9c-299b-4d55-8c95-2d1aa07475c6/image.png)
 
