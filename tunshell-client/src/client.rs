@@ -43,7 +43,7 @@ impl Client {
             .await;
 
         self.println("Negotiating connection...").await;
-        let peer_socket = self
+        let (peer_socket, message_stream) = self
             .negotiate_peer_connection(message_stream, &mut peer_info, self.config.is_target())
             .await?;
 
@@ -51,6 +51,19 @@ impl Client {
             ClientMode::Target => self.start_shell_server(peer_socket).await?,
             ClientMode::Local => self.start_shell_client(peer_socket).await?,
         };
+
+        let message_stream = if let Ok(message_stream) = Arc::try_unwrap(message_stream) {
+            message_stream.into_inner().ok()
+        } else {
+            None
+        };
+
+        if let Some(mut message_stream) = message_stream {
+            debug!("sending close message to server");
+            message_stream.write(&ClientMessage::Close).await?;
+        } else {
+            warn!("failed to take ownership of message stream");
+        }
 
         Ok(exit_code)
     }
@@ -92,10 +105,10 @@ impl Client {
         mut message_stream: ClientMessageStream,
         peer_info: &mut PeerJoinedPayload,
         master_side: bool,
-    ) -> Result<Box<dyn TunnelStream>> {
+    ) -> Result<(Box<dyn TunnelStream>, Arc<Mutex<ClientMessageStream>>)> {
         let mut bound = None;
 
-        let stream = loop {
+        let (stream, message_stream) = loop {
             match message_stream.next().await {
                 Some(Ok(ServerMessage::BindForDirectConnect)) => {
                     match self.bind_direct_connection(peer_info).await {
@@ -127,7 +140,11 @@ impl Client {
                     {
                         Some(direct_stream) => {
                             self.println("Direct connection to peer established").await;
-                            break direct_stream;
+                            message_stream
+                                .write(&ClientMessage::DirectConnectSucceeded)
+                                .await?;
+                            let message_stream = Arc::new(Mutex::new(message_stream));
+                            break (direct_stream, message_stream);
                         }
                         None => {
                             message_stream
@@ -138,7 +155,9 @@ impl Client {
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => {
                     self.println("Falling back to relayed connection").await;
-                    break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))));
+                    let message_stream = Arc::new(Mutex::new(message_stream));
+                    let relay_stream = Box::new(RelayStream::new(Arc::clone(&message_stream)));
+                    break (relay_stream, message_stream);
                 }
                 result @ _ => return Err(self.handle_unexpected_message(result)),
             }
@@ -153,7 +172,7 @@ impl Client {
         )
         .await?;
 
-        Ok(Box::new(stream))
+        Ok((Box::new(stream), message_stream))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -261,8 +280,8 @@ impl Client {
         mut message_stream: ClientMessageStream,
         peer_info: &mut PeerJoinedPayload,
         _master_side: bool,
-    ) -> Result<Box<dyn TunnelStream>> {
-        let stream = loop {
+    ) -> Result<(Box<dyn TunnelStream>, Arc<Mutex<ClientMessageStream>>)> {
+        let (stream, message_stream) = loop {
             match message_stream.next().await {
                 Some(Ok(ServerMessage::BindForDirectConnect)) => {
                     message_stream
@@ -271,7 +290,9 @@ impl Client {
                 }
                 Some(Ok(ServerMessage::StartRelayMode)) => {
                     self.println("Falling back to relayed connection").await;
-                    break Box::new(RelayStream::new(Arc::new(Mutex::new(message_stream))));
+                    let message_stream = Arc::new(Mutex::new(message_stream));
+                    let relay_stream = Box::new(RelayStream::new(Arc::clone(&message_stream)));
+                    break (relay_stream, message_stream);
                 }
                 result @ _ => return Err(self.handle_unexpected_message(result)),
             }
@@ -286,7 +307,7 @@ impl Client {
         )
         .await?;
 
-        Ok(Box::new(stream))
+        Ok((Box::new(stream), message_stream))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
