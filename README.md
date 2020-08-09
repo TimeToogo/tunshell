@@ -56,7 +56,7 @@ There are three networking models supported that are attempted and used in the f
 
 ![TCP](https://app.lucidchart.com/publicSegments/view/26e86773-55e4-4927-8487-525fde329006/image.png?)
 
-2. **UDP:** The implementation also contains thin [TCP-like protocol built on UDP](./tunshell-client/src/p2p/udp). In some cases this can help establish direct UDP connections at least of the clients are behind a more permissive NAT device.
+2. **UDP:** The implementation also contains thin [TCP-like protocol built on UDP](./tunshell-client/src/p2p/udp). In some cases this can help establish direct connections if at least of the clients are behind a more permissive NAT device.
 
 ![UDP](https://app.lucidchart.com/publicSegments/view/bd4afe42-a282-45d5-8a67-378ae31ad219/image.png?)
 
@@ -88,8 +88,12 @@ The next consideration is the operation of the client binary, which exposes shel
 
 ![Encryption Diagram](https://app.lucidchart.com/publicSegments/view/1a812bff-1780-464e-ba01-ac2913121c77/image.png)
 
-In addition to the secret, during the connection establishment phase, the relay server will generate a unique nonce for each connection pair and send this nonce to each client. The clients use the encryption secret and nonce to derive a encryption key using PBKDF2-SHA256. The resulting key is unique to this connection and used for AEAD encryption (AES-GCM-256) of the traffic between the clients.
+In addition to the secret, during the connection establishment phase, the relay server will generate a unique nonce for each connection pair and send this nonce to each client. The clients use the encryption secret and nonce to derive an encryption key using PBKDF2-SHA256. The resulting key is unique to this connection and only known two the clients themselves. The traffic between the clients is then end-to-end encrypted and authenticated using AES-GCM-256.
+
+It is important that the session and encryption keys remain secret. Exposing these parameters could allow attackers who obtain these keys to takeover hosts which have an active tunshell client.
 
 ## Future Scope
 
-TBC
+ - [ ] Add fallback shell built-in to install https://github.com/uutils/coreutils / busybox
+ - [ ] Socket forwarding / file copying
+ - [ ] Replacing AES encryption scheme with TLS using 256 bit ECDH key pairs (public keys become session keys)
