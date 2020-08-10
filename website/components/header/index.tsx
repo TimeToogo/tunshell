@@ -1,6 +1,5 @@
 import React from "react";
 import { Container } from "../layout";
-import styled from "styled-components";
 import * as Styled from "./styled";
 import { Link } from "../link";
 
@@ -11,7 +10,7 @@ export const Header = () => {
         <Styled.Contents>
           <Link href="/">
             <Styled.Logo>
-              <span>Tunshell</span>
+              <span>{"{> "}Tunshell <em>Beta</em></span>
             </Styled.Logo>
           </Link>
           <Styled.Nav>
@@ -22,7 +21,11 @@ export const Header = () => {
               <li>
                 <Link href="/go">Get started</Link>
               </li>
-              <li></li>
+              <li>
+                <Link href="https://github.com/TimeToogo/tunshell">
+                  <ion-icon name="logo-github"></ion-icon>
+                </Link>
+              </li>
             </ul>
           </Styled.Nav>
         </Styled.Contents>

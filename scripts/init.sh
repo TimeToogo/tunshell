@@ -67,7 +67,6 @@ then
     then
         echo "Installing client..."
         curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH -D $HEADERS_PATH
-
     fi
 else
     wget https://artifacts.tunshell.com/client-${TARGET} -O $CLIENT_PATH 2> /dev/null

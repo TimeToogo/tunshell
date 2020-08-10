@@ -16,17 +16,30 @@ export interface InstallScript {
 const INSTALL_SCRIPTS: InstallScript[] = [
   {
     types: [InstallScriptType.Local],
-    name: "Unix (CURL)",
+    name: "Unix (curl)",
+    icon: "",
+    scriptFactory: (args) => `sh <(curl -sSf https://lets.tunshell.com/init.sh) ${args.join(" ")}`,
+  },
+  {
+    types: [InstallScriptType.Target],
+    name: "Unix (curl)",
     icon: "",
     scriptFactory: (args) => `curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin ${args.join(" ")}`,
   },
   {
-    types: [InstallScriptType.Target],
-    name: "Unix (CURL)",
+    types: [InstallScriptType.Local],
+    name: "Unix (wget)",
     icon: "",
-    scriptFactory: (args) => `sh <(curl -sSf https://lets.tunshell.com/init.sh) ${args.join(" ")}`,
+    scriptFactory: (args) =>
+      `sh <(wget https://lets.tunshell.com/init.sh -O /dev/stdout 2> /dev/null) ${args.join(" ")}`,
   },
-  // TODO: wget
+  {
+    types: [InstallScriptType.Target],
+    name: "Unix (wget)",
+    icon: "",
+    scriptFactory: (args) =>
+      `wget https://lets.tunshell.com/init.sh -O /dev/stdout 2> /dev/null | sh /dev/stdin ${args.join(" ")}`,
+  },
   {
     types: [InstallScriptType.Local, InstallScriptType.Target],
     name: "Windows (PowerShell)",
@@ -88,7 +101,7 @@ const INSTALL_SCRIPTS: InstallScript[] = [
 ];
 
 export class InstallScriptService {
-  public getOptions = (type: InstallScriptType): InstallScript[] => {
+  public static getOptions = (type: InstallScriptType): InstallScript[] => {
     return INSTALL_SCRIPTS.filter((i) => i.types.includes(type));
   };
 

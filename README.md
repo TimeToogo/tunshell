@@ -2,7 +2,7 @@
 
 https://tunshell.com
 
-Tunshell is a free service which allows you to securely shell into remote hosts with near-zero setup.
+Tunshell is a simple and secure method to remote shell into ephemeral environments such as deployment pipelines or serverless functions.
 The project is predominately written in [Rust](https://www.rust-lang.org/).
 
 ## Why?
@@ -94,6 +94,6 @@ It is important that the session and encryption keys remain secret. Exposing the
 
 ## Future Scope
 
- - [ ] Add fallback shell built-in to install https://github.com/uutils/coreutils / busybox
- - [ ] Socket forwarding / file copying
- - [ ] Replacing AES encryption scheme with TLS using 256 bit ECDH key pairs (public keys can be dual purposed as session keys)
+- [ ] Add fallback shell built-in to install https://github.com/uutils/coreutils / busybox
+- [ ] Socket forwarding / file copying
+- [ ] Replacing AES encryption scheme with TLS using 256 bit ECDH key pairs (public keys can be dual purposed as session keys)
