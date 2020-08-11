@@ -75,7 +75,7 @@ extern "C" {
 }
 
 #[wasm_bindgen]
-pub fn tunshell_init_client(config: BrowserConfig) {
+pub async fn tunshell_init_client(config: BrowserConfig) {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
     
     if let Err(err) = console_log::init_with_level(log::Level::Debug) {
@@ -93,15 +93,14 @@ pub fn tunshell_init_client(config: BrowserConfig) {
         false
     );
 
-    wasm_bindgen_futures::spawn_local(async move {
-        let mut client = Client::new(config, host_shell);
-        let terminate = JsFuture::from(terminate);
 
-        tokio::select! {
-            res = client.start_session() => if let Err(err) = res {
-                client.println(&format!("\r\nError occurred during session: {:?}", err)).await;
-            },
-            _ = terminate => info!("terminating client...")
-        }
-    });
+    let mut client = Client::new(config, host_shell);
+    let terminate = JsFuture::from(terminate);
+
+    tokio::select! {
+        res = client.start_session() => if let Err(err) = res {
+            client.println(&format!("\r\nError occurred during session: {:?}", err)).await;
+        },
+        _ = terminate => info!("terminating client...")
+    }
 }

@@ -142,6 +142,10 @@ export const DropdownContainer = styled.div`
     max-height: 0;
     transition: max-height 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
     -webkit-overflow-scrolling: touch;
+    border-radius: 5px;
+    overflow: hidden;
+    background: #231c1c;
+    margin-top: 3px;
   }
 
   .edd-items-list::-webkit-scrollbar {

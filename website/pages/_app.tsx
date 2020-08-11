@@ -1,5 +1,6 @@
-import "xterm/css/xterm.css";
 import { createGlobalStyle } from "styled-components";
+import "xterm/css/xterm.css";
+import "highlight.js/styles/obsidian.css";
 
 const Reset = createGlobalStyle`
   html, body {

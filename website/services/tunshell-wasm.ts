@@ -1,4 +1,5 @@
 import { TerminalEmulator } from "./wasm/tunshell_client";
+import { SessionKeys } from "./session";
 
 type ClientModule = typeof import("./wasm/tunshell_client");
 
@@ -17,13 +18,21 @@ export class TunshellWasm {
     return this;
   };
 
-  connect = (sessionKey: string, encryptionKey: string, emulator: TerminalEmulator) => {
+  connect = async (session: SessionKeys, emulator: TerminalEmulator) => {
     let terminatePromise = new Promise((resolve) => {
       this.terminateCallback = resolve;
     });
 
-    const config = new this.module.BrowserConfig(sessionKey, encryptionKey, emulator, terminatePromise);
-    this.module.tunshell_init_client(config);
+    const config = new this.module.BrowserConfig(
+      session.localKey,
+      session.encryptionSecret,
+      emulator,
+      terminatePromise
+    );
+
+    console.log(`Initialising client...`);
+    await this.module.tunshell_init_client(config);
+    console.log(`Client session finished...`);
   };
 
   terminate = () => {

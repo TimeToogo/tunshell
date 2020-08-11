@@ -41,6 +41,10 @@ export const Nav = styled.nav`
       margin-right: 40px;
     }
 
+    a {
+      color: #fff;
+    }
+
     ion-icon {
       font-size: 30px;
     }

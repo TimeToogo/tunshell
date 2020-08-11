@@ -22,9 +22,9 @@ export const Header = () => {
                 <Link href="/go">Get started</Link>
               </li>
               <li>
-                <Link href="https://github.com/TimeToogo/tunshell">
+                <a href="https://github.com/TimeToogo/tunshell">
                   <ion-icon name="logo-github"></ion-icon>
-                </Link>
+                </a>
               </li>
             </ul>
           </Styled.Nav>

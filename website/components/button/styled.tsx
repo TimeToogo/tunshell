@@ -26,6 +26,13 @@ export const Button = styled.button<{ mode?: string }>`
     box-shadow: none;
   }
 
+  &:disabled {
+    cursor: default;
+    background: #888!important;
+    color: #333!important;
+    opacity: 0.5;
+  }
+
   ${(props) =>
     props.mode === "inverted" &&
     css`

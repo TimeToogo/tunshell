@@ -6,6 +6,9 @@
   },
   "dependencies": {
     "base-x": "^3.0.8",
+    "classnames": "^2.2.6",
+    "easydropdown": "^4.2.0",
+    "highlight.js": "^10.1.2",
     "next": "9.3.6",
     "react": "16.13.1",
     "react-dom": "16.13.1",

@@ -1,29 +1,44 @@
 import dynamic from "next/dynamic";
 import { TunshellWasm } from "../../services/tunshell-wasm";
 import { useEffect, useState } from "react";
-import { TerminalEmulator } from "../../services/wasm/tunshell_client";
-import { Term } from "../term";
+import { TerminalEmulator as TerminalEmulatorInterface } from "../../services/wasm/tunshell_client";
+import { TerminalEmulator } from "../term";
+import { SessionKeys } from "../../services/session";
 
-export const TunshellClient = dynamic({
+interface TunshellClientProps {
+  session: SessionKeys;
+  onClose: () => void;
+}
+
+export const TunshellClient = dynamic<TunshellClientProps>({
   loader: async () => {
     const tunshellWasm = await new TunshellWasm().init();
 
-    return ({ sessionKey, encryptionKey }: any) => {
-      const [emulator, setEmulator] = useState<TerminalEmulator>();
+    return ({ session, onClose }) => {
+      const [emulatorInterface, setEmulatorInterface] = useState<TerminalEmulatorInterface>();
+      const [term, setTerm] = useState<import("xterm").Terminal>();
 
       useEffect(() => {
-        if (!emulator) {
+        if (!emulatorInterface || !term) {
           return;
         }
 
-        tunshellWasm.connect(sessionKey, encryptionKey.key, emulator);
+        tunshellWasm
+          .connect(session, emulatorInterface)
+          .then(() => term.writeln("\nThe client has exited"))
+          .catch(() => term.writeln("\nAn error occurred during your session"));
 
         return () => {
           tunshellWasm.terminate();
         };
-      }, [sessionKey, encryptionKey, emulator]);
+      }, [session, emulatorInterface, term]);
 
-      return <Term onEmulator={setEmulator} />;
+      const onEmulatorInitialised = (emulatorInterface: TerminalEmulatorInterface, term: import("xterm").Terminal) => {
+        setEmulatorInterface(emulatorInterface);
+        setTerm(term);
+      };
+
+      return <TerminalEmulator onEmulatorInitialised={onEmulatorInitialised} onClose={onClose} fullScreen />;
     };
   },
 });

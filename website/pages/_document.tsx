@@ -35,11 +35,12 @@ export default class MyDocument extends Document {
             href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap"
             rel="stylesheet"
           />
+          <script type="module" src="https://unpkg.com/ionicons@5.1.2/dist/ionicons/ionicons.esm.js"></script>
+          <script noModule src="https://unpkg.com/ionicons@5.1.2/dist/ionicons/ionicons.js"></script>
         </Head>
         <body>
           <Main />
           <NextScript />
-          <script src="https://unpkg.com/ionicons@5.1.2/dist/ionicons.js"></script>
         </body>
       </Html>
     );
