@@ -13,7 +13,7 @@ export const Contents = styled.div`
   height: 100%;
 `;
 
-export const Logo = styled.div`
+export const Logo = styled.span`
   display: flex;
   flex-direction: row;
   align-items: center;
