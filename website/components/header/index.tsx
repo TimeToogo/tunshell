@@ -16,10 +16,10 @@ export const Header = () => {
           <Styled.Nav>
             <ul>
               <li>
-                <Link href="/how">How it works</Link>
+                <Link href="/how/">How it works</Link>
               </li>
               <li>
-                <Link href="/go">Get started</Link>
+                <Link href="/go/">Get started</Link>
               </li>
               <li>
                 <a href="https://github.com/TimeToogo/tunshell">

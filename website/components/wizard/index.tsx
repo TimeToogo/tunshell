@@ -98,7 +98,7 @@ export const Wizard = () => {
                 {state === State.CreatingSession ? "Generating session..." : "Generate session"}
               </Button>
             ) : (
-              "Install the client"
+              <span>Install the client</span>
             )}
           </Styled.StepHeader>
 
