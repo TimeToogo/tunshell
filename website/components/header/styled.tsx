@@ -4,6 +4,10 @@ import { COLOURS } from "../../theme/colours";
 export const Header = styled.header`
   height: 70px;
   color: ${COLOURS.OFF_WHITE};
+
+  a {
+    text-decoration: none;
+  }
 `;
 
 export const Contents = styled.div`

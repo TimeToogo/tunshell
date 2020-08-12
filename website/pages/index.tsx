@@ -10,8 +10,17 @@ const CTA = styled.div`
   width: 100%;
   display: flex;
   justify-content: center;
+
+  > *:first-child {
+    margin-right: 15px;
+  }
+
   button {
     font-size: 18px;
+  }
+
+  a {
+    text-decoration: none;
   }
 `;
 
@@ -29,6 +38,9 @@ export default function Home() {
         <Link href="/go">
           <Button mode="inverted">Get started</Button>
         </Link>
+        <a href="https://github.com/TimeToogo/tunshell#readme">
+          <Button>README.md</Button>
+        </a>
       </CTA>
     </div>
   );
