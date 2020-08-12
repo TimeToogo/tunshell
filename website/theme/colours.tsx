@@ -7,7 +7,7 @@ export const COLOURS = {
   TAN2: "#231c1c",
   TAN3: "#332a25",
   TAN4: "#bd9898",
-  TAN5: "#42352b",
+  TAN5: "#4c423a",
 
   RED: "#ff7d7d",
 };
