@@ -1,9 +1,10 @@
 import styled, { css } from "styled-components";
+import { COLOURS } from "../../theme/colours";
 
 export const Wrapper = styled.pre`
   width: 100%;
   height: 100%;
-  color: #eee;
+  color: ${COLOURS.OFF_WHITE};
   border-radius: 5px;
   box-shadow: 0 0 2px 1px #444 inset;
   position: relative;
@@ -14,10 +15,10 @@ export const Wrapper = styled.pre`
   padding: 15px 35px 15px 15px;
   box-sizing: border-box;
   margin: 0;
-  
+
   &,
   & > span {
-    background: #271f1c;
+    background: ${COLOURS.TAN2};
   }
 `;
 
@@ -34,23 +35,23 @@ export const Copy = styled.button`
   background: none;
   border: none;
   font-size: 20px;
-  color: #eee;
+  color: ${COLOURS.OFF_WHITE};
   cursor: pointer;
   transition: 0.2s ease-out all;
   outline: 0 !important;
 
   &:hover {
-    background: #bd9898;
+    background: ${COLOURS.TAN4};
   }
 `;
 
 export const Copied = styled.div<{ active: boolean }>`
   position: absolute;
-  background: #bd9898;
+  background: ${COLOURS.TAN4};
   bottom: calc(100% + 5px);
   border-radius: 5px;
   font-size: 16px;
-  color: #271f1c;
+  color: ${COLOURS.TAN2};
   padding: 5px;
   pointer-events: none;
   transition: 0.2s ease-out all;

@@ -1,9 +1,9 @@
 import styled from "styled-components";
+import { COLOURS } from "../../theme/colours";
 
 export const Header = styled.header`
   height: 70px;
-  background: #332f2d;
-  color: #eee;
+  color: ${COLOURS.OFF_WHITE};
 `;
 
 export const Contents = styled.div`
@@ -42,7 +42,7 @@ export const Nav = styled.nav`
     }
 
     a {
-      color: #fff;
+      color: ${COLOURS.WHITE};
     }
 
     ion-icon {

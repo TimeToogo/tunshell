@@ -1,4 +1,5 @@
 import styled, { css } from "styled-components";
+import { COLOURS } from "../../theme/colours";
 
 export const Button = styled.button<{ mode?: string }>`
   border: none;
@@ -12,13 +13,13 @@ export const Button = styled.button<{ mode?: string }>`
   cursor: pointer;
   transition: 0.2s ease-out all;
   outline: 0 !important;
-  color: #fff;
-  background-color: #271f1c;
+  color: ${COLOURS.WHITE};
+  background-color: ${COLOURS.TAN2};
   font-size: inherit;
 
   &:hover {
-    color: #231c1c;
-    background: #bd9898;
+    color: ${COLOURS.TAN2};
+    background: ${COLOURS.TAN4};
   }
 
   &:active {
@@ -28,20 +29,20 @@ export const Button = styled.button<{ mode?: string }>`
 
   &:disabled {
     cursor: default;
-    background: #888!important;
-    color: #333!important;
+    background: #888 !important;
+    color: ${COLOURS.OFF_BLACK}!important;
     opacity: 0.5;
   }
 
   ${(props) =>
     props.mode === "inverted" &&
     css`
-      color: #231c1c;
-      background: #bd9898;
+      color: ${COLOURS.TAN2};
+      background: ${COLOURS.TAN4};
 
       &:hover {
-        color: #fff;
-        background-color: #271f1c;
+        color: ${COLOURS.WHITE};
+        background-color: ${COLOURS.TAN2};
       }
     `}
 `;

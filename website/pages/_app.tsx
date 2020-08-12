@@ -1,13 +1,14 @@
 import { createGlobalStyle } from "styled-components";
 import "xterm/css/xterm.css";
 import "highlight.js/styles/obsidian.css";
+import { COLOURS } from "../theme/colours";
 
 const Reset = createGlobalStyle`
   html, body {
     padding: 0;
     margin: 0;
-    background: #332f2d;
-    color: #eee;
+    background: ${COLOURS.TAN3};
+    color: ${COLOURS.OFF_WHITE};
   }
 `;
 

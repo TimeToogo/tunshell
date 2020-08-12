@@ -1,4 +1,5 @@
 import styled from "styled-components";
+import { COLOURS } from "../../theme/colours";
 
 export const Wizard = styled.div`
   margin: 20px 0;
@@ -6,7 +7,7 @@ export const Wizard = styled.div`
 
 export const Dialog = styled.div`
   padding: 20px 30px 30px 30px;
-  background: #333;
+  background: ${COLOURS.TAN5};
   box-shadow: 0 0 5px #242424;
   border-radius: 5px;
   margin-bottom: 40px;
@@ -100,7 +101,7 @@ export const Error = styled.p`
 
   &,
   & a {
-    color: #ff7d7d;
+    color: ${COLOURS.RED};
   }
 
   a {

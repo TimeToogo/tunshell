@@ -1,4 +1,5 @@
 import styled from "styled-components";
+import { COLOURS } from "../../theme/colours";
 
 export const DropdownContainer = styled.div`
   .edd-root,
@@ -16,9 +17,9 @@ export const DropdownContainer = styled.div`
     display: inline-block;
     position: relative;
     user-select: none;
-    color: #fff;
+    color: ${COLOURS.WHITE};
     width: 100%;
-    background: #231c1c;
+    background: ${COLOURS.TAN2};
     border-radius: 5px;
     padding: 0 10px;
   }
@@ -120,7 +121,7 @@ export const DropdownContainer = styled.div`
     box-shadow: 0 0 6px rgba(0, 0, 0, 0.08);
     border-top: 0;
     border-right: 0;
-    background: #333;
+    background: ${COLOURS.OFF_BLACK};
   }
 
   .edd-root-open .edd-body {
@@ -144,7 +145,7 @@ export const DropdownContainer = styled.div`
     -webkit-overflow-scrolling: touch;
     border-radius: 5px;
     overflow: hidden;
-    background: #231c1c;
+    background: ${COLOURS.TAN2};
     margin-top: 3px;
   }
 
@@ -181,8 +182,8 @@ export const DropdownContainer = styled.div`
   }
 
   .edd-option-focused:not(.edd-option-disabled) {
-    color: #231c1c;
-    background: #bd9898;
+    color: ${COLOURS.TAN2};
+    background: ${COLOURS.TAN4};
   }
 
   .edd-option-disabled,
