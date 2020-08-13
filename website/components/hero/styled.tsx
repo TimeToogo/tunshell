@@ -6,6 +6,7 @@ export const Hero = styled.div`
   h1 {
     font-weight: normal;
     font-size: 40px;
+    line-height: 45px;
   }
 
   .typing {
@@ -23,6 +24,22 @@ export const Hero = styled.div`
   @keyframes blink {
     50% {
       opacity: 0;
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 30px 0;
+
+    h1 {
+      height: 135px;
+    }
+  }
+
+  @media (max-width: 350px) {
+    padding: 20px 0;
+
+    h1 {
+      height: 175px;
     }
   }
 `;

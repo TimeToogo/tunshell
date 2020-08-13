@@ -18,10 +18,10 @@ export const Header = () => {
           </Link>
           <Styled.Nav>
             <ul>
-              <li>
+              <li className="hide-on-mobile">
                 <a href="https://github.com/TimeToogo/tunshell#readme">README.md</a>
               </li>
-              <li>
+              <li className="hide-on-mobile">
                 <Link href="/go/">Get started</Link>
               </li>
               <li>

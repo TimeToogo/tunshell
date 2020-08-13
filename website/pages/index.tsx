@@ -10,6 +10,7 @@ const CTA = styled.div`
   width: 100%;
   display: flex;
   justify-content: center;
+  margin-bottom: 30px;
 
   > *:first-child {
     margin-right: 15px;

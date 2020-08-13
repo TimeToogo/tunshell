@@ -8,6 +8,12 @@ export const Header = styled.header`
   a {
     text-decoration: none;
   }
+
+  @media (max-width: 768px) {
+    .hide-on-mobile {
+      display: none;
+    }
+  }
 `;
 
 export const Contents = styled.div`

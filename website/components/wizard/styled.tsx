@@ -11,6 +11,10 @@ export const Dialog = styled.div`
   box-shadow: 0 0 5px #242424;
   border-radius: 5px;
   margin-bottom: 40px;
+
+  @media (max-width: 768px) {
+    padding: 20px;
+  }
 `;
 
 export const StepHeader = styled.header`
@@ -74,6 +78,10 @@ export const Environment = styled.div`
     &:not(:last-child) {
       margin-bottom: 30px;
     }
+  }
+
+  @media (max-width: 768px) {
+    padding: 0;
   }
 `;
 
