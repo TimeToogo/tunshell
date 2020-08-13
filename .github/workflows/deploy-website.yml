@@ -33,21 +33,21 @@ jobs:
     - uses: chrislennon/action-aws-cli@v1.1
     
     - name: Deploy to S3
-      run: aws s3 sync --delete --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell.com/ 
+      run: aws s3 sync --delete --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/ 
       working-directory: website
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
     
     - name: Deploy to S3 (wasm)
-      run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --recursive --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell.com/
+      run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --recursive --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
       working-directory: website
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
     
     - name: Invalidate CloudFront
-      run: aws cloudfront create-invalidation --distribution-id=E34DDIH79LWROV --paths '/*'
+      run: aws cloudfront create-invalidation --distribution-id=E2BXOYP52RJJQF --paths '/*'
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}

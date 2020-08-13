@@ -27,14 +27,14 @@ jobs:
       
     - uses: chrislennon/action-aws-cli@v1.1
     - name: Deploy to S3
-      run: aws s3 sync --delete --exclude="$PWD/*/*" ./ s3://lets.tunshell.com/ --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE 
+      run: aws s3 sync --delete --exclude="$PWD/*/*" ./ s3://tunshell-init/ --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE 
       working-directory: scripts
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
         
     - name: Invalidate CloudFront
-      run: aws cloudfront create-invalidation --distribution-id=EN7FC8CHF6D8E --paths '/*'
+      run: aws cloudfront create-invalidation --distribution-id=E2JEG1NKANF1OH --paths '/*'
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
