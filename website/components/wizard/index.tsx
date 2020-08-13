@@ -26,6 +26,7 @@ export const Wizard = () => {
   const [localHostType, setLocalHostType] = useState<string>();
   const [targetHostType, setTargetHostType] = useState<string>();
   const [session, setSession] = useState<SessionKeys>();
+  const [publicScript, setPublicScript] = useState(false);
   const [showWebTerm, setShowWebTerm] = useState(false);
 
   const canGenerateSession = Boolean(state === State.Initial && localHostType && targetHostType);
@@ -135,15 +136,40 @@ export const Wizard = () => {
                     />
                   </>
                 )}
+
               </Styled.Environment>
               <Styled.Separator />
               <Styled.Environment>
+                {publicScript && (
+                  <>
+                    <p>Configure this secret in the target env.</p>
+                    <Script
+                      lang={InstallScriptService.getScript(InstallScriptType.Target, targetHostType).lang}
+                      script={`TUNSHELL_SECRET="${scriptService
+                        .getSessionArgs(InstallScriptType.Target, session)
+                        .join(" ")}"`}
+                    />
+                  </>
+                )}
+
                 <p>Run this script on the target host.</p>
 
                 <Script
                   lang={InstallScriptService.getScript(InstallScriptType.Target, targetHostType).lang}
-                  script={scriptService.renderInstallScript(InstallScriptType.Target, targetHostType, session)}
+                  script={scriptService.renderInstallScript(
+                    InstallScriptType.Target,
+                    targetHostType,
+                    session,
+                    publicScript ? ["$TUNSHELL_SECRET"] : undefined
+                  )}
                 />
+
+                {InstallScriptService.getScript(InstallScriptType.Target, targetHostType).canBePublic && (
+                  <label>
+                    <input type="checkbox" checked={publicScript} onChange={(e) => setPublicScript(e.target.checked)} />
+                    i'm going to run this script in a public place
+                  </label>
+                )}
               </Styled.Environment>
             </Styled.Environments>
           )}

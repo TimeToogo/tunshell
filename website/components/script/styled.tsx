@@ -1,7 +1,7 @@
 import styled, { css } from "styled-components";
 import { COLOURS } from "../../theme/colours";
 
-export const Wrapper = styled.pre`
+export const Wrapper = styled.div`
   width: 100%;
   height: 100%;
   color: ${COLOURS.OFF_WHITE};
@@ -19,6 +19,10 @@ export const Wrapper = styled.pre`
   &,
   & > span {
     background: ${COLOURS.TAN2};
+  }
+
+  &:not(:last-child) {
+    margin-bottom: 15px;
   }
 `;
 
