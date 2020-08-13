@@ -10,7 +10,10 @@ export const Header = () => {
         <Styled.Contents>
           <Link href="/">
             <Styled.Logo>
-              <span>{"{> "}Tunshell <em>Beta</em></span>
+              <img src="/images/logo.svg" />
+              <span>
+                Tunshell <em>Beta</em>
+              </span>
             </Styled.Logo>
           </Link>
           <Styled.Nav>

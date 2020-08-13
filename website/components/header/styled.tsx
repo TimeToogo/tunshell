@@ -24,6 +24,11 @@ export const Logo = styled.span`
   height: 100%;
   font-size: 24px;
   letter-spacing: 1px;
+
+  img {
+    height: 35px;
+    margin-right: 10px;
+  }
 `;
 
 export const Nav = styled.nav`
