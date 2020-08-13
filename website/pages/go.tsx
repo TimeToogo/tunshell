@@ -8,7 +8,7 @@ export default function Go() {
   return (
     <div className="container">
       <Head>
-        <title>Tunshell</title>
+        <title>Create a session - Tunshell</title>
       </Head>
 
       <Header />

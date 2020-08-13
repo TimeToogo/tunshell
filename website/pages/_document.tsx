@@ -36,6 +36,16 @@ export default class MyDocument extends Document {
             href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&amp;display=swap"
             rel="stylesheet"
           />
+          <script async src="https://www.googletagmanager.com/gtag/js?id=UA-175341495-1" />
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-175341495-1');`,
+            }}
+          />
           <script type="module" src="https://unpkg.com/ionicons@5.1.2/dist/ionicons/ionicons.esm.js"></script>
           <script noModule src="https://unpkg.com/ionicons@5.1.2/dist/ionicons/ionicons.js"></script>
         </Head>
