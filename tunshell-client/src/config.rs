@@ -30,6 +30,8 @@ impl Config {
             ClientMode::try_from(args.next().expect("mode arg (2) must be set").as_str()).unwrap();
         let session_key = args.next().expect("session key arg (3) must be set");
         let encryption_key = args.next().expect("encryption key arg (4) must be set");
+        let relay_host = args.next().unwrap_or("relay.tunshell.com".to_owned());
+        let relay_port = args.next().unwrap_or("5000".to_owned()).parse::<u16>().expect("could not parse arg (6) as port");
 
         if session_key.len() < 10 {
             panic!("session key is too short")
@@ -42,8 +44,8 @@ impl Config {
         Self {
             mode,
             session_key,
-            relay_host: "relay.tunshell.com".to_owned(),
-            relay_port: 5000,
+            relay_host,
+            relay_port,
             encryption_key,
             direct_connection_timeout: Duration::from_millis(DEFAULT_DIRECT_CONNECT_TIMEOUT),
             enable_direct_connection: true,
