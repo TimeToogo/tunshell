@@ -28,8 +28,8 @@ services:
       MONGO_CONNECTION_STRING: mongodb://relay:${MONGO_PASSWORD}@mongo:27017/relay
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_TLS_PORT: 3001
-      TLS_RELAY_PRIVATE_KEY: /le-ssl/live/relay.tunshell.com/privkey.pem
-      TLS_RELAY_CERT: /le-ssl/live/relay.tunshell.com/fullchain.pem
+      TLS_RELAY_PRIVATE_KEY: /le-ssl/live/${RELAY_DOMAIN}/privkey.pem
+      TLS_RELAY_CERT: /le-ssl/live/${RELAY_DOMAIN}/fullchain.pem
 
   reverse_proxy:
     image: linuxserver/letsencrypt
@@ -38,10 +38,8 @@ services:
       - NET_ADMIN
     environment:
       - TZ=UTC
-      - URL=tunshell.com
-      - SUBDOMAINS=relay,lets
+      - URL=${RELAY_DOMAIN}
       - VALIDATION=http
-      - ONLY_SUBDOMAINS=true
     volumes:
       - ./config:/config
     ports:
