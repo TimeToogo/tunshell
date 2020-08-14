@@ -39,8 +39,15 @@ jobs:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
     
+    - name: Deploy to S3 (html)
+      run: aws s3 cp --recursive --content-type text/html --exclude "*" --include "*.html" --include "go" --include "404" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
+      working-directory: website
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
+    
     - name: Deploy to S3 (wasm)
-      run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --recursive --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
+      run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
       working-directory: website
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
