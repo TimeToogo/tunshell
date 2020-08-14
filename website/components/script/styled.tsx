@@ -39,6 +39,7 @@ export const Copy = styled.button`
   cursor: pointer;
   transition: 0.2s ease-out all;
   outline: 0 !important;
+  padding: 0;
 
   &:hover {
     background: ${COLOURS.TAN4};
