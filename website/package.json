@@ -2,7 +2,7 @@
   "name": "@timetoogo/tunshell--website",
   "scripts": {
     "dev": "next dev -p 3003",
-    "export": "next build && next export"
+    "export": "next build && next export && ./post-export.sh"
   },
   "dependencies": {
     "base-x": "^3.0.8",

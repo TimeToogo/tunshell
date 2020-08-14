@@ -22,7 +22,7 @@ export const Header = () => {
                 <a href="https://github.com/TimeToogo/tunshell#readme">README.md</a>
               </li>
               <li className="hide-on-mobile">
-                <Link href="/go/">Get started</Link>
+                <Link href="/go">Get started</Link>
               </li>
               <li>
                 <a href="https://github.com/TimeToogo/tunshell">
