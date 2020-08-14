@@ -26,5 +26,6 @@ tunshell todo:
     - [x] docker
  - [x] improve port binding logic
  - [x] integration tests / pipeline tests
- - [ ] docs / website
- - [ ] migrate aws account to OU / investigate hosting options
+ - [x] docs / website
+ - [x] migrate aws account to OU / investigate hosting options
+ - [ ] fix flakey tests
