@@ -7,10 +7,10 @@ Parameters:
     Type: String
     Default: t3a.nano
   DomainName:
-    Description: Domain name 
+    Description: The domain name to create the relay server DNS records for. You must have a Route53 hosted zone for this domain.
     Type: String
   Subdomain:
-    Description: Subdomain
+    Description: The subdomain to create the A record to the relay server for.
     Type: String
     Default: relay
   KeyName:
@@ -110,6 +110,8 @@ Resources:
         - AWSRegionArch2AMI
         - Ref: AWS::Region
         - AMI
+      CreditSpecification:
+        CPUCredits: standard
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
