@@ -25,7 +25,6 @@ rustup target add $TARGET
 
 if [[ ! -z "$RUN_TESTS" ]];
 then
-   env
    cross test -p tunshell-client --target $TARGET
 fi
 
