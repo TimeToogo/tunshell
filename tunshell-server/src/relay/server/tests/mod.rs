@@ -203,7 +203,7 @@ fn test_connect_with_to_expired_session() {
         let mut con = create_client_connection_to_server(&server).await;
 
         let mut mock_session = create_mock_session().await;
-        println!("mock_session: {:?}", mock_session);
+
         mock_session.created_at = chrono::Utc::now() - chrono::Duration::days(1);
         SessionStore::new(db::connect().await.unwrap())
             .save(&mock_session)

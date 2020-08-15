@@ -10,7 +10,7 @@ fi
 
 export TUNSHELL_API_PORT="3000"
 export TUNSHELL_RELAY_TLS_PORT="3001"
-export SQLITLE_DB_PATH="$PWD/db.sqlite"
+export SQLITE_DB_PATH="$PWD/db.sqlite"
 export TLS_RELAY_PRIVATE_KEY="$PWD/certs/development.key"
 export TLS_RELAY_CERT="$PWD/certs/development.cert"
 export STATIC_DIR="$PWD/static"

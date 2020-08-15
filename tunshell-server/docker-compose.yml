@@ -19,7 +19,7 @@ services:
     environment:
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_TLS_PORT: 3001
-      SQLITLE_DB_PATH: /app/db.sqlite
+      SQLITE_DB_PATH: /app/db.sqlite
       TLS_RELAY_PRIVATE_KEY: /app/tunshell-server/certs/development.key
       TLS_RELAY_CERT: /app/tunshell-server/certs/development.cert
       STATIC_DIR: /app/tunshell-server/static

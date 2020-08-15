@@ -95,7 +95,7 @@ Resources:
                 cd /app
 
                 echo "#!/bin/bash" >> env.sh
-                echo "RELAY_DOMAIN=$RELAY_DOMAIN >> env.sh
+                echo "export RELAY_DOMAIN=$RELAY_DOMAIN" >> env.sh
                 chmod +x env.sh
 
                 curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/setup-ec2.sh > setup-ec2.sh

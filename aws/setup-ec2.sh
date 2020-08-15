@@ -19,6 +19,7 @@ curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/nginx.conf 
 
 mkdir -p config/nginx/site-confs/
 mv nginx.conf config/nginx/site-confs/default
+touch db.sqlite
 
 sudo service docker start
 sg docker -c "docker-compose pull"

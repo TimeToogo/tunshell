@@ -7,7 +7,7 @@ pub(crate) struct Config {
 
 impl Config {
     pub(crate) fn from_env() -> Result<Self> {
-        let sqlite_db_path = env::var("SQLITLE_DB_PATH")?;
+        let sqlite_db_path = env::var("SQLITE_DB_PATH")?;
 
         Ok(Self { sqlite_db_path })
     }
