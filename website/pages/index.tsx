@@ -29,7 +29,7 @@ export default function Home() {
   return (
     <div className="container">
       <Head>
-        <title>Tunshell - Remote shell into empheral environments</title>
+        <title>Tunshell - Remote shell into ephemeral environments</title>
         <meta
           name="description"
           content="Tunshell is a simple and secure method to remote shell into ephemeral environments such as deployment pipelines or serverless functions."
