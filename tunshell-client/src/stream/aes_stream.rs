@@ -334,7 +334,6 @@ mod tests {
 
     #[test]
     fn test_write_then_read_aes_stream() {
-        env_logger::init();
         Runtime::new().unwrap().block_on(async {
             let cursor = Cursor::new(vec![]);
 
