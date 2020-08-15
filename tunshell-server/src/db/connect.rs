@@ -1,23 +1,31 @@
-use super::Config;
-use anyhow::{Error, Result};
+use super::{schema, Config};
+use anyhow::{Context, Error, Result};
 use log::*;
-use mongodb::Client;
+use rusqlite::Connection;
 
-pub(crate) async fn connect() -> Result<Client> {
-    info!("connecting to mongodb");
+pub(crate) async fn connect() -> Result<Connection> {
+    tokio::task::spawn_blocking(connect_sync)
+        .await
+        .context("error while connecting to sqlite")?
+}
+
+fn connect_sync() -> Result<Connection> {
+    info!("connecting to sqlite");
     let config = Config::from_env()?;
-    let client_options = config.to_client_options().await?;
 
-    match Client::with_options(client_options) {
-        Ok(client) => {
-            info!("connected to mongo");
-            Ok(client)
-        }
+    let mut con = match Connection::open(config.sqlite_db_path) {
+        Ok(con) => con,
         Err(err) => {
-            error!("failed to connect to mongo: {}", err);
-            Err(Error::from(err))
+            error!("failed to connect to sqlite: {}", err);
+            return Err(Error::from(err));
         }
-    }
+    };
+
+    info!("connected to sqlite");
+
+    schema::init(&mut con).context("error while initialising sqlite schema")?;
+
+    Ok(con)
 }
 
 #[cfg(all(test, integration))]

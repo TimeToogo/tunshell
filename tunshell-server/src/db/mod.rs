@@ -1,5 +1,6 @@
 mod config;
 mod connect;
+pub(self) mod schema;
 mod session;
 
 pub(crate) use config::*;

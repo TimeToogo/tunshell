@@ -9,9 +9,7 @@ struct ResponsePayload<'a> {
     peer2_key: &'a str,
 }
 
-pub(crate) async fn create_session(db: mongodb::Client) -> Result<Box<dyn Reply>, Rejection> {
-    let mut store = SessionStore::new(db);
-
+pub(crate) async fn create_session(mut store: SessionStore) -> Result<Box<dyn Reply>, Rejection> {
     debug!("creating new session");
     let session = Session::new(Participant::default(), Participant::default());
 
@@ -45,9 +43,9 @@ mod tests {
     #[test]
     fn test_create_session() {
         Runtime::new().unwrap().block_on(async {
-            let client = db::connect().await.unwrap();
+            let store = SessionStore::new(db::connect().await.unwrap());
 
-            let session = create_session(client).await.unwrap();
+            let session = create_session(store).await.unwrap();
 
             let body = session
                 .into_response()

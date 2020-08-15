@@ -60,3 +60,6 @@ temp/
 # java
 scripts/java/bin/
 *.jar
+
+# sqlite
+*.sqlite

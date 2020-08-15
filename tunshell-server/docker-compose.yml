@@ -6,13 +6,12 @@ services:
       context: .
       dockerfile: docker/dev.Dockerfile
     restart: unless-stopped
-    depends_on: 
-      - mongo
     volumes:
       - cargo:/usr/local/cargo:delegated
       - .:/app/tunshell-server:delegated
       - ../tunshell-shared:/app/tunshell-shared:delegated
       - target:/app/target:delegated
+      - ./db.sqlite:/app/db.sqlite
     ports:
       - "3000:3000"
       - "3001:3001"
@@ -20,28 +19,13 @@ services:
     environment:
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_TLS_PORT: 3001
-      MONGO_CONNECTION_STRING: mongodb://relay:password@mongo:27017/relay
+      SQLITLE_DB_PATH: /app/db.sqlite
       TLS_RELAY_PRIVATE_KEY: /app/tunshell-server/certs/development.key
       TLS_RELAY_CERT: /app/tunshell-server/certs/development.cert
       STATIC_DIR: /app/tunshell-server/static
       RUST_LOG: debug
       CARGO_TARGET_DIR: /app/target
-  
-  mongo:
-    image: mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-      - "28017:28017"
-    volumes:
-      - ./mongo:/docker-entrypoint-initdb.d:ro
-      - mongodb:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
-      MONGO_INITDB_DATABASE: relay
 
 volumes:
-  mongodb:
   cargo:
   target:

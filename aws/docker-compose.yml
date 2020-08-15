@@ -1,31 +1,19 @@
 version: '3.0'
-services:  
-  mongo:
-    image: mongo:4.2
-    container_name: mongo
-    restart: unless-stopped
-    volumes:
-      - ./mongo_init.js:/docker-entrypoint-initdb.d/mongo_init.js:ro
-      - ./mongo-db/:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
-      MONGO_INITDB_DATABASE: relay
-
+services:
   relay:
     image: timetoogo/tunshell-relay
     container_name: relay
     restart: unless-stopped
     depends_on:
-      - mongo
       - reverse_proxy
     ports:
       - "443:3000"
       - "5000:3001"
     volumes:
       - ./config/etc/letsencrypt/:/le-ssl
+      - ./db.sqlite:/app/db.sqlite
     environment:
-      MONGO_CONNECTION_STRING: mongodb://relay:${MONGO_PASSWORD}@mongo:27017/relay
+      SQLITE_DB_PATH: /app/db.sqlite
       TUNSHELL_API_PORT: 3000
       TUNSHELL_RELAY_TLS_PORT: 3001
       TLS_RELAY_PRIVATE_KEY: /le-ssl/live/${RELAY_DOMAIN}/privkey.pem
@@ -51,5 +39,5 @@ services:
     container_name: watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: watchtower reverse_proxy relay mongo --interval 30
+    command: watchtower reverse_proxy relay --interval 30
     restart: unless-stopped

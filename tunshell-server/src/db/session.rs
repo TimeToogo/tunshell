@@ -1,13 +1,10 @@
-use anyhow::{Error, Result};
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use mongodb::bson::{self, doc, oid::ObjectId};
-use mongodb::{
-    options::{FindOneOptions, UpdateOptions},
-    Client,
-};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use std::convert::TryFrom;
+use rusqlite::{named_params, params, Connection};
+use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct Participant {
@@ -16,7 +13,7 @@ pub(crate) struct Participant {
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct Session {
-    id: ObjectId,
+    id: String,
     pub(crate) peer1: Participant,
     pub(crate) peer2: Participant,
     pub(crate) created_at: DateTime<Utc>,
@@ -24,7 +21,7 @@ pub(crate) struct Session {
 
 #[derive(Clone)]
 pub(crate) struct SessionStore {
-    client: Client,
+    con: Arc<Mutex<Connection>>,
 }
 
 impl Participant {
@@ -37,56 +34,10 @@ impl Participant {
     }
 }
 
-impl Into<bson::Document> for Participant {
-    fn into(self) -> bson::Document {
-        doc! {
-            "key": self.key,
-        }
-    }
-}
-
-impl TryFrom<bson::Document> for Participant {
-    type Error = Error;
-
-    fn try_from(value: bson::Document) -> Result<Self, Self::Error> {
-        let key = value.get_str("key")?.to_owned();
-        Ok(Self { key })
-    }
-}
-
-impl Into<bson::Document> for Session {
-    fn into(self) -> bson::Document {
-        doc! {
-            "_id": self.id,
-            "peer1": Into::<bson::Document>::into(self.peer1),
-            "peer2": Into::<bson::Document>::into(self.peer2),
-            "created_at": self.created_at
-        }
-    }
-}
-
-impl TryFrom<bson::Document> for Session {
-    type Error = Error;
-
-    fn try_from(value: bson::Document) -> Result<Self, Self::Error> {
-        let id = value.get_object_id("_id")?.clone();
-        let peer1 = Participant::try_from(value.get_document("peer1")?.clone())?;
-        let peer2 = Participant::try_from(value.get_document("peer2")?.clone())?;
-        let created_at = value.get_datetime("created_at")?.clone();
-
-        Ok(Self {
-            id,
-            peer1,
-            peer2,
-            created_at,
-        })
-    }
-}
-
 impl Session {
     pub(crate) fn new(peer1: Participant, peer2: Participant) -> Session {
         Session {
-            id: ObjectId::new(),
+            id: Uuid::new_v4().to_string(),
             peer1,
             peer2,
             created_at: Utc::now(),
@@ -132,49 +83,79 @@ impl Session {
 }
 
 impl SessionStore {
-    pub(crate) fn new(client: Client) -> SessionStore {
-        SessionStore { client }
+    pub(crate) fn new(con: Connection) -> SessionStore {
+        SessionStore {
+            con: Arc::new(Mutex::new(con)),
+        }
     }
 
     pub(crate) async fn find_by_key(&mut self, key: &str) -> Result<Option<Session>> {
-        //  $or: [{ 'host.key': key }, { 'client.key': key }],
-        let result = self
-            .client
-            .database("relay")
-            .collection("sessions")
-            .find_one(
-                doc! {
-                    "$or": [{"peer1.key": key.clone()}, {"peer2.key": key.clone()}]
-                },
-                FindOneOptions::default(),
-            )
-            .await?;
+        let con = Arc::clone(&self.con);
+        let key = key.to_owned();
 
-        let doc = match result {
+        tokio::task::spawn_blocking(move || {
+            let con = con.lock().unwrap();
+
+            Self::find_by_key_sync(&con, key.as_str())
+        })
+        .await
+        .context("error while finding session by key")?
+    }
+
+    fn find_by_key_sync(con: &Connection, key: &str) -> Result<Option<Session>> {
+        let mut statement = con.prepare(
+            "
+            SELECT id, peer1_key, peer2_key, created_at FROM sessions
+            WHERE peer1_key = :key OR peer2_key = :key
+        ",
+        )?;
+
+        let mut result = statement.query_named(named_params! {":key": key})?;
+
+        let row = match result.next()? {
+            Some(row) => row,
             None => return Ok(None),
-            Some(doc) => doc,
         };
 
-        Ok(Some(Session::try_from(doc)?))
+        let session = Session {
+            id: row.get(0)?,
+            peer1: Participant { key: row.get(1)? },
+            peer2: Participant { key: row.get(2)? },
+            created_at: DateTime::parse_from_rfc3339(row.get::<usize, String>(3)?.as_str())?
+                .with_timezone(&Utc),
+        };
+
+        Ok(Some(session))
     }
 
     pub(crate) async fn save(&mut self, session: &Session) -> Result<()> {
-        let result = self
-            .client
-            .database("relay")
-            .collection("sessions")
-            .update_one(
-                doc! { "_id": session.id.clone() },
-                doc! {
-                    "$set": Into::<bson::Document>::into(session.clone())
-                },
-                UpdateOptions::builder().upsert(true).build(),
-            )
-            .await;
+        let con = Arc::clone(&self.con);
+        let session = session.clone();
 
-        if let Err(err) = result {
-            return Err(Error::from(err));
-        }
+        tokio::task::spawn_blocking(move || {
+            let con = con.lock().unwrap();
+
+            Self::save_sync(&con, &session)
+        })
+        .await
+        .context("error while saving session")??;
+
+        Ok(())
+    }
+
+    fn save_sync(con: &Connection, session: &Session) -> Result<()> {
+        con.execute(
+            "
+                INSERT OR REPLACE INTO sessions (id, peer1_key, peer2_key, created_at)
+                VALUES (?1, ?2, ?3, ?4)
+            ",
+            params![
+                session.id,
+                session.peer1.key,
+                session.peer2.key,
+                session.created_at.to_rfc3339()
+            ],
+        )?;
 
         Ok(())
     }
@@ -188,83 +169,79 @@ pub(crate) fn generate_secure_key() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db;
+    use tokio::runtime::Runtime;
 
     #[test]
-    fn test_participant_into_bson() {
-        let participant = Participant::new("test-key".to_owned());
+    fn test_find_by_key() {
+        Runtime::new().unwrap().block_on(async {
+            let mut store = SessionStore::new(db::connect().await.unwrap());
 
-        let document: bson::Document = participant.into();
+            {
+                let con = store.con.lock().unwrap();
 
-        assert_eq!(
-            document,
-            doc! {
-                "key": "test-key",
+                con.execute(
+                    r#"
+                    INSERT OR REPLACE INTO sessions (id, peer1_key, peer2_key, created_at)
+                    VALUES ("test_id", "valid_peer1_key", "valid_peer2_key", "2000-01-01T01:01:01.000Z")
+                    "#,
+                    params![],
+                ).unwrap();
             }
-        );
+
+            let session = Session {
+                id: "test_id".to_owned(),
+                peer1: Participant { key: "valid_peer1_key".to_owned() },
+                peer2: Participant { key: "valid_peer2_key".to_owned() },
+                created_at: DateTime::parse_from_rfc3339("2000-01-01T01:01:01.000Z").unwrap().with_timezone(&Utc)
+            };
+
+            assert_eq!(store.find_by_key("valid_peer1_key").await.unwrap(), Some(session.clone()));
+            assert_eq!(store.find_by_key("valid_peer2_key").await.unwrap(), Some(session.clone())); 
+            assert_eq!(store.find_by_key("invalid_key").await.unwrap(), None); 
+        });
     }
 
     #[test]
-    fn test_participant_from_bson() {
-        let document = doc! {
-            "key": "test-key",
-        };
+    fn test_save() {
+        Runtime::new().unwrap().block_on(async {
+            let mut store = SessionStore::new(db::connect().await.unwrap());
 
-        let participant = Participant::try_from(document).unwrap();
-
-        assert_eq!(participant, Participant::new("test-key".to_owned()));
-    }
-
-    #[test]
-    fn test_session_into_bson() {
-        let session = Session::new(
-            Participant::new("peer1-key".to_owned()),
-            Participant::new("peer2-key".to_owned()),
-        );
-
-        let document: bson::Document = session.clone().into();
-
-        assert_eq!(
-            document,
-            doc! {
-                "_id": session.id,
-                "peer1": {
-                    "key": "peer1-key",
+            let session = Session {
+                id: "test_save_id".to_owned(),
+                peer1: Participant {
+                    key: "valid_peer1_key".to_owned(),
                 },
-                "peer2": {
-                    "key": "peer2-key",
+                peer2: Participant {
+                    key: "valid_peer2_key".to_owned(),
                 },
-                "created_at": session.created_at
-            }
-        );
-    }
+                created_at: DateTime::parse_from_rfc3339("2000-01-01T01:01:01.000Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+            };
 
-    #[test]
-    fn test_session_from_bson() {
-        let id = ObjectId::new();
-        let created_at = Utc::now();
+            store.save(&session).await.unwrap();
 
-        let document = doc! {
-            "_id": id.clone(),
-            "peer1": {
-                "key": "peer1-key",
-            },
-            "peer2": {
-                "key": "peer2-key",
-            },
-            "created_at": created_at.clone()
-        };
+            let count: u32 = {
+                let con = store.con.lock().unwrap();
 
-        let session = Session::try_from(document).unwrap();
+                con.query_row(
+                    r#"
+                    SELECT COUNT(*) FROM sessions
+                    WHERE 1=1
+                    AND id = "test_save_id"
+                    AND peer1_key = "valid_peer1_key"
+                    AND peer2_key = "valid_peer2_key"
+                    AND created_at = "2000-01-01T01:01:01+00:00"
+                    "#,
+                    params![],
+                    |r| r.get(0),
+                )
+                .unwrap()
+            };
 
-        let mut expected = Session::new(
-            Participant::new("peer1-key".to_owned()),
-            Participant::new("peer2-key".to_owned()),
-        );
-
-        expected.id = id;
-        expected.created_at = created_at;
-
-        assert_eq!(session, expected);
+            assert_eq!(count, 1);
+        });
     }
 
     #[test]

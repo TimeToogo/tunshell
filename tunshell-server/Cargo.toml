@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 tunshell-shared = { path = "../tunshell-shared" }
-mongodb = { version = "1.0.0", features=["tokio-runtime"] }
 tokio = { version = "0.2.21", features=["rt-threaded", "blocking", "time", "io-util", "tcp", "udp", "macros"] }
 tokio-util = { version = "0.3.1", features=["compat"] }
 tokio-rustls = { version = "0.14.0", features=["dangerous_configuration"] }
@@ -22,6 +21,8 @@ warp = { version = "0.2.3", features=["tls"] }
 chrono = "0.4.13"
 rustls = "0.18.0"
 rand = "0.7.3"
+rusqlite = { version = "0.23.1", features=["bundled"] }
+uuid = { version = "0.8.1", features=["v4"] }
 
 [dev-dependencies]
 lazy_static = "1.4.0"

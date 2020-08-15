@@ -2,7 +2,7 @@ FROM rust:alpine AS build
 
 ENV RUSTFLAGS="--cfg alpine"
 
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev sqlite-dev
 RUN mkdir /app/
 
 COPY . /app/
@@ -12,6 +12,7 @@ WORKDIR /app/tunshell-server
 RUN cargo build --release
 
 FROM alpine:latest
+
 RUN mkdir /app/
 
 COPY --from=build /app/target/release/server /app/server

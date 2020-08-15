@@ -92,8 +92,11 @@ Resources:
               - "\n"
               - |
                 sudo mkdir /app
-                cd /app 
-                echo $RELAY_DOMAIN > relay_domain
+                cd /app
+
+                echo "#!/bin/bash" >> env.sh
+                echo "RELAY_DOMAIN=$RELAY_DOMAIN >> env.sh
+                chmod +x env.sh
 
                 curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/setup-ec2.sh > setup-ec2.sh
                 sudo chown -R ubuntu:ubuntu /app
