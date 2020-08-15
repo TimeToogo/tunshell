@@ -31,7 +31,7 @@ export default function Home() {
       <Head>
         <title>Tunshell - Remote shell into empheral environments</title>
         <meta
-          key="description"
+          name="description"
           content="Tunshell is a simple and secure method to remote shell into ephemeral environments such as deployment pipelines or serverless functions."
         />
       </Head>
