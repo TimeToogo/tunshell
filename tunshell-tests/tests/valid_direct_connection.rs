@@ -61,13 +61,13 @@ fn test() {
         let mut local = client::Client::new(local_config, local_shell.clone());
 
         let session_task = tokio::spawn(async move {
-            futures::future::try_join(local.start_session(), target.start_session()).await
+            futures::future::join(local.start_session(), target.start_session()).await
         });
 
         local_shell.write_to_stdin("echo hello\n".as_bytes());
         local_shell.write_to_stdin("exit\n".as_bytes());
 
         let result = session_task.await.unwrap();
-        assert_eq!(result.unwrap(), (0, 0));
+        assert_eq!((result.0.unwrap(), result.1.unwrap()), (0, 0));
     })
 }
