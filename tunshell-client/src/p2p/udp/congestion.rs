@@ -245,7 +245,7 @@ mod tests {
             
             let wait_for_send = tokio::spawn(wait_until_can_send(Arc::clone(&con), packet.clone()));
 
-            tokio::time::delay_for(Duration::from_millis(10)).await;
+            tokio::time::delay_for(Duration::from_millis(100)).await;
 
             {
                 let con = con.lock().unwrap();

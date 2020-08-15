@@ -350,11 +350,11 @@ mod tests {
         let (port1, port2) = init_udp_port_number_pairs();
 
         let config1 = UdpConnectionConfig::default()
-            .with_connect_timeout(Duration::from_millis(50))
+            .with_connect_timeout(Duration::from_millis(500))
             .with_bind_addr(SocketAddr::from(([0, 0, 0, 0], port1)));
 
         let config2 = UdpConnectionConfig::default()
-            .with_connect_timeout(Duration::from_millis(50))
+            .with_connect_timeout(Duration::from_millis(500))
             .with_bind_addr(SocketAddr::from(([0, 0, 0, 0], port2)));
 
         let mut connection1 = UdpConnection::new(config1);
