@@ -300,9 +300,11 @@ impl Interpreter {
             return Ok(());
         }
 
+        // TODO: strip UNC paths on windows
         state.pwd = fs::canonicalize(new_pwd)?;
         debug!("change pwd to: {}", state.pwd.to_string_lossy());
-        return Ok(());
+
+        Ok(())
     }
 
     fn exit(&mut self, code: Option<String>) {
