@@ -113,6 +113,10 @@ impl HostShell {
         Ok(())
     }
 
+    pub fn disable_raw_mode(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     pub fn stdin(&self) -> Result<HostShellStdin> {
         Ok(HostShellStdin {
             state: Arc::clone(&self.stdin),

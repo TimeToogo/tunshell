@@ -1,20 +1,19 @@
 use anyhow::{Error, Result};
 use crossterm;
 use futures::channel::mpsc;
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures::channel::mpsc::{UnboundedReceiver};
 use futures::stream::StreamExt;
+use io::{AsyncWriteExt, AsyncReadExt};
 use log::*;
-use std::io::{Read, Write};
-use std::thread;
-use std::thread::JoinHandle;
+use tokio::io;
+use std::thread::{self, JoinHandle};
 
 pub struct HostShellStdin {
-    receiver: UnboundedReceiver<Vec<u8>>,
-    buff: Vec<u8>,
+    stdin: io::Stdin,
 }
 
 pub struct HostShellStdout {
-    sender: UnboundedSender<Vec<u8>>,
+    stdout: io::Stdout,
 }
 
 pub struct HostShellResizeWatcher {
@@ -25,108 +24,22 @@ pub struct HostShell {}
 
 impl HostShellStdin {
     pub fn new() -> Result<Self> {
-        let (receiver, _thread) = Self::create_thread();
-
-        Ok(Self {
-            receiver,
-            buff: vec![],
-        })
-    }
-
-    fn create_thread() -> (UnboundedReceiver<Vec<u8>>, JoinHandle<()>) {
-        let (tx, rx) = mpsc::unbounded::<Vec<u8>>();
-
-        let thread = thread::spawn(move || {
-            let stdin = std::io::stdin();
-            let mut buff = [0u8; 1024];
-
-            while !tx.is_closed() {
-                info!("reading from stdin");
-                let read = match stdin.lock().read(&mut buff) {
-                    Ok(0) => {
-                        info!("stdin stream finished");
-                        break;
-                    }
-                    Ok(read) => {
-                        info!("read {} bytes from stdin", read);
-                        read
-                    }
-                    Err(err) => {
-                        error!("Failed to read from stdin: {:?}", err);
-                        break;
-                    }
-                };
-
-                match tx.unbounded_send(Vec::from(&buff[..read])) {
-                    Ok(_) => info!("sent {} bytes from stdin to channel", read),
-                    Err(err) => {
-                        error!("Failed to send from stdin: {:?}", err);
-                        break;
-                    }
-                }
-            }
-        });
-
-        (rx, thread)
+        Ok(Self { stdin: io::stdin() })
     }
 
     pub async fn read(&mut self, buff: &mut [u8]) -> Result<usize> {
-        if self.buff.len() == 0 {
-            if let Some(buff) = self.receiver.next().await {
-                self.buff.extend(buff);
-            }
-        }
-
-        let read = std::cmp::min(self.buff.len(), buff.len());
-        buff[..read].copy_from_slice(&self.buff[..read]);
-        self.buff.drain(..read);
-
-        Ok(read)
+        self.stdin.read(buff).await.map_err(Error::from)
     }
 }
 
 impl HostShellStdout {
     pub fn new() -> Result<Self> {
-        let (sender, _thread) = Self::create_thread();
-
-        Ok(Self { sender })
-    }
-
-    fn create_thread() -> (UnboundedSender<Vec<u8>>, JoinHandle<()>) {
-        let (tx, mut rx) = mpsc::unbounded::<Vec<u8>>();
-
-        let thread = thread::spawn(move || {
-            let stdout = std::io::stdout();
-
-            futures::executor::block_on(async move {
-                let mut stdout = stdout.lock();
-
-                while let Some(data) = rx.next().await {
-                    match stdout.write_all(data.as_slice()) {
-                        Ok(_) => debug!("wrote {} bytes to stdout", data.len()),
-                        Err(err) => {
-                            error!("Failed to write to stdout: {:?}", err);
-                            break;
-                        }
-                    }
-
-                    match stdout.flush() {
-                        Ok(_) => info!("stdout flushed"),
-                        Err(err) => {
-                            error!("Failed to flush stdout: {:?}", err);
-                            break;
-                        }
-                    };
-                }
-            });
-        });
-
-        (tx, thread)
+        Ok(Self { stdout: io::stdout() })
     }
 
     pub async fn write(&mut self, buff: &[u8]) -> Result<()> {
-        self.sender.unbounded_send(Vec::from(buff))?;
-
+        self.stdout.write_all(buff).await.map_err(Error::from)?;
+        self.stdout.flush().await.map_err(Error::from)?;
         Ok(())
     }
 }
@@ -189,7 +102,14 @@ impl HostShell {
     }
 
     pub fn enable_raw_mode(&mut self) -> Result<()> {
+        debug!("enabling tty raw mode");
         crossterm::terminal::enable_raw_mode()?;
+        Ok(())
+    }
+
+    pub fn disable_raw_mode(&mut self) -> Result<()> {
+        debug!("disabling tty raw mode");
+        crossterm::terminal::disable_raw_mode()?;
         Ok(())
     }
 
@@ -219,7 +139,7 @@ impl HostShell {
 
 impl Drop for HostShell {
     fn drop(&mut self) {
-        crossterm::terminal::disable_raw_mode()
+        self.disable_raw_mode()
             .unwrap_or_else(|err| debug!("Failed to disable terminal raw mode: {:?}", err));
     }
 }

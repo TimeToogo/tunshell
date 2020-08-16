@@ -58,11 +58,15 @@ impl ShellClient {
         info!("shell requested");
         info!("starting shell stream");
 
-        let exit_code = self.stream_shell_io(&mut stream).await?;
+        self.host_shell.enable_raw_mode()?;
+
+        let exit_code = self.stream_shell_io(&mut stream).await;
+
+        self.host_shell.disable_raw_mode()?;
 
         info!("session finished");
 
-        Ok(exit_code)
+        Ok(exit_code?)
     }
 
     async fn authenticate(&self, stream: &mut ShellStream, key: ShellKey) -> Result<()> {
@@ -97,8 +101,6 @@ impl ShellClient {
         let mut stdin = self.host_shell.stdin()?;
         let mut stdout = self.host_shell.stdout()?;
         let mut resize_watcher = self.host_shell.resize_watcher()?;
-
-        self.host_shell.enable_raw_mode()?;
 
         loop {
             info!("waiting for shell message");

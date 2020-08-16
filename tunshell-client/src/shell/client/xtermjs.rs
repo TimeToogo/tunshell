@@ -151,6 +151,10 @@ impl HostShell {
         Ok(())
     }
 
+    pub fn disable_raw_mode(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     pub fn stdin(&mut self) -> Result<HostShellStdin> {
         Ok(HostShellStdin::new(self.stdin.take().unwrap()))
     }
