@@ -51,7 +51,7 @@ const INSTALL_SCRIPTS: InstallScript[] = [
     lang: "powershell",
     icon: "",
     scriptFactory: (args) =>
-      `[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; &amp;$([scriptblock]::Create((New-ObjectSystem.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) ${args.join(
+      `[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; &$([scriptblock]::Create((New-Object System.Net.WebClient).DownloadString('https://lets.tunshell.com/init.ps1'))) ${args.join(
         " "
       )}`,
   },
@@ -78,7 +78,7 @@ const INSTALL_SCRIPTS: InstallScript[] = [
     lang: "python",
     icon: "",
     scriptFactory: (args) =>
-      `import urllib.request;r=urllib.request.urlopen('https://lets.tunshell.com/init.py') ;exec(r.read().decode('utf-8'),{'p':${JSON.stringify(
+      `import urllib.request;r=urllib.request.urlopen('https://lets.tunshell.com/init.py');exec(r.read().decode('utf-8'),{'p':${JSON.stringify(
         args
       )}})`,
   },
