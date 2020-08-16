@@ -86,11 +86,11 @@ If these were to be compromised so would your host so it's critical that these a
 
 ![Artifact Supply Chain](https://app.lucidchart.com/publicSegments/view/fc6f92fa-1b4b-4800-8a2c-2e1c5f72a8ba/image.png)
 
-The next consideration is the operation of the client binary, which exposes shell access over a secured network channel. It is important to state that, although the traffic between clients can be passed through the relay server, effort has gone into ensuring that the relay server is not able to inspect, modify or forge traffic between any two clients. This is currently achieved by generating an encryption secret independently of the relay server which is then known to each of the clients.
+The next consideration is the operation of the client binary, which exposes shell access over a network channel. It is important to state that, although the traffic between clients can be passed through the relay server, effort has gone into ensuring that the relay server is not able to inspect, modify or forge traffic between any two clients. This is currently achieved by generating an encryption secret independently of the relay server which is then known to each of the clients.
 
 ![Encryption Diagram](https://app.lucidchart.com/publicSegments/view/1a812bff-1780-464e-ba01-ac2913121c77/image.png)
 
-In addition to the secret, during the connection establishment phase, the relay server will generate a unique nonce for each connection pair and send this nonce to each client. The clients use the encryption secret and nonce to derive an encryption key using PBKDF2-SHA256. The resulting key is unique to this connection and only known two the clients themselves. The traffic between the clients is then end-to-end encrypted and authenticated using AES-GCM-256.
+In addition to the secret, during the connection establishment phase, the relay server will generate a unique nonce for each connection pair and send this nonce to each client. The clients use the encryption secret and nonce to derive an encryption key using PBKDF2-SHA256. The resulting key is unique to this connection and only known to the both clients. The traffic between the clients is then end-to-end encrypted and authenticated using AES-GCM-256.
 
 It is important that the session and encryption keys remain secret. Exposing these parameters could allow attackers who obtain these keys to takeover hosts which have an active tunshell client.
 
