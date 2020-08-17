@@ -33,7 +33,8 @@ Tunshell is comprised of 3 main components:
 
 ### Install Script
 
-The process is kicked off using [tunshell.com](https://tunshell.com). One can generate the install a pair of install scripts for their local and target environments.
+The process is kicked off using [tunshell.com](https://tunshell.com). 
+One can generate a "session" which represents a remote shell connection from one client to another.
 
 For each session the website generates one install script for each side of the connection.
 Below is a diagram illustrating the noteworthy components embedded in each script.
@@ -57,21 +58,21 @@ There are three networking models supported that are attempted and used in the f
 
 ![TCP](https://app.lucidchart.com/publicSegments/view/26e86773-55e4-4927-8487-525fde329006/image.png?)
 
-2. **UDP:** The implementation also contains thin [TCP-like protocol built on UDP](./tunshell-client/src/p2p/udp). In some cases this can help establish direct connections if at least of the clients are behind a more permissive NAT device.
+2. **UDP:** The implementation also contains thin [TCP-like protocol built on UDP](./tunshell-client/src/p2p/udp). In some cases this can help establish a direct connection if at least of the clients are behind a more permissive NAT device.
 
 ![UDP](https://app.lucidchart.com/publicSegments/view/bd4afe42-a282-45d5-8a67-378ae31ad219/image.png?)
 
-3. **Relayed:** In the case where no direct connection succeeds, the clients will fallback to a proxying data through the relay server. The relay server will traffic packets between the clients using the existing TLS connections initiated by each client.
+3. **Relayed:** In the case where no direct connection succeeds, the clients will fallback to proxying data through the relay server. The relay server will traffic packets between the clients using the existing TLS connections initiated by each client.
 
 ![Relayed](https://app.lucidchart.com/publicSegments/view/055838d6-6aeb-4a8c-8196-3eadf4653f53/image.png?)
 
-The relayed connection is also used for connections where the client is running in the users web browser. In which case a Web Socket is used between the client and the relay server in place of raw TLS.
+The relayed connection is also used for connections where one of the clients is running in a web browser. In which case a Web Socket is used between the client and the relay server on top of TLS.
 
 ![Relayed + WS](https://app.lucidchart.com/publicSegments/view/d8f71cde-9585-4811-9fd2-21a81dda061a/image.png?)
 
 ### In-built Shell
 
-In some restricted environments the client will not have permission to allocate a PTY. This means that running the native shell in an interactive session is not going to be possible. The client has a bare-bones (read: incomplete) implementation of a [VT100-style shell](./tunshell-client/src/shell/server/fallback/) which does not require a PTY and is used as a fallback in such cases.
+In some restricted environments the client will not have permission to allocate a PTY. This means that running the native shell in an interactive session is not going to be possible. The client has a bare-bones (read: incomplete) implementation of a [VT100-style shell](./tunshell-client/src/shell/server/fallback/) which does not require a PTY and is used as a fallback in such cases. This is still WIP.
 
 ## Security Considerations
 
@@ -82,7 +83,8 @@ Although a lot of thought has gone into the limiting the attack surface there ar
 
 First and foremost, one must always be wary when running scripts from remote sources.
 The installation method of the tunshell client relies on the execution of a 3rd party script and binary on the host machine.
-If these were to be compromised so would your host so it's critical that these are tightly controlled in a transparent process. The artifacts are generated directly from source code in this repo, stored in AWS S3 and served via CloudFront CDN.
+If these were to be compromised so would your host. So it's critical that these are produced and delivered in a secure and transparent process.
+In summary, the artifacts are generated directly from the source in this repo, stored in AWS S3 and served via CloudFront CDN.
 
 ![Artifact Supply Chain](https://app.lucidchart.com/publicSegments/view/fc6f92fa-1b4b-4800-8a2c-2e1c5f72a8ba/image.png)
 
