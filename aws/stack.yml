@@ -7,7 +7,7 @@ Parameters:
     Type: String
     Default: t3a.nano
   DomainName:
-    Description: The domain name to create the relay server DNS records for. You must have a Route53 hosted zone for this domain.
+    Description: The apex domain name to create the relay server DNS records for. You must have a Route53 hosted zone for this domain.
     Type: String
   Subdomain:
     Description: The subdomain to create the A record to the relay server for.

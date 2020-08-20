@@ -115,6 +115,33 @@ The resulting key is unique to this connection and only known to the both client
 It is important that the session and encryption keys remain secret. 
 Exposing these parameters could allow attackers who obtain these keys to takeover hosts which have an active tunshell client.
 
+## Supported Targets for Client
+
+The following is list of the supported platforms and architectures for the tunshell client:
+
+| Target | Builds | Tested |
+|--------|--------|--------|
+| x86_64-unknown-linux-musl | Y | Y |
+| armv7-unknown-linux-musleabihf | Y | N |
+| arm-unknown-linux-musleabi | Y | Y |
+| aarch64-unknown-linux-musl | Y | Y |
+| arm-linux-androideabi | Y | N |
+| i686-unknown-linux-musl | Y | Y |
+| i586-unknown-linux-musl | Y | Y |
+| x86_64-apple-darwin | Y | Y |
+| x86_64-apple-ios | Y | N |
+| x86_64-pc-windows-msvc | Y | Y |
+| i686-pc-windows-msvc | Y | N |
+
+ - *Builds:* indicates whether the client successfully built for the target
+ - *Tested:* indicates whether the test suites succeeds for the target, clients with _N_ listed may be inoperable
+
+ These targets are managed by [the build pipeline](.github/workflows/deploy-client-binaries.yml).
+
+## Self-hosted relay server
+
+For additional security or customisation it is possible to self-host the relay server on your own infrastructure. The details of doing so can be found [here](./aws/README.md).
+
 ## Future Scope
 
 - [ ] Add fallback shell built-in to install https://github.com/uutils/coreutils / busybox
