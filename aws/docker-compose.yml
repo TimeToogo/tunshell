@@ -1,7 +1,7 @@
 version: '3.0'
 services:
   relay:
-    image: timetoogo/tunshell-relay
+    image: timetoogo/tunshell-relay:feature-global-relay
     container_name: relay
     restart: unless-stopped
     depends_on:
