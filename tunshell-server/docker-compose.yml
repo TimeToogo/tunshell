@@ -22,6 +22,7 @@ services:
       SQLITE_DB_PATH: /app/db.sqlite
       TLS_RELAY_PRIVATE_KEY: /app/tunshell-server/certs/development.key
       TLS_RELAY_CERT: /app/tunshell-server/certs/development.cert
+      DOMAIN_NAME: tunshell.localhost
       STATIC_DIR: /app/tunshell-server/static
       RUST_LOG: debug
       CARGO_TARGET_DIR: /app/target

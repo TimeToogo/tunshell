@@ -14,6 +14,7 @@ export SQLITE_DB_PATH="$PWD/db.sqlite"
 export TLS_RELAY_PRIVATE_KEY="$PWD/certs/development.key"
 export TLS_RELAY_CERT="$PWD/certs/development.cert"
 export STATIC_DIR="$PWD/static"
+export DOMAIN_NAME="tunshell.localhost"
 
 if [[ -z "$SKIP_TESTS" ]];
 then

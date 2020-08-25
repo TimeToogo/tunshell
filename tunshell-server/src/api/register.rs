@@ -13,10 +13,17 @@ pub async fn register() -> Result<BoxedFilter<(impl Reply + 'static,)>> {
     let routes = warp::any()
         .and({
             warp::path("api").and(
-                // POST /api/sessions
-                warp::path("sessions")
-                    .and(warp::post())
-                    .and_then(move || routes::create_session(store.clone())),
+                warp::any().and(
+                    // POST /api/sessions
+                    warp::path("sessions")
+                        .and(warp::post())
+                        .and_then(move || routes::create_session(store.clone())),
+                ).or(
+                    // GET /api/info
+                    warp::path("info")
+                        .and(warp::get())
+                        .and_then(move || routes::get_info()),
+                )
             )
         })
         .with(cors());
