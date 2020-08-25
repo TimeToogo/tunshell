@@ -13,6 +13,13 @@ fi
 
 . env.sh
 
+# Wait until server is reachable via DNS
+until nc -zvw5 $RELAY_DOMAIN 22
+do
+    echo "$RELAY_DOMAIN is still not reachable will retry in 30s..."
+    sleep 30
+done
+
 curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/docker-compose.yml > docker-compose.yml
 curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/nginx.conf > nginx.conf
 
