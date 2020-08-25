@@ -18,6 +18,7 @@ services:
       TUNSHELL_RELAY_TLS_PORT: 3001
       TLS_RELAY_PRIVATE_KEY: /le-ssl/live/${RELAY_DOMAIN}/privkey.pem
       TLS_RELAY_CERT: /le-ssl/live/${RELAY_DOMAIN}/fullchain.pem
+      DOMAIN_NAME: ${RELAY_DOMAIN}
 
   reverse_proxy:
     image: linuxserver/letsencrypt
@@ -27,6 +28,7 @@ services:
     environment:
       - TZ=UTC
       - URL=${RELAY_DOMAIN}
+      - EXTRA_DOMAINS=${EXTRA_DOMAIN}
       - VALIDATION=http
     volumes:
       - ./config:/config
