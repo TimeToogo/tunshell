@@ -7,10 +7,13 @@ import { Button } from "../button";
 import { SessionKeys, SessionService } from "../../services/session";
 import { Script } from "../script";
 import { TunshellClient } from "../tunshell-client";
+import { LocationService, RELAY_SERVERS, RelayServer } from "../../services/location";
 
 const scriptService = new InstallScriptService();
 const localOptions = InstallScriptService.getOptions(InstallScriptType.Local);
 const targetOptions = InstallScriptService.getOptions(InstallScriptType.Target);
+
+const locationService = new LocationService();
 
 const sessionService = new SessionService();
 
@@ -23,6 +26,7 @@ enum State {
 
 export const Wizard = () => {
   const [state, setState] = useState<State>(State.Initial);
+  const [relayLocation, setRelayLocation] = useState<string>("auto");
   const [localHostType, setLocalHostType] = useState<string>();
   const [targetHostType, setTargetHostType] = useState<string>();
   const [session, setSession] = useState<SessionKeys>();
@@ -30,10 +34,18 @@ export const Wizard = () => {
 
   const canGenerateSession = Boolean(state === State.Initial && localHostType && targetHostType);
 
+  const getRelayServer = async (): Promise<RelayServer> => {
+    if (relayLocation === "auto") {
+      return await locationService.findNearestRelayServer();
+    } else {
+      return RELAY_SERVERS.find((i) => i.domain === relayLocation);
+    }
+  };
+
   const generateSession = async () => {
     try {
       setState(State.CreatingSession);
-      setSession(await sessionService.createSessionKeys());
+      setSession(await sessionService.createSessionKeys(await getRelayServer()));
       setState(State.CreatedSession);
     } catch (e) {
       console.warn(`Failed to create a session: `, e);
@@ -87,6 +99,18 @@ export const Wizard = () => {
               </Styled.Dropdown>
             </Styled.Environment>
           </Styled.Environments>
+
+          <Styled.RelayLocation>
+            <label>Location:</label>
+            <Dropdown inline onSelect={(i) => setRelayLocation(i)} disabled={!!session}>
+              <option value="auto">Auto</option>
+              {RELAY_SERVERS.map((i) => (
+                <option key={i.domain} value={i.domain}>
+                  {i.label}
+                </option>
+              ))}
+            </Dropdown>
+          </Styled.RelayLocation>
         </Styled.Dialog>
 
         <Styled.Dialog>
@@ -94,9 +118,11 @@ export const Wizard = () => {
             <Styled.StepNumber>2</Styled.StepNumber>
 
             {state !== State.CreatedSession ? (
-              <Button mode="inverted" onClick={() => generateSession()} disabled={!canGenerateSession}>
-                {state === State.CreatingSession ? "Generating session..." : "Generate session"}
-              </Button>
+              <>
+                <Button mode="inverted" onClick={() => generateSession()} disabled={!canGenerateSession}>
+                  {state === State.CreatingSession ? "Generating session..." : "Generate session"}
+                </Button>
+              </>
             ) : (
               <span>Install the client</span>
             )}

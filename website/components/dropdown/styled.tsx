@@ -1,7 +1,7 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { COLOURS } from "../../theme/colours";
 
-export const DropdownContainer = styled.div`
+export const DropdownContainer = styled.div<{ inline?: boolean; disabled?: boolean }>`
   .edd-root,
   .edd-root *,
   .edd-root *::before,
@@ -22,6 +22,22 @@ export const DropdownContainer = styled.div`
     background: ${COLOURS.TAN2};
     border-radius: 5px;
     padding: 0 10px;
+
+    ${({ inline }) =>
+      inline &&
+      css`
+        background: none;
+        padding: 0;
+        display: inline-flex;
+      `}
+
+    ${({ disabled }) =>
+      disabled &&
+      css`
+        pointer-events: none;
+        opacity: 0.5;
+        cursor: default;
+      `}
   }
 
   .edd-root-disabled {
@@ -38,6 +54,12 @@ export const DropdownContainer = styled.div`
     overflow: hidden;
     transition: border-color 200ms;
     padding: 10px;
+
+    ${({ inline }) =>
+      inline &&
+      css`
+        padding: 0;
+      `}
   }
 
   .edd-root:not(.edd-root-disabled) .edd-head:hover {
@@ -48,6 +70,12 @@ export const DropdownContainer = styled.div`
     width: 100%;
     display: inline-block;
     vertical-align: middle;
+
+    ${({ inline }) =>
+      inline &&
+      css`
+        text-decoration: underline;
+      `}
   }
 
   .edd-arrow {
@@ -59,6 +87,12 @@ export const DropdownContainer = styled.div`
     transition: transform 150ms;
     pointer-events: none;
     color: #666;
+
+    ${({ inline }) =>
+      inline &&
+      css`
+        display: none;
+      `}
   }
 
   .edd-root-disabled .edd-arrow {
@@ -175,6 +209,12 @@ export const DropdownContainer = styled.div`
   .edd-option {
     position: relative;
     padding: 10px 10px 10px 25px;
+
+    ${({ inline }) =>
+      inline &&
+      css`
+        padding: 5px;
+      `}
   }
 
   .edd-option-selected {

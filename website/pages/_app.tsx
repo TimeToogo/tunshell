@@ -10,6 +10,10 @@ const Reset = createGlobalStyle`
     background: ${COLOURS.TAN3};
     color: ${COLOURS.OFF_WHITE};
   }
+
+  html, body, #__next {
+    height: 100%;
+  }
 `;
 
 const Typography = createGlobalStyle`

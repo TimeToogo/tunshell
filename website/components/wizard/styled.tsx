@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import { COLOURS } from "../../theme/colours";
+import { DropdownContainer } from "../dropdown/styled";
 
 export const Wizard = styled.div`
   margin: 20px 0;
@@ -11,6 +12,7 @@ export const Dialog = styled.div`
   box-shadow: 0 0 5px #242424;
   border-radius: 5px;
   margin-bottom: 40px;
+  position: relative;
 
   @media (max-width: 768px) {
     padding: 20px;
@@ -90,6 +92,29 @@ export const Dropdown = styled.div`
   max-width: 100%;
   font-size: 24px;
   text-align: center;
+`;
+
+export const RelayLocation = styled.div`
+  display: flex;
+  margin-top: 15px;
+  font-size: 16px;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  right: 0;
+
+  label {
+    margin-right: 15px;
+  }
+
+  ${DropdownContainer} {
+    min-width: 50px;
+  }
+
+  @media (max-width: 900px) {
+    position: static;
+    justify-content: center;
+  }
 `;
 
 export const Separator = styled.hr`

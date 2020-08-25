@@ -1,22 +1,25 @@
 import { ApiClient, CreateSessionResponse } from "./api-client";
+import { RelayServer } from "./location";
 
 export interface SessionKeys {
   targetKey: string;
   localKey: string;
   encryptionSecret: string;
+  relayServer: RelayServer;
 }
 
 export class SessionService {
   private readonly api = new ApiClient();
 
-  public createSessionKeys = async (): Promise<SessionKeys> => {
-    let keys = await this.api.createSession();
+  public createSessionKeys = async (relayServer: RelayServer): Promise<SessionKeys> => {
+    let keys = await this.api.createSession(relayServer);
     keys = this.randomizeSessionKeys(keys);
 
     return {
       targetKey: keys.peer1Key,
       localKey: keys.peer2Key,
       encryptionSecret: this.generateEncryptionSecret(),
+      relayServer,
     };
   };
 

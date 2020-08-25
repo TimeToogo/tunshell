@@ -1,4 +1,3 @@
-import { ApiClient, CreateSessionResponse } from "./api-client";
 import { SessionKeys } from "./session";
 
 export enum InstallScriptType {
@@ -129,8 +128,15 @@ export class InstallScriptService {
   };
 
   private sessionToArgs = (type: InstallScriptType, session: SessionKeys): string[] => {
-    return type === InstallScriptType.Local
-      ? ["L", session.localKey, session.encryptionSecret]
-      : ["T", session.targetKey, session.encryptionSecret];
+    const args =
+      type === InstallScriptType.Local
+        ? ["L", session.localKey, session.encryptionSecret]
+        : ["T", session.targetKey, session.encryptionSecret];
+
+    if (!session.relayServer.default) {
+      args.push(session.relayServer.domain);
+    }
+
+    return args;
   };
 }

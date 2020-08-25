@@ -5,6 +5,13 @@ import { Hero } from "../components/hero";
 import styled from "styled-components";
 import { Link } from "../components/link";
 import { Button } from "../components/button";
+import { Footer } from "../components/footer";
+
+const Main = styled.main`
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+`;
 
 const CTA = styled.div`
   width: 100%;
@@ -27,7 +34,7 @@ const CTA = styled.div`
 
 export default function Home() {
   return (
-    <div className="container">
+    <Main>
       <Head>
         <title>Tunshell - Remote shell into ephemeral environments</title>
         <meta
@@ -35,10 +42,8 @@ export default function Home() {
           content="Tunshell is a simple and secure method to remote shell into ephemeral environments such as deployment pipelines or serverless functions."
         />
       </Head>
-
       <Header />
       <Hero />
-
       <CTA>
         <Link href="/go">
           <Button mode="inverted">Get started</Button>
@@ -47,6 +52,7 @@ export default function Home() {
           <Button>README.md</Button>
         </a>
       </CTA>
-    </div>
+      <Footer />
+    </Main>
   );
 }

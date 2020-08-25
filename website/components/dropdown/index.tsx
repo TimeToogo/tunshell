@@ -1,11 +1,15 @@
 import React, { HTMLAttributes, useRef, useEffect } from "react";
 import { DropdownContainer } from "./styled";
 
-export const Dropdown: React.FC<HTMLAttributes<HTMLSelectElement> & { onSelect: (string) => void }> = ({
-  children,
-  onSelect,
-  ...props
-}) => {
+interface Props {
+  onSelect: (string) => void;
+  inline?: boolean;
+  disabled?: boolean;
+}
+
+export const Dropdown: React.FC<
+  React.DetailedHTMLProps<HTMLAttributes<HTMLSelectElement>, HTMLSelectElement> & Props
+> = ({ children, onSelect, inline, disabled, ...props }) => {
   const selectRef = useRef();
 
   useEffect(() => {
@@ -27,8 +31,10 @@ export const Dropdown: React.FC<HTMLAttributes<HTMLSelectElement> & { onSelect: 
   }, []);
 
   return (
-    <DropdownContainer>
-      <select ref={selectRef}>{children}</select>
+    <DropdownContainer inline={inline} disabled={disabled}>
+      <select {...props} ref={selectRef}>
+        {children}
+      </select>
     </DropdownContainer>
   );
 };

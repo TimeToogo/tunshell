@@ -1,11 +1,13 @@
+import { RelayServer } from "./location";
+
 export interface CreateSessionResponse {
   peer1Key: string;
   peer2Key: string;
 }
 
 export class ApiClient {
-  createSession = async (): Promise<CreateSessionResponse> => {
-    const response = await fetch("https://relay.tunshell.com/api/sessions", {
+  createSession = async (relayServer: RelayServer): Promise<CreateSessionResponse> => {
+    const response = await fetch(`https://${relayServer.domain}/api/sessions`, {
       method: "POST",
     }).then((i) => i.json());
 
