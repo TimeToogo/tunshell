@@ -111,7 +111,7 @@ Resources:
                 echo "export EXTRA_DOMAIN=$EXTRA_DOMAIN" >> env.sh
                 chmod +x env.sh
 
-                curl https://raw.githubusercontent.com/TimeToogo/tunshell/feature/global-relay/aws/setup-ec2.sh > setup-ec2.sh
+                curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/setup-ec2.sh > setup-ec2.sh
                 sudo chown -R ubuntu:ubuntu /app
                 sudo chmod +x setup-ec2.sh
                 sudo -u ubuntu bash ./setup-ec2.sh
