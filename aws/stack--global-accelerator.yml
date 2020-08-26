@@ -13,12 +13,12 @@ Parameters:
     Description: The subdomain to create the A record to the relay server for.
     Type: String
     Default: relay
-  LatencySubdomain:
-    Description: The subdomain to add a latency-based record for
+  NearestRelaySubdomain:
+    Description: The subdomain to act as nearest relay server locator
     Type: String
-    Default: nearest.relay
-  LatencyRegion:
-    Description: The region used to determine the add the latency-based record for
+    Default: origin-nearest.relay
+  NearestRelayRegion:
+    Description: The region of the relay server (current region)
     Type: String
     AllowedValues: [af-south-1, ap-east-1, ap-northeast-1, ap-northeast-2, ap-northeast-3, ap-south-1, ap-southeast-1, ap-southeast-2, ca-central-1, cn-north-1, cn-northwest-1, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, eu-west-3, me-south-1, sa-east-1, us-east-1, us-east-2, us-west-1, us-west-2]
   KeyName:
@@ -98,17 +98,12 @@ Resources:
               - Ref:
                   DNSRecord
               - "\n"
-              - 'EXTRA_DOMAIN='
-              - Ref:
-                  LatencyDNSRecord
-              - "\n"
               - |
                 sudo mkdir /app
                 cd /app
 
                 echo "#!/bin/bash" >> env.sh
                 echo "export RELAY_DOMAIN=$RELAY_DOMAIN" >> env.sh
-                echo "export EXTRA_DOMAIN=$EXTRA_DOMAIN" >> env.sh
                 chmod +x env.sh
 
                 curl https://raw.githubusercontent.com/TimeToogo/tunshell/master/aws/setup-ec2.sh > setup-ec2.sh
@@ -251,7 +246,7 @@ Resources:
             - GlobalAccelerator
             - DnsName
 
-  LatencyDNSRecord:
+  NearestRelayDNSRecord:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneName:
@@ -263,24 +258,26 @@ Resources:
         Fn::Join:
           - '.'
           - 
-            - Ref: LatencySubdomain
+            - Ref: NearestRelaySubdomain
             - Ref: DomainName
-      Type: A
       Region:
-        Ref: LatencyRegion
+        Ref: NearestRelayRegion
       SetIdentifier:
         Fn::Join:
-          - '.'
+          - '-'
           - 
             - 'nearest-relay'
             - Ref: Subdomain
+            - Ref: NearestRelaySubdomain
             - Ref: DomainName
-      AliasTarget:
-        HostedZoneId: Z2BJ6XQ5FK7U4H
-        DNSName: 
-          Fn::GetAtt:
-            - GlobalAccelerator
-            - DnsName
+      Type: CNAME
+      TTL: 3600
+      ResourceRecords:
+        - Fn::Join:
+            - '.'
+            - 
+              - Ref: Subdomain
+              - Ref: DomainName
 
 Outputs:
   InstanceId:

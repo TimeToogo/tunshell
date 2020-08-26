@@ -28,7 +28,6 @@ services:
     environment:
       - TZ=UTC
       - URL=${RELAY_DOMAIN}
-      - EXTRA_DOMAINS=${EXTRA_DOMAIN}
       - VALIDATION=http
     volumes:
       - ./config:/config

@@ -20,15 +20,6 @@ do
     sleep 30
 done
 
-if [[ ! -z "$EXTRA_DOMAIN" ]];
-then
-    until nc -zvw5 $EXTRA_DOMAIN 22
-    do
-        echo "$EXTRA_DOMAIN is still not reachable will retry in 30s..."
-        sleep 30
-    done
-fi
-
 # Extra time for DNS / routing to propagate
 sleep 300
 
