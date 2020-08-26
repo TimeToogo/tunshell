@@ -268,7 +268,13 @@ Resources:
       Type: A
       Region:
         Ref: LatencyRegion
-      SetIdentifier: nearest-relay
+      SetIdentifier:
+        Fn::Join:
+          - '.'
+          - 
+            - 'nearest-relay'
+            - Ref: Subdomain
+            - Ref: DomainName
       AliasTarget:
         HostedZoneId: Z2BJ6XQ5FK7U4H
         DNSName: 
