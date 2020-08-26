@@ -26,6 +26,7 @@ export class TunshellWasm {
     const config = new this.module.BrowserConfig(
       session.localKey,
       session.encryptionSecret,
+      session.relayServer.domain,
       emulator,
       terminatePromise
     );

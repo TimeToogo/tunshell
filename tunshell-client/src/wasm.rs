@@ -13,6 +13,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 pub struct BrowserConfig {
     client_key: String,
     encryption_key: String,
+    relay_server: String,
     term: TerminalEmulator,
     terminate: Promise
 }
@@ -20,10 +21,11 @@ pub struct BrowserConfig {
 #[wasm_bindgen]
 impl BrowserConfig {
     #[wasm_bindgen(constructor)]
-    pub fn new(client_key: String, encryption_key: String, term: TerminalEmulator, terminate: Promise) -> Self{
+    pub fn new(client_key: String, encryption_key: String, relay_server: String, term: TerminalEmulator, terminate: Promise) -> Self{
         Self {
             client_key,
             encryption_key,
+            relay_server,
             term,
             terminate
         }
@@ -87,7 +89,7 @@ pub async fn tunshell_init_client(config: BrowserConfig) {
     let config = Config::new(
         ClientMode::Local,
         &config.client_key,
-        "relay.tunshell.com",
+        &config.relay_server,
         443,
         &config.encryption_key,
         false

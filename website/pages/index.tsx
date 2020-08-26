@@ -9,6 +9,7 @@ import { Footer } from "../components/footer";
 
 const Main = styled.main`
   height: 100%;
+  min-height: min-content;
   display: flex;
   flex-direction: column;
 `;
