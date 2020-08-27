@@ -7,7 +7,7 @@ use futures::TryFutureExt;
 use log::*;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{time::Duration, task::{Context, Poll}};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tunshell_shared::PeerJoinedPayload;
@@ -106,10 +106,11 @@ impl P2PConnection for TcpConnection {
             let connected_ip = self.peer_info.peer_ip_address.parse::<IpAddr>().unwrap();
 
             if peer_addr.ip() == connected_ip {
+                socket.set_keepalive(Some(Duration::from_secs(30)))?;
                 self.socket.replace(socket);
                 return Ok(());
             } else {
-                error!("received connection for unknown ip address: {}", peer_addr);
+                error!("received connection from unknown ip address: {}", peer_addr);
             }
         }
 
