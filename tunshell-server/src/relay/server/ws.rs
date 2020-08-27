@@ -1,14 +1,18 @@
 use super::{super::config::Config, IoStream};
 use anyhow::{Error, Result};
-use futures::{Sink, Stream};
+use futures::{Sink, SinkExt, Stream};
 use log::*;
 use mpsc::{Receiver, Sender};
 use std::{
     cmp, io,
     net::SocketAddr,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     task::{Context, Poll},
+    time::Duration,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -24,15 +28,44 @@ use warp::{
 pub(super) struct WebSocketStream {
     peer_addr: SocketAddr,
     ws: Arc<Mutex<WebSocket>>,
+    closed: Arc<AtomicBool>,
     recv_buff: Vec<u8>,
 }
 
 impl WebSocketStream {
     fn new(peer_addr: SocketAddr, ws: WebSocket) -> Self {
+        let ws = Arc::new(Mutex::new(ws));
+        let closed = Arc::new(AtomicBool::new(false));
+
+        tokio::spawn(Self::send_pings(Arc::clone(&ws), Arc::clone(&closed)));
+
         Self {
             peer_addr,
-            ws: Arc::new(Mutex::new(ws)),
+            ws,
+            closed,
             recv_buff: vec![],
+        }
+    }
+
+    // Here we send websocket ping frames every 30s
+    // This ensures that the underlying socket is kept alive
+    // When using AWS Global Accelerator, idle TCP connections
+    // are closed after 350s. Sending a ping prevents that from occurring.
+    async fn send_pings(ws: Arc<Mutex<WebSocket>>, closed: Arc<AtomicBool>) {
+        loop {
+            tokio::time::delay_for(Duration::from_secs(30)).await;
+
+            if closed.load(Ordering::Relaxed) {
+                debug!("websocket closed, finished sending pings");
+                break;
+            }
+
+            debug!("sending ping");
+            let mut ws = ws.lock().unwrap();
+            if let Err(err) = ws.start_send_unpin(Message::ping(Vec::<u8>::new())) {
+                warn!("error while sending ping: {}", err);
+                break;
+            }
         }
     }
 }
@@ -66,6 +99,8 @@ impl AsyncRead for WebSocketStream {
             if message.is_binary() {
                 debug!("received {} bytes from websocket", message.as_bytes().len());
                 self.recv_buff.extend_from_slice(message.as_bytes());
+            } else if message.is_pong() {
+                info!("received pong");
             } else {
                 warn!("received non-binary message from websocket: {:?}", message);
             }
@@ -121,6 +156,12 @@ impl AsyncWrite for WebSocketStream {
         Pin::new(&mut *ws)
             .poll_close(cx)
             .map_err(warp_err_to_io_err)
+    }
+}
+
+impl Drop for WebSocketStream {
+    fn drop(&mut self) {
+        self.closed.store(true, Ordering::Relaxed);
     }
 }
 
@@ -222,7 +263,7 @@ mod tests {
     use async_tungstenite::{
         async_tls::client_async_tls_with_connector, WebSocketStream as ClientWebSocketStream,
     };
-    use futures::{SinkExt, StreamExt, FutureExt};
+    use futures::{FutureExt, SinkExt, StreamExt};
     use lazy_static::lazy_static;
     use std::{
         net::{Ipv4Addr, SocketAddr},
