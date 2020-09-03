@@ -1,4 +1,5 @@
 import java.io.File;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -6,34 +7,36 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class init {
     public static void main(String[] args) throws Exception {
         System.out.println("Installing client...");
-        var clientFile = File.createTempFile("tunshell-client", "",
+        File clientFile = File.createTempFile("tunshell-client", "",
                 new File(System.getProperty("java.io.tmpdir")));
 
-        var url = String.format("https://artifacts.tunshell.com/client-%s", getTarget());
-        try (var in = new URL(url).openStream()) {
+        String url = String.format("https://artifacts.tunshell.com/client-%s", getTarget());
+        try (InputStream in = new URL(url).openStream()) {
             Files.copy(in, Paths.get(clientFile.getPath()), StandardCopyOption.REPLACE_EXISTING);
         }
 
         clientFile.setExecutable(true);
 
-        var command = new ArrayList<String>() {
+        List<String> command = new ArrayList<String>() {
             {
                 add(clientFile.getAbsolutePath());
                 addAll(Arrays.asList(args));
             }
         };
-        var pb = new ProcessBuilder(command);
+        ProcessBuilder pb = new ProcessBuilder(command);
         pb.inheritIO();
-        var process = pb.start();
+        Process process = pb.start();
         process.waitFor();
     }
 
     private static String getTarget() throws Exception {
-        var targets = new HashMap<String, HashMap<String, String>>() {
+        Map<String, Map<String, String>> targets = new HashMap<String, Map<String, String>>() {
             {
                 put("linux", new HashMap<String, String>() {
                     {
@@ -57,8 +60,8 @@ public class init {
             }
         };
 
-        var os = System.getProperty("os.name").toLowerCase();
-        HashMap<String, String> osTargets = null;
+        String os = System.getProperty("os.name").toLowerCase();
+        Map<String, String> osTargets = null;
 
         if (os.contains("linux")) {
             osTargets = targets.get("linux");
@@ -70,7 +73,7 @@ public class init {
             throw new Exception(String.format("Unsupported platform: %s", os));
         }
 
-        var cpu = System.getProperty("os.arch");
+        String cpu = System.getProperty("os.arch");
 
         if (!osTargets.containsKey(cpu)) {
             throw new Exception(String.format("Unsupported CPU architecture: %s", cpu));
