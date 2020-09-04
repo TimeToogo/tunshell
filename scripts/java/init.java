@@ -50,6 +50,7 @@ public class init {
     public static Arch from(String name) {
       switch (name) {
         case "x86_64":
+        case "amd64":
           return Arch.X86_64;
         case "i686":
           return Arch.I686;
