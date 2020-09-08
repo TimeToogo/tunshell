@@ -41,6 +41,7 @@ fn test() {
             target_key,
             "localhost.tunshell.com",
             config.tls_port,
+            config.api_port,
             "mock_encryption_key",
             true,
         );
@@ -54,6 +55,7 @@ fn test() {
             client_key,
             "localhost.tunshell.com",
             config.tls_port,
+            config.api_port,
             "mock_encryption_key",
             true,
         );
