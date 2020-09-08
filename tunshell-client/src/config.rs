@@ -1,6 +1,7 @@
 use anyhow::Error;
 use std::{convert::TryFrom, env, time::Duration};
 
+const DEFAULT_SERVER_CONNECT_TIMEOUT: u64 = 10000; // ms
 const DEFAULT_DIRECT_CONNECT_TIMEOUT: u64 = 3000; // ms
 
 pub struct Config {
@@ -8,7 +9,9 @@ pub struct Config {
     session_key: String,
     encryption_key: String,
     relay_host: String,
-    relay_port: u16,
+    relay_tls_port: u16,
+    relay_ws_port: u16,
+    server_connection_timeout: Duration,
     direct_connection_timeout: Duration,
     enable_direct_connection: bool,
     dangerous_disable_relay_server_verification: bool,
@@ -31,7 +34,16 @@ impl Config {
         let session_key = args.next().expect("session key arg (3) must be set");
         let encryption_key = args.next().expect("encryption key arg (4) must be set");
         let relay_host = args.next().unwrap_or("relay.tunshell.com".to_owned());
-        let relay_port = args.next().unwrap_or("5000".to_owned()).parse::<u16>().expect("could not parse arg (6) as port");
+        let relay_tls_port = args
+            .next()
+            .unwrap_or("5000".to_owned())
+            .parse::<u16>()
+            .expect("could not parse arg (6) as TLS port");
+        let relay_ws_port = args
+            .next()
+            .unwrap_or("443".to_owned())
+            .parse::<u16>()
+            .expect("could not parse arg (7) as WebSocket port");
 
         if session_key.len() < 10 {
             panic!("session key is too short")
@@ -45,8 +57,10 @@ impl Config {
             mode,
             session_key,
             relay_host,
-            relay_port,
+            relay_tls_port,
+            relay_ws_port,
             encryption_key,
+            server_connection_timeout: Duration::from_millis(DEFAULT_SERVER_CONNECT_TIMEOUT),
             direct_connection_timeout: Duration::from_millis(DEFAULT_DIRECT_CONNECT_TIMEOUT),
             enable_direct_connection: true,
             dangerous_disable_relay_server_verification: false,
@@ -57,7 +71,8 @@ impl Config {
         mode: ClientMode,
         client_key: &str,
         relay_host: &str,
-        relay_port: u16,
+        relay_tls_port: u16,
+        relay_ws_port: u16,
         encryption_key: &str,
         enable_direct_connection: bool,
     ) -> Self {
@@ -65,8 +80,10 @@ impl Config {
             mode,
             session_key: client_key.to_owned(),
             relay_host: relay_host.to_owned(),
-            relay_port,
+            relay_tls_port,
+            relay_ws_port,
             encryption_key: encryption_key.to_owned(),
+            server_connection_timeout: Duration::from_millis(DEFAULT_SERVER_CONNECT_TIMEOUT),
             direct_connection_timeout: Duration::from_millis(DEFAULT_DIRECT_CONNECT_TIMEOUT),
             enable_direct_connection,
             dangerous_disable_relay_server_verification: false,
@@ -89,12 +106,20 @@ impl Config {
         &self.relay_host[..]
     }
 
-    pub fn relay_port(&self) -> u16 {
-        self.relay_port
+    pub fn relay_tls_port(&self) -> u16 {
+        self.relay_tls_port
+    }
+
+    pub fn relay_ws_port(&self) -> u16 {
+        self.relay_ws_port
     }
 
     pub fn encryption_key(&self) -> &str {
         &self.encryption_key[..]
+    }
+
+    pub fn server_connection_timeout(&self) -> Duration {
+        self.server_connection_timeout
     }
 
     pub fn direct_connection_timeout(&self) -> Duration {

@@ -1,10 +1,16 @@
 cfg_if::cfg_if! {
     if #[cfg(not(target_arch = "wasm32"))] {
-        mod tls_server_stream;
-        pub use tls_server_stream::*;
+        use tokio::io::{AsyncRead, AsyncWrite};
+        
+        pub trait AsyncIO : AsyncRead + AsyncWrite + Send + Unpin {}
+
+        pub mod tls_stream;
+        pub mod websocket_stream;
+        mod dual_stream;
+        pub use dual_stream::*;
     } else {
-        mod websocket_stream;
-        pub use websocket_stream::*;
+        mod websys_websocket_stream;
+        pub use websys_websocket_stream::*;
     }
 }
 
@@ -21,6 +27,7 @@ mod tests {
             "test",
             "relay.tunshell.com",
             5000,
+            443,
             "test",
             true,
         );
