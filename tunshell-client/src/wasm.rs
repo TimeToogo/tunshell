@@ -90,6 +90,7 @@ pub async fn tunshell_init_client(config: BrowserConfig) {
         ClientMode::Local,
         &config.client_key,
         &config.relay_server,
+        5000,
         443,
         &config.encryption_key,
         false

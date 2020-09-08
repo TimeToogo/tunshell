@@ -2088,6 +2088,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "async-tungstenite",
  "byteorder",
  "cfg-if",
  "console_error_panic_hook",

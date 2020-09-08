@@ -15,12 +15,12 @@ use tokio::{
 use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
 use webpki::DNSNameRef;
 
-pub struct ServerStream {
+pub struct TlsServerStream {
     inner: TlsStream<TcpStream>,
 }
 
-impl ServerStream {
-    pub async fn connect(config: &Config) -> Result<Self> {
+impl TlsServerStream {
+    pub async fn connect(config: &Config, port: u16) -> Result<Self> {
         let mut tls_config = ClientConfig::default();
         tls_config
             .root_store
@@ -53,7 +53,7 @@ impl ServerStream {
 
         let relay_dns_name = DNSNameRef::try_from_ascii_str(config.relay_host())?;
 
-        let relay_addr = (config.relay_host(), config.relay_port())
+        let relay_addr = (config.relay_host(), port)
             .to_socket_addrs()?
             .next()
             .unwrap();
@@ -68,7 +68,7 @@ impl ServerStream {
     }
 }
 
-impl AsyncRead for ServerStream {
+impl AsyncRead for TlsServerStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -78,7 +78,7 @@ impl AsyncRead for ServerStream {
     }
 }
 
-impl AsyncWrite for ServerStream {
+impl AsyncWrite for TlsServerStream {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -98,3 +98,5 @@ impl AsyncWrite for ServerStream {
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
+
+impl super::AsyncIO for TlsServerStream {}
