@@ -53,8 +53,8 @@ then
     # Check if client is already downloaded and up-to-date
     if [ -x "$(command -v grep)" ] && [ -x "$(command -v cut)" ] && [ -x "$(command -v sed)" ] && [ -f "$HEADERS_PATH" ]
     then
-        CURRENT_ETAG=$(cat $HEADERS_PATH | grep etag)
-        LATEST_ETAG=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep etag)
+        CURRENT_ETAG=$(cat $HEADERS_PATH | grep etag || true)
+        LATEST_ETAG=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep etag || true)
 
         if [ "$CURRENT_ETAG" = "$LATEST_ETAG" ]
         then
