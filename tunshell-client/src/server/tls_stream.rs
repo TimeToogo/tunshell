@@ -1,5 +1,5 @@
 use crate::Config;
-use anyhow::Result;
+use anyhow::{bail, Context as AnyhowContext, Result};
 use std::{
     io,
     net::ToSocketAddrs,
@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
 };
 use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
@@ -53,12 +53,20 @@ impl TlsServerStream {
 
         let relay_dns_name = DNSNameRef::try_from_ascii_str(config.relay_host())?;
 
-        let relay_addr = (config.relay_host(), port)
-            .to_socket_addrs()?
-            .next()
-            .unwrap();
+        let network_stream = if let Ok(http_proxy) = std::env::var("HTTP_PROXY") {
+            log::info!("Connecting to relay server via http proxy {}", http_proxy);
 
-        let network_stream = TcpStream::connect(relay_addr).await?;
+            connect_via_http_proxy(config, port, http_proxy).await?
+        } else {
+            log::info!("Connecting to relay server over TCP");
+            let relay_addr = (config.relay_host(), port)
+                .to_socket_addrs()?
+                .next()
+                .unwrap();
+
+            TcpStream::connect(relay_addr).await?
+        };
+
         network_stream.set_keepalive(Some(Duration::from_secs(30)))?;
         let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
 
@@ -66,6 +74,36 @@ impl TlsServerStream {
             inner: transport_stream,
         })
     }
+}
+
+async fn connect_via_http_proxy(
+    config: &Config,
+    port: u16,
+    http_proxy: String,
+) -> Result<TcpStream> {
+    let proxy_addr = http_proxy.to_socket_addrs()?.next().unwrap();
+    let mut proxy_stream = TcpStream::connect(proxy_addr).await?;
+
+    proxy_stream
+        .write_all(format!("CONNECT {}:{} HTTP/1.1\n\n", config.relay_host(), port).as_bytes())
+        .await?;
+    let mut read_buff = [0u8; 1024];
+
+    let read = match proxy_stream.read(&mut read_buff).await? {
+        0 => bail!("Failed to read response from http proxy"),
+        read @ _ => read,
+    };
+
+    let response =
+        String::from_utf8(read_buff[..read].to_vec()).context("failed to parse proxy response")?;
+    if !response.contains("HTTP/1.1 200") && !response.contains("HTTP/1.0 200") {
+        bail!(format!(
+            "invalid response returned from http proxy: {}",
+            response
+        ));
+    }
+
+    Ok(proxy_stream)
 }
 
 impl AsyncRead for TlsServerStream {

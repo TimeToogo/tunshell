@@ -25,7 +25,7 @@ mod tests {
         let config = Config::new(
             ClientMode::Target,
             "test",
-            "relay.tunshell.com",
+            "au.relay.tunshell.com",
             5000,
             443,
             "test",

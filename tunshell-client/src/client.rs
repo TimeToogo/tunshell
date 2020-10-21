@@ -357,7 +357,7 @@ mod tests {
         let config = Config::new(
             ClientMode::Target,
             "invalid_key",
-            "relay.tunshell.com",
+            "au.relay.tunshell.com",
             5000,
             443,
             "test",
