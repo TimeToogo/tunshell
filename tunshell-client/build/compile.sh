@@ -16,6 +16,7 @@ fi
 
 SCRIPT_DIR=$(dirname "$0")
 SCRIPT_DIR=`cd $SCRIPT_DIR;pwd`
+OUTPUT_PATH="$SCRIPT_DIR/artifacts/client-$TARGET"
 
 mkdir -p $SCRIPT_DIR/artifacts
 
@@ -29,4 +30,10 @@ then
 fi
 
 cross build -p tunshell-client --release --target $TARGET
-cp $SCRIPT_DIR/../../target/$TARGET/release/client $SCRIPT_DIR/artifacts/client-$TARGET
+cp $SCRIPT_DIR/../../target/$TARGET/release/client $OUTPUT_PATH
+
+if [[ -x "$(command -v strip)" ]];
+then
+   echo "Stripping binary..."
+   strip $OUTPUT_PATH
+fi
