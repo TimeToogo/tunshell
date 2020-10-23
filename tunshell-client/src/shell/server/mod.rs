@@ -4,7 +4,7 @@ use anyhow::{Error, Result};
 use futures::stream::StreamExt;
 use log::*;
 use std::time::Duration;
-use tokio::time;
+use tokio::{io::AsyncWriteExt, time};
 use tokio_util::compat::*;
 
 mod fallback;
@@ -23,11 +23,17 @@ use pty::*;
 
 type ShellStream = ShellServerStream<Compat<Box<dyn TunnelStream>>>;
 
-pub(crate) struct ShellServer {}
+pub(crate) struct ShellServer {
+    conf: ShellServerConfig,
+}
+
+pub(crate) struct ShellServerConfig {
+    pub(crate) echo_stdout: bool,
+}
 
 impl ShellServer {
-    pub(crate) fn new() -> Result<ShellServer> {
-        Ok(ShellServer {})
+    pub(crate) fn new(conf: ShellServerConfig) -> Result<ShellServer> {
+        Ok(ShellServer { conf })
     }
 
     pub(crate) async fn run(self, stream: Box<dyn TunnelStream>, key: ShellKey) -> Result<()> {
@@ -108,6 +114,11 @@ impl ShellServer {
         mut shell: Box<dyn Shell + Send + 'a>,
     ) -> Result<()> {
         let mut buff = [0u8; 1024];
+        let mut host_stdout = if self.conf.echo_stdout {
+            Some(tokio::io::stdout())
+        } else {
+            None
+        };
 
         loop {
             info!("waiting for shell message");
@@ -122,6 +133,12 @@ impl ShellServer {
                     },
                     Ok(read) => {
                         info!("read {} bytes from stdout", read);
+
+                        if let Some(host_stdout) = host_stdout.as_mut() {
+                            host_stdout.write_all(&buff[..read]).await?;
+                            host_stdout.flush().await?;
+                        }
+
                         stream.write(&ShellServerMessage::Stdout(buff[..read].to_vec())).await?;
                         info!("sent {} bytes to client shell", read);
                     },
@@ -167,9 +184,13 @@ mod tests {
     use tokio::time::timeout;
     use tunshell_shared::Message;
 
+    fn new_shell_server() -> ShellServer {
+        ShellServer::new(ShellServerConfig { echo_stdout: true }).unwrap()
+    }
+
     #[test]
     fn test_new_shell_server() {
-        ShellServer::new().unwrap();
+        new_shell_server();
     }
 
     #[test]
@@ -186,8 +207,7 @@ mod tests {
             );
 
             let mock_stream = Cursor::new(mock_data).compat();
-            ShellServer::new()
-                .unwrap()
+            new_shell_server()
                 .run(Box::new(mock_stream), ShellKey::new("MyKey"))
                 .await
                 .expect_err("client key should be rejected");
@@ -203,9 +223,7 @@ mod tests {
 
             timeout(
                 Duration::from_millis(5000),
-                ShellServer::new()
-                    .unwrap()
-                    .run(Box::new(mock_stream), ShellKey::new("CorrectKey")),
+                new_shell_server().run(Box::new(mock_stream), ShellKey::new("CorrectKey")),
             )
             .await
             .unwrap()
@@ -230,9 +248,7 @@ mod tests {
 
             timeout(
                 Duration::from_millis(5000),
-                ShellServer::new()
-                    .unwrap()
-                    .run(Box::new(mock_stream), ShellKey::new("CorrectKey")),
+                new_shell_server().run(Box::new(mock_stream), ShellKey::new("CorrectKey")),
             )
             .await
             .unwrap()
@@ -289,7 +305,7 @@ mod tests {
             );
 
             let mock_stream = Cursor::new(mock_data).compat();
-            let server = ShellServer::new().unwrap();
+            let server = new_shell_server();
 
             server
                 .run(Box::new(mock_stream), ShellKey::new("CorrectKey"))
@@ -331,7 +347,7 @@ mod tests {
             );
 
             let mock_stream = Cursor::new(mock_data).compat();
-            let server = ShellServer::new().unwrap();
+            let server = new_shell_server();
 
             server
                 .run(Box::new(mock_stream), ShellKey::new("CorrectKey"))

@@ -93,6 +93,7 @@ pub async fn tunshell_init_client(config: BrowserConfig) {
         5000,
         443,
         &config.encryption_key,
+        false,
         false
     );
 

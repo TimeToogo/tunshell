@@ -1,5 +1,5 @@
 #[cfg(not(target_arch = "wasm32"))]
-use crate::p2p;
+use crate::{p2p, ShellServerConfig};
 use crate::{
     AesStream, ClientMode, Config, HostShell, RelayStream, ServerStream, ShellKey, TunnelStream,
 };
@@ -312,10 +312,12 @@ impl Client {
 
     #[cfg(not(target_arch = "wasm32"))]
     async fn start_shell_server(&self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
-        crate::ShellServer::new()?
-            .run(peer_socket, ShellKey::new(self.config.encryption_key()))
-            .await
-            .and_then(|_| Ok(0))
+        crate::ShellServer::new(ShellServerConfig {
+            echo_stdout: self.config.echo_stdout(),
+        })?
+        .run(peer_socket, ShellKey::new(self.config.encryption_key()))
+        .await
+        .and_then(|_| Ok(0))
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -362,6 +364,7 @@ mod tests {
             443,
             "test",
             true,
+            false,
         );
         let mut client = Client::new(config, HostShell::new().unwrap());
 

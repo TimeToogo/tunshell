@@ -44,6 +44,7 @@ fn test() {
             config.api_port,
             "mock_encryption_key",
             false,
+            false,
         );
         target_config.set_dangerous_disable_relay_server_verification(true);
         let mut target = client::Client::new(target_config, target_shell.clone());
@@ -57,6 +58,7 @@ fn test() {
             config.tls_port,
             config.api_port,
             "mock_encryption_key",
+            false,
             false,
         );
         local_config.set_dangerous_disable_relay_server_verification(true);

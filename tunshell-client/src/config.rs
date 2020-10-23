@@ -13,6 +13,7 @@ pub struct Config {
     relay_ws_port: u16,
     server_connection_timeout: Duration,
     direct_connection_timeout: Duration,
+    echo_stdout: bool,
     enable_direct_connection: bool,
     dangerous_disable_relay_server_verification: bool,
 }
@@ -44,6 +45,15 @@ impl Config {
             .unwrap_or("443".to_owned())
             .parse::<u16>()
             .expect("could not parse arg (7) as WebSocket port");
+        let mut echo_stdout = false;
+
+        // Parse optional args
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--echo" => echo_stdout = true,
+                arg @ _ => panic!(format!("Unknown argument: {}", arg)),
+            }
+        }
 
         if session_key.len() < 10 {
             panic!("session key is too short")
@@ -62,6 +72,7 @@ impl Config {
             encryption_key,
             server_connection_timeout: Duration::from_millis(DEFAULT_SERVER_CONNECT_TIMEOUT),
             direct_connection_timeout: Duration::from_millis(DEFAULT_DIRECT_CONNECT_TIMEOUT),
+            echo_stdout,
             enable_direct_connection: true,
             dangerous_disable_relay_server_verification: false,
         }
@@ -75,6 +86,7 @@ impl Config {
         relay_ws_port: u16,
         encryption_key: &str,
         enable_direct_connection: bool,
+        echo_stdout: bool,
     ) -> Self {
         Self {
             mode,
@@ -86,6 +98,7 @@ impl Config {
             server_connection_timeout: Duration::from_millis(DEFAULT_SERVER_CONNECT_TIMEOUT),
             direct_connection_timeout: Duration::from_millis(DEFAULT_DIRECT_CONNECT_TIMEOUT),
             enable_direct_connection,
+            echo_stdout,
             dangerous_disable_relay_server_verification: false,
         }
     }
@@ -124,6 +137,10 @@ impl Config {
 
     pub fn direct_connection_timeout(&self) -> Duration {
         self.direct_connection_timeout
+    }
+
+    pub fn echo_stdout(&self) -> bool {
+        self.echo_stdout
     }
 
     pub fn enable_direct_connection(&self) -> bool {
