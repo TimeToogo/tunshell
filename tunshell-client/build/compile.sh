@@ -32,7 +32,12 @@ fi
 cross build -p tunshell-client --release --target $TARGET
 cp $SCRIPT_DIR/../../target/$TARGET/release/client $OUTPUT_PATH
 
-if [[ -x "$(command -v strip)" ]];
+if [[ $TARGET =~ "linux" ]]; 
+then
+  # do something
+   echo "Stripping binary using cross docker image..."
+   docker run --rm -v$SCRIPT_DIR:/app/ rustembedded/cross:$TARGET strip /app/artifacts/client-$TARGET
+elif [[ -x "$(command -v strip)" && $TARGET =~ "apple" ]];
 then
    echo "Stripping binary..."
    strip $OUTPUT_PATH
