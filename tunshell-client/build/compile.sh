@@ -51,6 +51,9 @@ then
       arm-linux-androideabi)
          STRIP="arm-linux-androideabi-strip"
          ;;
+      aarch64-linux-android)
+         STRIP="aarch64-linux-android-strip"
+         ;;
       *)   
          echo "Unknown linux target: $TARGET"
          exit 1

@@ -3,11 +3,14 @@
 
 set -e
 
-case "$(uname -s):$(uname -m):$(uname -v)" in
+case "$(uname -s):$(uname -m):$(uname -v):$(uname -a)" in
 Linux:x86_64*)     
     TARGET="x86_64-unknown-linux-musl"
     ;;
-Linux:arm64*)     
+Linux:aarch64:*:*Android*)
+    TARGET="aarch64-linux-android"
+    ;;
+Linux:arm64*|Linux:aarch64*)
     TARGET="aarch64-unknown-linux-musl"
     ;;
 Linux:arm*)     

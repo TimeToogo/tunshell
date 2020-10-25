@@ -27,6 +27,8 @@ jobs:
           - platform: ubuntu-latest
             target: arm-linux-androideabi
           - platform: ubuntu-latest
+            target: aarch64-linux-android
+          - platform: ubuntu-latest
             target: i686-unknown-linux-musl
             tests: true
           - platform: ubuntu-latest
