@@ -43,6 +43,12 @@ jobs:
             tests: true
           - platform: windows-latest
             target: i686-pc-windows-msvc
+          # iSH (https://ish.app/)
+          - platform: ubuntu-latest
+            target: i686-unknown-linux-musl
+            client_binary_name: ish
+            tests: false
+            rustflags: -C target-feature=-mmx,-sse,-sse2 --cfg tls_only_aes_gcm
     runs-on: ${{ matrix.platform }}
 
     steps:
@@ -54,7 +60,7 @@ jobs:
       env:
         TEMPDIR: /tmp
 
-    - run: ./compile.sh ${{ matrix.target }}
+    - run: ./compile.sh ${{ matrix.target }} ${{ matrix.client_binary_name }}
       working-directory: tunshell-client/build
       shell: bash
       env:
@@ -62,6 +68,7 @@ jobs:
         RUST_TEST_THREADS: 1
         CI: true
         RUST_LOG: debug
+        RUSTFLAGS: ${{ matrix.rustflags }}
 
     - uses: chrislennon/action-aws-cli@v1.1
 

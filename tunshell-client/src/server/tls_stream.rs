@@ -49,6 +49,27 @@ impl TlsServerStream {
                 .set_certificate_verifier(Arc::new(NullCertVerifier {}));
         }
 
+        // For targeting CPUs without native SSE2 support (iSH emulated CPU)
+        // =================================================================
+        // The underlying crypto lib (ring) emits custom assembly for the
+        // Poly1305 authentication algorithm (https://github.com/briansmith/ring/blob/main/crypto/poly1305/asm/poly1305-x86.pl).
+        // Fortunately the AES-GCM ciphers has fallbacks in rust and can be compiled
+        // for every target (https://github.com/briansmith/ring/issues/104).
+        // So when targeting CPUs without SSE2 support we only support AES-GCM TLS ciphers.
+        #[cfg(tls_only_aes_gcm)]
+        {
+            use tokio_rustls::rustls::BulkAlgorithm;
+
+            tls_config.ciphersuites = tls_config
+                .ciphersuites
+                .iter()
+                .filter(|s| {
+                    s.bulk == BulkAlgorithm::AES_128_GCM || s.bulk == BulkAlgorithm::AES_256_GCM
+                })
+                .map(|s| *s)
+                .collect();
+        }
+
         let connector = TlsConnector::from(Arc::new(tls_config));
 
         let relay_dns_name = DNSNameRef::try_from_ascii_str(config.relay_host())?;
@@ -67,7 +88,10 @@ impl TlsServerStream {
             TcpStream::connect(relay_addr).await?
         };
 
-        network_stream.set_keepalive(Some(Duration::from_secs(30)))?;
+        if let Err(err) = network_stream.set_keepalive(Some(Duration::from_secs(30))) {
+            log::warn!("failed to set tcp keepalive: {}", err);
+        }
+
         let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
 
         Ok(Self {

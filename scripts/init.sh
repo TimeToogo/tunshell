@@ -3,7 +3,7 @@
 
 set -e
 
-case "$(uname -s):$(uname -m)" in
+case "$(uname -s):$(uname -m):$(uname -v)" in
 Linux:x86_64*)     
     TARGET="x86_64-unknown-linux-musl"
     ;;
@@ -12,6 +12,9 @@ Linux:arm64*)
     ;;
 Linux:arm*)     
     TARGET="armv7-unknown-linux-musleabihf"
+    ;;
+Linux:i686:iSH*)
+    TARGET="ish"
     ;;
 Linux:i686*)     
     TARGET="i686-unknown-linux-musl"

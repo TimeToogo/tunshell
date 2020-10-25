@@ -27,8 +27,16 @@ impl ServerStream {
 
         let connection: Box<dyn super::AsyncIO> = match connection {
             Ok(Ok(con)) => Box::new(con),
-            _ => {
-                error!("Failed to connect via TLS, falling back to websocket");
+            err @ _ => {
+                error!(
+                    "Failed to connect via TLS, falling back to websocket: {}",
+                    match err {
+                        Err(err) => err.to_string(),
+                        Ok(Err(err)) => err.to_string(),
+                        _ => unreachable!(),
+                    }
+                );
+
                 let ws = timeout(
                     config.server_connection_timeout(),
                     WebsocketServerStream::connect(config),

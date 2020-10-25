@@ -26,7 +26,7 @@ const INSTALL_SCRIPTS: InstallScript[] = [
     name: "Unix (curl)",
     lang: "bash",
     icon: "",
-    scriptFactory: (args) => `curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin ${args.join(" ")}`,
+    scriptFactory: (args) => `curl -sSf https://lets.tunshell.com/init.sh | sh -s -- ${args.join(" ")}`,
   },
   {
     types: [InstallScriptType.Local],
@@ -42,7 +42,7 @@ const INSTALL_SCRIPTS: InstallScript[] = [
     lang: "bash",
     icon: "",
     scriptFactory: (args) =>
-      `wget https://lets.tunshell.com/init.sh -O /dev/stdout 2> /dev/null | sh /dev/stdin ${args.join(" ")}`,
+      `wget https://lets.tunshell.com/init.sh -O /dev/stdout 2> /dev/null | sh -s -- ${args.join(" ")}`,
   },
   {
     types: [InstallScriptType.Local, InstallScriptType.Target],

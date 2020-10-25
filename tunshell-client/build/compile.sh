@@ -3,9 +3,10 @@
 set -e
 
 TARGET=$1
+CLIENT_NAME=${2:-"$TARGET"}
 
 if [[ -z "$TARGET" ]]; then
-   echo "usage: compile.sh [target]"
+   echo "usage: compile.sh [target] [client-name: default to target]"
    exit 1
 fi
 
@@ -16,7 +17,7 @@ fi
 
 SCRIPT_DIR=$(dirname "$0")
 SCRIPT_DIR=`cd $SCRIPT_DIR;pwd`
-OUTPUT_PATH="$SCRIPT_DIR/artifacts/client-$TARGET"
+OUTPUT_PATH="$SCRIPT_DIR/artifacts/client-$CLIENT_NAME"
 
 mkdir -p $SCRIPT_DIR/artifacts
 
@@ -57,7 +58,7 @@ then
    esac
 
    echo "Stripping binary using cross docker image ($STRIP)..."
-   docker run --rm -v$SCRIPT_DIR:/app/ rustembedded/cross:$TARGET $STRIP /app/artifacts/client-$TARGET
+   docker run --rm -v$SCRIPT_DIR:/app/ rustembedded/cross:$TARGET $STRIP /app/artifacts/client-$CLIENT_NAME
 elif [[ -x "$(command -v strip)" && $TARGET =~ "apple" ]];
 then
    echo "Stripping binary..."

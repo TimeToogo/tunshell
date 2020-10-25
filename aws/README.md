@@ -55,5 +55,5 @@ Additionally you will have to pass an additional argument to the client init scr
 sh <(curl -sSf https://lets.tunshell.com/init.sh) L M485rfdQg8h24byfwkEsc YcO8WqyFIEVv8mxReYugGq relay.yourdomain.com
 
 # Target
-curl -sSf https://lets.tunshell.com/init.sh | sh /dev/stdin T FDxbfDDd67fRFd5skflmc YcO8WqyFIEVv8mxReYugGq relay.yourdomain.com
+curl -sSf https://lets.tunshell.com/init.sh | sh -s -- T FDxbfDDd67fRFd5skflmc YcO8WqyFIEVv8mxReYugGq relay.yourdomain.com
 ```
