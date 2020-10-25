@@ -20,6 +20,7 @@ jobs:
           - platform: ubuntu-latest
             target: aarch64-unknown-linux-musl
             tests: true
+            rustflags: -C link-arg=-lgcc # from https://github.com/rust-embedded/cross/blob/master/docker/Dockerfile.aarch64-unknown-linux-musl
           - platform: ubuntu-latest
             target: arm-unknown-linux-musleabi
             tests: true
