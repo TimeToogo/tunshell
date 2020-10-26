@@ -33,16 +33,34 @@ const INSTALL_SCRIPTS: InstallScript[] = [
     name: "Unix (wget)",
     lang: "bash",
     icon: "",
-    scriptFactory: (args) =>
-      `sh <(wget https://lets.tunshell.com/init.sh -O /dev/stdout 2> /dev/null) ${args.join(" ")}`,
+    scriptFactory: (args) => `sh <(wget https://lets.tunshell.com/init.sh -O - 2> /dev/null) ${args.join(" ")}`,
   },
   {
     types: [InstallScriptType.Target],
     name: "Unix (wget)",
     lang: "bash",
     icon: "",
+    scriptFactory: (args) => `wget https://lets.tunshell.com/init.sh -O - 2> /dev/null | sh -s -- ${args.join(" ")}`,
+  },
+  {
+    types: [InstallScriptType.Local],
+    name: "Unix (curl / posix)",
+    lang: "bash",
+    icon: "",
     scriptFactory: (args) =>
-      `wget https://lets.tunshell.com/init.sh -O /dev/stdout 2> /dev/null | sh -s -- ${args.join(" ")}`,
+      `curl -sSf https://lets.tunshell.com/init.sh -o $\{TMPDIR:=/tmp}/tunshell.sh && sh $\{TMPDIR:=/tmp}/tunshell.sh ${args.join(
+        " "
+      )}`,
+  },
+  {
+    types: [InstallScriptType.Local],
+    name: "Unix (wget / posix)",
+    lang: "bash",
+    icon: "",
+    scriptFactory: (args) =>
+      `wget https://lets.tunshell.com/init.sh -O $\{TMPDIR:=/tmp}/tunshell.sh && sh $\{TMPDIR:=/tmp}/tunshell.sh ${args.join(
+        " "
+      )}`,
   },
   {
     types: [InstallScriptType.Local, InstallScriptType.Target],
