@@ -4,8 +4,24 @@ cfg_if::cfg_if! {
         
         pub trait AsyncIO : AsyncRead + AsyncWrite + Send + Unpin {}
 
-        pub mod tls_stream;
+        pub mod tcp_stream;
+
+        cfg_if::cfg_if! {
+            if #[cfg(openssl)] {
+                mod openssl_tls_stream;
+                pub mod tls_stream {
+                    pub use super::openssl_tls_stream::*;
+                }
+            } else {
+                mod ring_tls_stream;
+                pub mod tls_stream {
+                    pub use super::ring_tls_stream::*;
+                }
+            }
+        }
+
         pub mod websocket_stream;
+
         mod dual_stream;
         pub use dual_stream::*;
     } else {

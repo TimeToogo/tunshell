@@ -54,6 +54,9 @@ then
       aarch64-linux-android)
          STRIP="aarch64-linux-android-strip"
          ;;
+      mips-unknown-linux-musl)
+         STRIP="mips-linux-muslsf-strip"
+         ;;
       *)   
          echo "Unknown linux target: $TARGET"
          exit 1

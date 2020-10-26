@@ -25,6 +25,9 @@ Linux:i686*)
 Linux:i586*)     
     TARGET="i586-unknown-linux-musl"
     ;;
+Linux:mips*)     
+    TARGET="mips-unknown-linux-musl"
+    ;;
 Darwin:x86_64*)    
     TARGET="x86_64-apple-darwin"
     ;;
@@ -35,7 +38,7 @@ WindowsNT:i686*)
     TARGET="i686-pc-windows-msvc.exe"
     ;;
 *)          
-    echo "Unsupported system ($(uname))"
+    echo "Unsupported system ($(uname -a))"
     exit 1
     ;;
 esac
