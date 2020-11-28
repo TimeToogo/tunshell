@@ -15,7 +15,7 @@ echo "Installing compile toolchain..."
 case "$OSTYPE" in
   msys*)    
     choco install rust-ms
-    echo '##[add-path]%USERPROFILE%\.cargo\bin'
+    echo '%USERPROFILE%\.cargo\bin' >> $GITHUB_PATH
     ;;
   
   darwin*)    
