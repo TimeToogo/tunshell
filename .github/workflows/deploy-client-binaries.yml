@@ -47,8 +47,10 @@ jobs:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             tests: true
+            rustflags: -C target-feature=+crt-static
           - platform: windows-latest
             target: i686-pc-windows-msvc
+            rustflags: -C target-feature=+crt-static
           # iSH (https://ish.app/)
           - platform: ubuntu-latest
             target: i686-unknown-linux-musl
