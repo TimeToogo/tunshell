@@ -78,18 +78,16 @@ jobs:
         RUST_LOG: debug
         RUSTFLAGS: ${{ matrix.rustflags }}
 
-    - uses: chrislennon/action-aws-cli@v1.1
+    - uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
 
     # Deploy artifact to https://artifacts.tunshell.com
     - name: Deploy to S3
       run: aws s3 cp --recursive artifacts/ s3://tunshell-artifacts/ --acl=public-read --cache-control max-age=31536000 --metadata-directive REPLACE
       working-directory: tunshell-client/build
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
 
     - name: Invalidate CloudFront
       run: aws cloudfront create-invalidation --distribution-id=E3DF4SGU15BNWT --paths '/*'
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}

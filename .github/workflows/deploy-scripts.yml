@@ -25,16 +25,15 @@ jobs:
       run: ./build.sh
       working-directory: scripts/java
       
-    - uses: chrislennon/action-aws-cli@v1.1
+    - uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
     - name: Deploy to S3
       run: aws s3 sync --delete --exclude="$PWD/*/*" ./ s3://tunshell-init/ --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE 
       working-directory: scripts
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}
         
     - name: Invalidate CloudFront
       run: aws cloudfront create-invalidation --distribution-id=E2JEG1NKANF1OH --paths '/*'
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.ARTIFACT_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.ARTIFACT_AWS_SECRET_ACCESS_KEY }}

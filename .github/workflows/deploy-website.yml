@@ -30,32 +30,23 @@ jobs:
     - run: npm run export
       working-directory: website
     
-    - uses: chrislennon/action-aws-cli@v1.1
+    - uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
     
     - name: Deploy to S3
       run: aws s3 sync --delete --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/ 
       working-directory: website
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
     
     - name: Deploy to S3 (html)
       run: aws s3 cp --recursive --content-type text/html --exclude "*" --include "*.html" --include "go" --include "404" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
       working-directory: website
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
     
     - name: Deploy to S3 (wasm)
       run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
       working-directory: website
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
     
     - name: Invalidate CloudFront
       run: aws cloudfront create-invalidation --distribution-id=E2BXOYP52RJJQF --paths '/*'
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.WEBSITE_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.WEBSITE_AWS_SECRET_ACCESS_KEY }}
-        name: Publish Install Scripts
