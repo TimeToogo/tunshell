@@ -38,10 +38,17 @@ def run():
     print('Installing client...')
     target = get_target()
 
-    with tempfile.NamedTemporaryFile() as tmp:
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
         r = urllib.request.urlopen(f'https://artifacts.tunshell.com/client-{target}')
         tmp.write(r.read())
-        os.chmod(tmp.name, 0o755)
-        subprocess.run([tmp.name] + p)
+        tmp.close()
+        try:
+          os.chmod(tmp.name, 0o755)
+          subprocess.run([tmp.name] + p)
+        finally:
+          try:
+            os.unlink(tmp.name)
+          except:
+            pass
 
 run()
