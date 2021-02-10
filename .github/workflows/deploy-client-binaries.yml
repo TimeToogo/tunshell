@@ -37,6 +37,9 @@ jobs:
           - platform: ubuntu-latest
             target: mips-unknown-linux-musl
             rustflags: --cfg openssl
+          - platform: ubuntu-latest
+            target: x86_64-unknown-freebsd
+            tests: true
           # Apple
           - platform: macos-latest
             target: x86_64-apple-darwin
