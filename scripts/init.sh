@@ -28,6 +28,15 @@ Linux:i586*)
 Linux:mips*)     
     TARGET="mips-unknown-linux-musl"
     ;;
+FreeBSD:x86_64*)
+    TARGET="x86_64-unknown-freebsd"
+    ;;
+FreeBSD:amd64*)
+    TARGET="x86_64-unknown-freebsd"
+    ;;
+FreeBSD:i686*)
+    TARGET="i686-unknown-freebsd"
+    ;;
 Darwin:x86_64*)    
     TARGET="x86_64-apple-darwin"
     ;;

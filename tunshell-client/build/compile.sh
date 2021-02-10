@@ -33,7 +33,7 @@ fi
 cross build -p tunshell-client --release --target $TARGET
 cp $SCRIPT_DIR/../../target/$TARGET/release/client $OUTPUT_PATH
 
-if [[ $TARGET =~ "linux" ]]; 
+if [[ $TARGET =~ "linux" ]] || [[ $TARGET =~ "freebsd" ]];
 then
    case $TARGET in
       x86_64-unknown-linux-musl|i686-unknown-linux-musl|i586-unknown-linux-musl)
@@ -56,6 +56,9 @@ then
          ;;
       mips-unknown-linux-musl)
          STRIP="mips-linux-muslsf-strip"
+         ;;
+      x86_64-unknown-freebsd)
+         STRIP="x86_64-unknown-freebsd12-strip"
          ;;
       *)   
          echo "Unknown linux target: $TARGET"

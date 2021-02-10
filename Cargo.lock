@@ -1185,9 +1185,9 @@ checksum = "d36492546b6af1463394d46f0c834346f31548646f6ba10849802c9c9a27ac33"
 
 [[package]]
 name = "portable-pty"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4634a3dfb2d62cb300c8fa548c090db9c811e2fa94237914311b1b353505d8d0"
+checksum = "1dfe828cdc03091f621a7c9a257769fbb9c66d75f7e45d0fbb563fa3bf669815"
 dependencies = [
  "anyhow",
  "bitflags",

@@ -37,6 +37,9 @@ jobs:
           - platform: ubuntu-latest
             target: mips-unknown-linux-musl
             rustflags: --cfg openssl
+          - platform: ubuntu-latest
+            target: x86_64-unknown-freebsd
+            cc: x86_64-unknown-freebsd12-gcc
           # Apple
           - platform: macos-latest
             target: x86_64-apple-darwin
@@ -77,6 +80,7 @@ jobs:
         CI: true
         RUST_LOG: debug
         RUSTFLAGS: ${{ matrix.rustflags }}
+        CC: ${{ matrix.cc }}
 
     - uses: aws-actions/configure-aws-credentials@v1
       with:
