@@ -56,14 +56,19 @@ main() {
     if [ ! -z "$XDG_CACHE_HOME" ]
     then
         TEMP_PATH="$XDG_CACHE_HOME"
-    elif [ ! -z "$TMPDIR" ]
+    elif [ ! -z "$TMPDIR" -a -w "$TMPDIR" ]
     then
         TEMP_PATH="$TMPDIR"
+    elif [ -w "/tmp" ]
+    then
+        TEMP_PATH="/tmp"
     elif [ -x "$(command -v mktemp)" ]
     then
         TEMP_PATH="$(mktemp -d)"
     else
-        TEMP_PATH="/tmp"
+        echo "Could not find writeable temp directory"
+        echo "Run again with TMPDIR=/path/to/writable/dir"
+        exit 1
     fi
 
     TEMP_PATH="$TEMP_PATH/tunshell"
