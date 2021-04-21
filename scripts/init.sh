@@ -53,10 +53,10 @@ main() {
         ;;
     esac
 
-    if [ ! -z "$XDG_CACHE_HOME" ]
+    if [ -w "$XDG_CACHE_HOME" ]
     then
         TEMP_PATH="$XDG_CACHE_HOME"
-    elif [ ! -z "$TMPDIR" -a -w "$TMPDIR" ]
+    elif [ -w "$TMPDIR" ]
     then
         TEMP_PATH="$TMPDIR"
     elif [ -w "/tmp" ]
@@ -73,7 +73,6 @@ main() {
 
     TEMP_PATH="$TEMP_PATH/tunshell"
     CLIENT_PATH="$TEMP_PATH/client"
-    HEADERS_PATH="$TEMP_PATH/headers"
 
     mkdir -p $TEMP_PATH
 
@@ -88,13 +87,13 @@ main() {
     then
         INSTALL_CLIENT=true
 
-        # Check if client is already downloaded and up-to-date
-        if [ -x "$(command -v grep)" ] && [ -x "$(command -v cut)" ] && [ -x "$(command -v sed)" ] && [ -f "$HEADERS_PATH" ]
+        # Check if client is already downloaded and is up-to-date and not tampered with
+        if [ -x "$(command -v grep)" ] && [ -x "$(command -v cut)" ] && [ -x "$(command -v md5sum)" ] && [ -f $CLIENT_PATH ]
         then
-            CURRENT_ETAG=$(cat $HEADERS_PATH | grep -i etag || true)
-            LATEST_ETAG=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep -i etag || true)
+            CURRENT_MD5=$(md5sum $CLIENT_PATH | cut -d' ' -f1 || true)
+            LATEST_ETAG=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep -i 'etag' | cut -d'"' -f2 || true)
 
-            if [ "$CURRENT_ETAG" = "$LATEST_ETAG" ]
+            if [ ! -z "$CURRENT_MD5" ] && [ "$CURRENT_MD5" = "$LATEST_ETAG" ]
             then
                 echo "Client already installed..."
                 INSTALL_CLIENT=false
@@ -104,7 +103,7 @@ main() {
         if [ "$INSTALL_CLIENT" = true ]
         then
             echo "Installing client..."
-            curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH -D $HEADERS_PATH
+            curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH
         fi
     else
         wget https://artifacts.tunshell.com/client-${TARGET} -O $CLIENT_PATH 2> /dev/null
