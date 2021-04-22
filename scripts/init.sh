@@ -88,12 +88,12 @@ main() {
         INSTALL_CLIENT=true
 
         # Check if client is already downloaded and is up-to-date and not tampered with
-        if [ -x "$(command -v grep)" ] && [ -x "$(command -v cut)" ] && [ -x "$(command -v md5sum)" ] && [ -f $CLIENT_PATH ]
+        if [ -x "$(command -v grep)" ] && [ -x "$(command -v cut)" ] && [ -x "$(command -v sha256sum)" ] && [ -f $CLIENT_PATH ]
         then
-            CURRENT_MD5=$(md5sum $CLIENT_PATH | cut -d' ' -f1 || true)
-            LATEST_ETAG=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep -i 'etag' | cut -d'"' -f2 || true)
+            CURRENT_HASH=$(sha256sum $CLIENT_PATH | cut -d' ' -f1 || true)
+            LATEST_HASH=$(curl -XHEAD -sSfI https://artifacts.tunshell.com/client-${TARGET} | grep -i 'sha256' | cut -d' ' -f2 | cut -d$'\r' -f1 || true)
 
-            if [ ! -z "$CURRENT_MD5" ] && [ "$CURRENT_MD5" = "$LATEST_ETAG" ]
+            if [ ! -z "$CURRENT_HASH" ] && [ ! -z "$LATEST_HASH" ] && [ "$CURRENT_HASH" = "$LATEST_HASH" ]
             then
                 echo "Client already installed..."
                 INSTALL_CLIENT=false
