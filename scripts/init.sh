@@ -56,6 +56,9 @@ main() {
     if [ -w "$XDG_CACHE_HOME" ]
     then
         TEMP_PATH="$XDG_CACHE_HOME"
+    elif mkdir -p $HOME/.cache
+    then
+        TEMP_PATH="$HOME/.cache"
     elif [ -w "$TMPDIR" ]
     then
         TEMP_PATH="$TMPDIR"
@@ -105,8 +108,12 @@ main() {
             echo "Installing client..."
             curl -sSf https://artifacts.tunshell.com/client-${TARGET} -o $CLIENT_PATH
         fi
+    elif [ -x "$(command -v wget)" ]
+    then
+        wget -q https://artifacts.tunshell.com/client-${TARGET} -O $CLIENT_PATH 
     else
-        wget https://artifacts.tunshell.com/client-${TARGET} -O $CLIENT_PATH 2> /dev/null
+        echo "Could not download client: please install curl or wget..."
+        exit 1
     fi
 
     chmod +x $CLIENT_PATH
