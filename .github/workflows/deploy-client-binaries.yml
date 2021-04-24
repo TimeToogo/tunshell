@@ -90,13 +90,14 @@ jobs:
 
     # Deploy artifact to https://artifacts.tunshell.com
     - name: Deploy to S3
-      run: |
-        aws s3 cp artifacts/client s3://tunshell-artifacts/client-${{ matrix.client_binary_name || matrix.target }} \
-          --acl=public-read \
-          --cache-control max-age=31536000 \
-          --metadata "sha256=$(sha256sum artifacts/client | awk '{print $1}')" \
+      run: >
+        aws s3 cp artifacts/client s3://tunshell-artifacts/client-${{ matrix.client_binary_name || matrix.target }}
+          --acl=public-read 
+          --cache-control max-age=31536000
+          --metadata "sha256=$(sha256sum artifacts/client | awk '{print $1}')"
           --metadata-directive REPLACE
       working-directory: tunshell-client/build
+      shell: bash
 
     - name: Invalidate CloudFront
       run: aws cloudfront create-invalidation --distribution-id=E3DF4SGU15BNWT --paths '/*'
