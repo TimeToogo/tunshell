@@ -41,10 +41,10 @@ main() {
     Darwin:x86_64*)    
         TARGET="x86_64-apple-darwin"
         ;;
-    WindowsNT:x86_64*)    
+    WindowsNT:x86_64*|MINGW64_NT*:x86_64*)
         TARGET="x86_64-pc-windows-msvc.exe"
         ;;
-    WindowsNT:i686*)    
+    WindowsNT:i686*|MINGW32_NT*:i686*)
         TARGET="i686-pc-windows-msvc.exe"
         ;;
     *)          
