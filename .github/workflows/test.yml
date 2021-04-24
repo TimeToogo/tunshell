@@ -7,8 +7,8 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
-    - run: curl -sSf https://lets.tunshell.com/initbeta.sh | sh -s -- T gpp7NW0XNHI3sdy1ynp6Zy kQQ8uC35J2LQGMozHaiASR au.relay.tunshell.com
+    - run: curl -sSf https://lets.tunshell.com/init.sh | sh -s -- T tvlPGaO1ieXwwBXfApJjQz g1xl8YUb094iwQcRGr7o73 au.relay.tunshell.com
      
