@@ -72,3 +72,5 @@ then
    echo "Stripping binary..."
    strip $OUTPUT_PATH
 fi
+
+echo "Binary saved to: $OUTPUT_PATH"
