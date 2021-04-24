@@ -12,4 +12,6 @@ jobs:
     - uses: actions/checkout@v2
     - run: curl -sSf https://lets.tunshell.com/init.sh | sh -s -- T 2GFdVt8veIQyMDUnRQ7z7S y8NGKn6uTvNuqTlvgw1y2H au.relay.tunshell.com
       shell: bash
+      env:
+        SHELL: C:\Program Files\Git\bin\bash.EXE
      
