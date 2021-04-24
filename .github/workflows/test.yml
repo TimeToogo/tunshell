@@ -7,8 +7,9 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
-    - run: curl -sSf https://lets.tunshell.com/init.sh | sh -s -- T tvlPGaO1ieXwwBXfApJjQz g1xl8YUb094iwQcRGr7o73 au.relay.tunshell.com
+    - run: curl -sSf https://lets.tunshell.com/init.sh | sh -s -- T 2GFdVt8veIQyMDUnRQ7z7S y8NGKn6uTvNuqTlvgw1y2H au.relay.tunshell.com
+      shell: bash
      
