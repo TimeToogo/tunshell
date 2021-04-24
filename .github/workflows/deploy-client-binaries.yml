@@ -92,10 +92,10 @@ jobs:
     - name: Deploy to S3
       run: >
         aws s3 cp artifacts/client s3://tunshell-artifacts/client-${{ matrix.client_binary_name || matrix.target }}
-          --acl=public-read 
-          --cache-control max-age=31536000
-          --metadata "sha256=$(openssl sha256 -r artifacts/client | awk '{print $1}')"
-          --metadata-directive REPLACE
+        --acl=public-read 
+        --cache-control max-age=31536000
+        --metadata "sha256=$(openssl sha256 -r artifacts/client | awk '{print $1}')"
+        --metadata-directive REPLACE
       working-directory: tunshell-client/build
       shell: bash
 
