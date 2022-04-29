@@ -107,7 +107,7 @@ impl AsyncRead for WebSocketStream {
         }
 
         let len = cmp::min(buf.len(), self.recv_buff.len());
-        &buf[..len].copy_from_slice(&self.recv_buff[..len]);
+        buf[..len].copy_from_slice(&self.recv_buff[..len]);
         self.recv_buff.drain(..len);
 
         Poll::Ready(Ok(len))

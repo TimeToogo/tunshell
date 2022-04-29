@@ -1,7 +1,10 @@
 use super::{
     ShellClientMessage, ShellClientStream, ShellServerMessage, StartShellPayload, WindowSize,
 };
-use crate::{util::delay::delay_for, ShellKey, TunnelStream};
+use crate::{
+    remote_pty_supported, shell::proto::ShellStartedPayload, util::delay::delay_for, ShellKey,
+    TunnelStream,
+};
 use anyhow::{Context, Error, Result};
 use futures::stream::StreamExt;
 use log::*;
@@ -18,6 +21,12 @@ cfg_if::cfg_if! {
     } else {
         mod shell;
         pub use shell::*;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))] {
+        mod remote_pty;
+        use remote_pty::start_remote_pty_master;
     }
 }
 
@@ -52,18 +61,38 @@ impl ShellClient {
             .write(&ShellClientMessage::StartShell(StartShellPayload {
                 term: self.host_shell.term().unwrap_or("".to_owned()),
                 size: WindowSize::from(self.host_shell.size().await?),
+                remote_pty_support: remote_pty_supported(),
             }))
             .await?;
 
         info!("shell requested");
-        info!("starting shell stream");
 
-        self.host_shell.enable_raw_mode()?;
+        let response = tokio::select! {
+            message = stream.next() => match message {
+                Some(Ok(ShellServerMessage::ShellStarted(res))) => res,
+                Some(Ok(_)) => return Err(Error::msg("shell server returned an unexpected response")),
+                Some(Err(err)) => return Err(Error::from(err).context("shell server returned an error")),
+                None => return Err(Error::msg("did not receive shell started response"))
+            },
+            _ = delay_for(Duration::from_millis(30000)) =>  return Err(Error::msg("timed out while waiting for shell"))
+        };
 
-        let exit_code = self.stream_shell_io(&mut stream).await;
-
-        self.host_shell.disable_raw_mode()?;
-
+        let exit_code = if let ShellStartedPayload::RemotePty = response {
+            cfg_if::cfg_if! {
+                if #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))] {
+                    return Err(Error::msg("shell server started remote pty when not supported on local"));
+                } else {
+                    info!("starting remote pty master");
+                    start_remote_pty_master(stream).await
+                }
+            }
+        } else {
+            info!("starting shell stream");
+            self.host_shell.enable_raw_mode()?;
+            let exit_code = self.stream_shell_io(&mut stream).await;
+            self.host_shell.disable_raw_mode()?;
+            exit_code
+        };
         info!("session finished");
 
         Ok(exit_code?)

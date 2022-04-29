@@ -229,7 +229,7 @@ impl AsyncRead for UdpConnection {
             return Poll::Pending;
         } else {
             let data = con.recv_drain_bytes(buff.len());
-            &buff[..data.len()].copy_from_slice(&data[..]);
+            buff[..data.len()].copy_from_slice(&data[..]);
             return Poll::Ready(Ok(data.len()));
         }
     }

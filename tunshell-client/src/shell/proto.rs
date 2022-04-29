@@ -9,6 +9,7 @@ pub(super) enum ShellClientMessage {
     StartShell(StartShellPayload),
     Stdin(Vec<u8>),
     Resize(WindowSize),
+    RemotePtyData(RemotePtyDataPayload),
     Error(String),
 }
 
@@ -16,8 +17,10 @@ pub(super) enum ShellClientMessage {
 pub(super) enum ShellServerMessage {
     KeyAccepted,
     KeyRejected,
+    ShellStarted(ShellStartedPayload),
     Stdout(Vec<u8>),
     Exited(u8),
+    RemotePtyEvent(RemotePtyEventPayload),
     Error(String),
 }
 
@@ -25,10 +28,32 @@ pub(super) enum ShellServerMessage {
 pub(super) struct StartShellPayload {
     pub(super) term: String,
     pub(super) size: WindowSize,
+    pub(super) remote_pty_support: bool
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub(super) struct WindowSize(pub(super) u16, pub(super) u16);
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub(super) enum ShellStartedPayload {
+    LocalPty,
+    RemotePty,
+    Fallback
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub(super) enum RemotePtyEventPayload {
+    Connect(u32),
+    Payload(RemotePtyDataPayload),
+    Close(u32)
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub(super) struct RemotePtyDataPayload {
+    pub con_id: u32,
+    pub data: Vec<u8>
+}
+
 
 pub(super) type ShellClientStream<S> = MessageStream<ShellClientMessage, ShellServerMessage, S>;
 
@@ -42,6 +67,7 @@ impl Message for ShellClientMessage {
             Self::StartShell(_) => 2,
             Self::Stdin(_) => 3,
             Self::Resize(_) => 4,
+            Self::RemotePtyData(_) => 5,
             Self::Error(_) => 255,
         }
     }
@@ -52,6 +78,7 @@ impl Message for ShellClientMessage {
             Self::StartShell(payload) => serde_json::to_vec(&payload)?,
             Self::Stdin(payload) => payload.clone(),
             Self::Resize(payload) => serde_json::to_vec(&payload)?,
+            Self::RemotePtyData(payload) => serde_json::to_vec(&payload)?,
             Self::Error(payload) => payload.as_bytes().to_vec(),
         };
 
@@ -64,6 +91,7 @@ impl Message for ShellClientMessage {
             2 => Self::StartShell(serde_json::from_slice(raw_message.data().as_slice())?),
             3 => Self::Stdin(raw_message.data().clone()),
             4 => Self::Resize(serde_json::from_slice(raw_message.data().as_slice())?),
+            5 => Self::RemotePtyData(serde_json::from_slice(raw_message.data().as_slice())?),
             255 => Self::Error(String::from_utf8(raw_message.data().clone())?),
             id @ _ => {
                 return Err(Error::msg(format!(
@@ -82,8 +110,10 @@ impl Message for ShellServerMessage {
         match self {
             Self::KeyAccepted => 1,
             Self::KeyRejected => 2,
-            Self::Stdout(_) => 3,
-            Self::Exited(_) => 4,
+            Self::ShellStarted(_) => 3,
+            Self::Stdout(_) => 4,
+            Self::Exited(_) => 5,
+            Self::RemotePtyEvent(_) => 6,
             Self::Error(_) => 255,
         }
     }
@@ -92,8 +122,10 @@ impl Message for ShellServerMessage {
         let buff = match self {
             Self::KeyAccepted => Vec::<u8>::new(),
             Self::KeyRejected => Vec::<u8>::new(),
+            Self::ShellStarted(payload) => serde_json::to_vec(payload)?,
             Self::Stdout(payload) => payload.clone(),
             Self::Exited(payload) => vec![*payload],
+            Self::RemotePtyEvent(payload) => serde_json::to_vec(payload)?,
             Self::Error(payload) => payload.as_bytes().to_vec(),
         };
 
@@ -104,11 +136,13 @@ impl Message for ShellServerMessage {
         let message = match raw_message.type_id() {
             1 => Self::KeyAccepted,
             2 => Self::KeyRejected,
-            3 => Self::Stdout(raw_message.data().clone()),
-            4 => Self::Exited(raw_message.data().get(0).map_or_else(
+            3 => Self::ShellStarted(serde_json::from_slice(raw_message.data().as_slice())?),
+            4 => Self::Stdout(raw_message.data().clone()),
+            5 => Self::Exited(raw_message.data().get(0).map_or_else(
                 || Err(Error::msg("encountered exit message without exit code")),
                 |v| Ok(*v),
             )?),
+            6 => Self::RemotePtyEvent(serde_json::from_slice(raw_message.data().as_slice())?),
             255 => Self::Error(String::from_utf8(raw_message.data().clone())?),
             id @ _ => {
                 return Err(Error::msg(format!(
@@ -152,6 +186,7 @@ mod tests {
         let message = ShellClientMessage::StartShell(StartShellPayload {
             term: "test".to_owned(),
             size: WindowSize(100, 50),
+            remote_pty_support: false
         });
         let serialised = message.serialise().unwrap();
 
@@ -159,7 +194,7 @@ mod tests {
             serialised,
             RawMessage::new(
                 2,
-                "{\"term\":\"test\",\"size\":[100,50]}".as_bytes().to_vec()
+                "{\"term\":\"test\",\"size\":[100,50],\"remote_pty_support\":false}".as_bytes().to_vec()
             )
             .unwrap()
         );
@@ -221,11 +256,23 @@ mod tests {
     }
 
     #[test]
+    fn test_server_serialise_shell_started() {
+        let message = ShellServerMessage::ShellStarted(ShellStartedPayload::LocalPty);
+        let serialised = message.serialise().unwrap();
+
+        assert_eq!(serialised, RawMessage::new(3, serde_json::to_vec(&ShellStartedPayload::LocalPty).unwrap()).unwrap());
+
+        let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
+
+        assert_eq!(message, deserialised);
+    }
+
+    #[test]
     fn test_server_serialise_stdout() {
         let message = ShellServerMessage::Stdout(vec![1, 2, 3, 4, 5]);
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(3, vec![1, 2, 3, 4, 5]).unwrap());
+        assert_eq!(serialised, RawMessage::new(4, vec![1, 2, 3, 4, 5]).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 
@@ -237,7 +284,7 @@ mod tests {
         let message = ShellServerMessage::Exited(5);
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(4, vec![5]).unwrap());
+        assert_eq!(serialised, RawMessage::new(5, vec![5]).unwrap());
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 

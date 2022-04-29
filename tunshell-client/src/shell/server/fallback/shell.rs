@@ -1,3 +1,4 @@
+use super::super::ShellStream;
 use super::{InputStream, Interpreter, OutputStream, Token};
 use crate::shell::{proto::WindowSize, server::shell::Shell};
 use anyhow::{Error, Result};
@@ -94,6 +95,14 @@ impl Shell for FallbackShell {
         state
             .exit_code
             .ok_or_else(|| Error::msg("shell has not closed"))
+    }
+
+    fn custom_io_handling(&self) -> bool {
+        false
+    }
+
+    async fn stream_io(&mut self, _stream: &mut ShellStream) -> Result<()> {
+        unreachable!()
     }
 }
 

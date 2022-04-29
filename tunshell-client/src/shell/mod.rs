@@ -26,3 +26,7 @@ impl ShellKey {
         &self.key
     }
 }
+
+pub(super) fn remote_pty_supported() -> bool {
+    cfg!(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))
+}

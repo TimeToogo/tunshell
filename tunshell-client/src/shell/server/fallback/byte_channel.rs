@@ -39,7 +39,7 @@ impl AsyncRead for ByteChannel {
         }
 
         let len = cmp::min(buf.len(), self.buff.len());
-        &buf[..len].copy_from_slice(self.buff.drain(..len).collect::<Vec<u8>>().as_slice());
+        buf[..len].copy_from_slice(self.buff.drain(..len).collect::<Vec<u8>>().as_slice());
         Poll::Ready(Ok(len))
     }
 }

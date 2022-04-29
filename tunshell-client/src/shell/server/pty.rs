@@ -1,4 +1,4 @@
-use super::{get_default_shell, shell::Shell, DefaultShell};
+use super::{get_default_shell, shell::Shell, DefaultShell, ShellStream};
 use crate::shell::proto::WindowSize;
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
@@ -212,6 +212,14 @@ impl Shell for PtyShell {
         } else {
             Ok(1)
         }
+    }
+
+    fn custom_io_handling(&self) -> bool {
+        false
+    }
+
+    async fn stream_io(&mut self, _stream: &mut ShellStream) -> Result<()> {
+        unreachable!()
     }
 }
 

@@ -1,4 +1,4 @@
-use super::{ShellClientMessage, ShellServerMessage, ShellServerStream};
+use super::{ShellClientMessage, ShellServerMessage, ShellServerStream, proto::ShellStartedPayload};
 use crate::{ShellKey, TunnelStream};
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
@@ -16,12 +16,23 @@ pub(self) use default::*;
 mod shell;
 use shell::*;
 
-#[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
-mod pty;
-#[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
-use pty::*;
+cfg_if::cfg_if! {
+    if #[cfg(all(not(target_os = "ios"), not(target_os = "android")))] {
+        mod pty;
+        use pty::*;
+    }
+}
 
-type ShellStream = ShellServerStream<Compat<Box<dyn TunnelStream>>>;
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))] {
+        mod remote_pty;
+        use remote_pty::RemotePtyShell;
+    }
+}
+
+// mod remote_pty;
+
+pub(super) type ShellStream = ShellServerStream<Compat<Box<dyn TunnelStream>>>;
 
 pub(crate) struct ShellServer {
     conf: ShellServerConfig,
@@ -44,10 +55,16 @@ impl ShellServer {
         info!("successfully authenticated client");
 
         info!("waiting for shell request");
-        let shell = self.start_shell(&mut stream).await?;
+        let (shell_type, mut shell) = self.start_shell(&mut stream).await?;
         info!("shell started");
 
-        self.steam_shell_io(&mut stream, shell).await?;
+        stream.write(&ShellServerMessage::ShellStarted(shell_type)).await?;
+
+        if shell.custom_io_handling() {
+            shell.stream_io(&mut stream).await?;
+        } else {
+            self.steam_shell_io(&mut stream, shell).await?;
+        }
 
         // We keep the connection alive for some time to allow the receive
         // of any acknowledgement packets and so the client can continue to receive
@@ -79,7 +96,7 @@ impl ShellServer {
         }
     }
 
-    async fn start_shell(&self, stream: &mut ShellStream) -> Result<Box<dyn Shell + Send>> {
+    async fn start_shell(&self, stream: &mut ShellStream) -> Result<(ShellStartedPayload, Box<dyn Shell + Send>)> {
         let request = tokio::select! {
             message = stream.next() => match message {
                 Some(Ok(ShellClientMessage::StartShell(request))) => request,
@@ -96,16 +113,28 @@ impl ShellServer {
             let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
 
             if let Ok(pty_shell) = pty_shell {
-                return Ok(Box::new(pty_shell));
+                return Ok((ShellStartedPayload::LocalPty, Box::new(pty_shell)));
             }
 
             warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
         }
 
+        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        if request.remote_pty_support {
+            debug!("initialising remote pty shell");
+            let rpty_shell = RemotePtyShell::new(&request.term).await;
+
+            if let Ok(rpty_shell) = rpty_shell {
+                return Ok((ShellStartedPayload::RemotePty, Box::new(rpty_shell)));
+            }
+
+            warn!("failed to init remote pty shell: {:?}", rpty_shell.err().unwrap());
+        }
+
         debug!("falling back to in-built shell");
         let fallback_shell = FallbackShell::new(request.term.as_ref(), request.size.clone());
 
-        Ok(Box::new(fallback_shell))
+        Ok((ShellStartedPayload::Fallback, Box::new(fallback_shell)))
     }
 
     async fn steam_shell_io<'a>(
@@ -273,6 +302,7 @@ mod tests {
                 ShellClientMessage::StartShell(StartShellPayload {
                     term: "TERM".to_owned(),
                     size: WindowSize(50, 50),
+                    remote_pty_support: false
                 })
                 .serialise()
                 .unwrap()
@@ -331,6 +361,7 @@ mod tests {
                 ShellClientMessage::StartShell(StartShellPayload {
                     term: "TERM".to_owned(),
                     size: WindowSize(50, 50),
+                    remote_pty_support: false,
                 })
                 .serialise()
                 .unwrap()

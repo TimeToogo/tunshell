@@ -51,7 +51,7 @@ impl Config {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--echo" => echo_stdout = true,
-                arg @ _ => panic!(format!("Unknown argument: {}", arg)),
+                arg @ _ => panic!("Unknown argument: {}", arg),
             }
         }
 
