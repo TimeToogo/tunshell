@@ -1,4 +1,5 @@
 mod client;
+
 pub use client::*;
 
 mod config;
@@ -22,5 +23,12 @@ cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
         mod wasm;
         pub use wasm::*;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(not(target_arch = "wasm32"))] {
+        use std::sync::atomic::AtomicBool;
+        pub static STOP_ON_SIGINT: AtomicBool = AtomicBool::new(true);
     }
 }

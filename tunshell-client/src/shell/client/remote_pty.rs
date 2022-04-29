@@ -13,6 +13,7 @@ use anyhow::{Error, Result};
 use futures::StreamExt;
 use remote_pty_common::channel;
 
+use crate::STOP_ON_SIGINT;
 use crate::shell::proto::{RemotePtyDataPayload, RemotePtyEventPayload, ShellServerMessage};
 
 use super::ShellStream;
@@ -234,7 +235,24 @@ impl ChannelDemuxer {
     }
 }
 
+struct IgnoreSignals;
+
+impl IgnoreSignals {
+    fn start() -> Self {
+        STOP_ON_SIGINT.store(false, Ordering::SeqCst);
+
+        Self
+    }
+}
+
+impl Drop for IgnoreSignals {
+    fn drop(&mut self) {
+        STOP_ON_SIGINT.store(true, Ordering::SeqCst);
+    }
+}
+
 pub(super) async fn start_remote_pty_master(mut stream: ShellStream) -> Result<u8> {
+    let _ignore_signals = IgnoreSignals::start();
     let (mut demuxer, listener) = ChannelDemuxer::new();
 
     let mut server = tokio::task::spawn_blocking(move || {
