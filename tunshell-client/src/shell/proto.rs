@@ -27,6 +27,7 @@ pub(super) enum ShellServerMessage {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub(super) struct StartShellPayload {
     pub(super) term: String,
+    pub(super) color: bool,
     pub(super) size: WindowSize,
     pub(super) remote_pty_support: bool
 }
@@ -185,6 +186,7 @@ mod tests {
     fn test_client_serialise_start_shell() {
         let message = ShellClientMessage::StartShell(StartShellPayload {
             term: "test".to_owned(),
+            color: true,
             size: WindowSize(100, 50),
             remote_pty_support: false
         });

@@ -38,7 +38,7 @@ struct StreamingState {
 }
 
 impl RemotePtyShell {
-    pub(super) async fn new(term: &str) -> Result<Self> {
+    pub(super) async fn new(term: &str, color: bool) -> Result<Self> {
         info!("creating remote pty shell");
 
         let path = download_rpty_bash().await?;
@@ -47,6 +47,13 @@ impl RemotePtyShell {
         let proc = Command::new(path)
             .env("RPTY_TRANSPORT", format!("unix:{sock_path}"))
             .env("TERM", term)
+            .env("PS1", if color { 
+                r"\[\e[0;38;5;242m\][rpty] \[\e[0;92m\]\u\[\e[0;92m\]@\[\e[0;92m\]\H\[\e[0m\]:\[\e[0;38;5;39m\]\w\[\e[0m\]\$ \[\e[0m\]" 
+            } else {
+                r"[rpty] \u@\H:\w\$ "
+            })
+            .arg("--noprofile")
+            .arg("--norc")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -402,5 +409,4 @@ impl Drop for StreamingState {
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

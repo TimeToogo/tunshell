@@ -1,12 +1,12 @@
 use anyhow::{Error, Result};
 use crossterm;
 use futures::channel::mpsc;
-use futures::channel::mpsc::{UnboundedReceiver};
+use futures::channel::mpsc::UnboundedReceiver;
 use futures::stream::StreamExt;
-use io::{AsyncWriteExt, AsyncReadExt};
+use io::{AsyncReadExt, AsyncWriteExt};
 use log::*;
+use std::{thread::{self, JoinHandle}, env};
 use tokio::io;
-use std::thread::{self, JoinHandle};
 
 pub struct HostShellStdin {
     stdin: io::Stdin,
@@ -34,7 +34,9 @@ impl HostShellStdin {
 
 impl HostShellStdout {
     pub fn new() -> Result<Self> {
-        Ok(Self { stdout: io::stdout() })
+        Ok(Self {
+            stdout: io::stdout(),
+        })
     }
 
     pub async fn write(&mut self, buff: &[u8]) -> Result<()> {
@@ -134,6 +136,10 @@ impl HostShell {
 
     pub async fn size(&self) -> Result<(u16, u16)> {
         crossterm::terminal::size().map_err(Error::new)
+    }
+
+    pub(crate) fn color(&self) -> Result<bool> {
+        Ok(crossterm::style::available_color_count() > 1 && env::var("NO_COLOR").is_err())
     }
 }
 

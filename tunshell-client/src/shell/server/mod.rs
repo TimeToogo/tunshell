@@ -122,7 +122,7 @@ impl ShellServer {
         #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
         if request.remote_pty_support {
             debug!("initialising remote pty shell");
-            let rpty_shell = RemotePtyShell::new(&request.term).await;
+            let rpty_shell = RemotePtyShell::new(&request.term, request.color).await;
 
             if let Ok(rpty_shell) = rpty_shell {
                 return Ok((ShellStartedPayload::RemotePty, Box::new(rpty_shell)));
@@ -301,6 +301,7 @@ mod tests {
             mock_data.extend_from_slice(
                 ShellClientMessage::StartShell(StartShellPayload {
                     term: "TERM".to_owned(),
+                    color: true,
                     size: WindowSize(50, 50),
                     remote_pty_support: false
                 })
@@ -360,6 +361,7 @@ mod tests {
             mock_data.extend_from_slice(
                 ShellClientMessage::StartShell(StartShellPayload {
                     term: "TERM".to_owned(),
+                    color: true,
                     size: WindowSize(50, 50),
                     remote_pty_support: false,
                 })

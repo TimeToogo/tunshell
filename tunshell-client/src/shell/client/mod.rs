@@ -60,6 +60,7 @@ impl ShellClient {
         stream
             .write(&ShellClientMessage::StartShell(StartShellPayload {
                 term: self.host_shell.term().unwrap_or("".to_owned()),
+                color: self.host_shell.color().unwrap_or(false),
                 size: WindowSize::from(self.host_shell.size().await?),
                 remote_pty_support: remote_pty_supported(),
             }))
