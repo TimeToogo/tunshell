@@ -196,7 +196,7 @@ mod tests {
             serialised,
             RawMessage::new(
                 2,
-                "{\"term\":\"test\",\"size\":[100,50],\"remote_pty_support\":false}".as_bytes().to_vec()
+                "{\"term\":\"test\",\"color\":true,\"size\":[100,50],\"remote_pty_support\":false}".as_bytes().to_vec()
             )
             .unwrap()
         );
