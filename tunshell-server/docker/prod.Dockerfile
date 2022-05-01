@@ -2,7 +2,7 @@ FROM rust:alpine AS build
 
 ENV RUSTFLAGS="--cfg alpine"
 
-RUN apk add --no-cache musl-dev sqlite-dev
+RUN apk add --no-cache musl-dev sqlite-dev openssl-dev
 RUN mkdir /app/
 
 COPY . /app/
