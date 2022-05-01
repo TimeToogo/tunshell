@@ -174,6 +174,10 @@ impl HostShell {
     pub async fn size(&self) -> Result<(u16, u16)> {
         convert_to_size(self.term.size())
     }
+
+    pub fn color(&self) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 fn convert_to_size(arr: JsValue) -> Result<(u16, u16)> {
