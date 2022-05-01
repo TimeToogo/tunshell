@@ -1464,7 +1464,7 @@ checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 [[package]]
 name = "remote-pty-common"
 version = "0.1.0"
-source = "git+https://github.com/TimeToogo/remote-pty#866d85003f53031b5cd401f06048b68b6bef50b0"
+source = "git+https://github.com/TimeToogo/remote-pty#2bc100fd96d736f9a7be77fdbd36836a7256eace"
 dependencies = [
  "bincode",
  "lazy_static",
@@ -1475,7 +1475,7 @@ dependencies = [
 [[package]]
 name = "remote-pty-master"
 version = "0.1.0"
-source = "git+https://github.com/TimeToogo/remote-pty#866d85003f53031b5cd401f06048b68b6bef50b0"
+source = "git+https://github.com/TimeToogo/remote-pty#2bc100fd96d736f9a7be77fdbd36836a7256eace"
 dependencies = [
  "bincode",
  "errno",
