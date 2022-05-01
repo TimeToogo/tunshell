@@ -1,4 +1,4 @@
-# Tunshell (Beta)
+# Tunshell
 
 https://tunshell.com
 
@@ -141,9 +141,3 @@ The following is list of the supported platforms and architectures for the tunsh
 ## Self-hosted relay server
 
 For additional security or customisation it is possible to self-host the relay server on your own infrastructure. The details of doing so can be found [here](./aws/README.md).
-
-## Future Scope
-
-- [ ] Add fallback shell built-in to install https://github.com/uutils/coreutils / busybox
-- [ ] Socket forwarding / file copying
-- [ ] Replacing AES encryption scheme with TLS using 256 bit ECDH key pairs (public keys can be dual purposed as session keys)
