@@ -9,4 +9,5 @@
 # So we use a standard S3 origin and ensure the S3 paths are exactly what is reflected in the final URL.
 
 mv out/go.html out/go
+mv out/web.html out/web
 mv out/404.html out/404
