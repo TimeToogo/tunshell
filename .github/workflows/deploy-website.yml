@@ -41,7 +41,7 @@ jobs:
       working-directory: website
     
     - name: Deploy to S3 (html)
-      run: aws s3 cp --recursive --content-type text/html --exclude "*" --include "*.html" --include "go" --include "404" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
+      run: aws s3 cp --recursive --content-type text/html --exclude "*" --include "*.html" --include "go" --include "web" --include "404" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
       working-directory: website
     
     - name: Deploy to S3 (wasm)
