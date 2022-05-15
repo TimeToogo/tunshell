@@ -144,4 +144,14 @@ export const Error = styled.p`
 
 export const LaunchShell = styled.div`
   margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+`;
+
+export const LaunchShellLink = styled.a`
+  text-align: center;
+  color: white;
+  margin-top: 10px;
+  font-size: 12px;
 `;

@@ -12,7 +12,7 @@ export const Header = () => {
             <Styled.Logo>
               <img src="/images/logo.svg" />
               <span>
-                Tunshell <em>Beta</em>
+                Tunshell
               </span>
             </Styled.Logo>
           </Link>

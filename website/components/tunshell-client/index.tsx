@@ -8,13 +8,14 @@ import { SessionKeys } from "../../services/session";
 interface TunshellClientProps {
   session: SessionKeys;
   onClose: () => void;
+  children?: any;
 }
 
 export const TunshellClient = dynamic<TunshellClientProps>({
   loader: async () => {
     const tunshellWasm = await new TunshellWasm().init();
 
-    return ({ session, onClose }) => {
+    return ({ session, onClose, children }) => {
       const [emulatorInterface, setEmulatorInterface] = useState<TerminalEmulatorInterface>();
       const [term, setTerm] = useState<import("xterm").Terminal>();
 
@@ -38,7 +39,11 @@ export const TunshellClient = dynamic<TunshellClientProps>({
         setTerm(term);
       };
 
-      return <TerminalEmulator onEmulatorInitialised={onEmulatorInitialised} onClose={onClose} fullScreen />;
+      return (
+        <TerminalEmulator onEmulatorInitialised={onEmulatorInitialised} onClose={onClose} fullScreen>
+          {children}
+        </TerminalEmulator>
+      );
     };
   },
 });

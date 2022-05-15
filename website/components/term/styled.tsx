@@ -28,13 +28,14 @@ export const FullScreenWrapper = styled.div`
   z-index: 10;
   box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   padding: 20px;
 
   ${Term} {
     height: 400px;
-    width: 700px;
+    width: 900px;
     min-height: 380px;
     max-height: 100%;
     max-width: 100%;

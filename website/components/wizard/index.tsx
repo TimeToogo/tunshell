@@ -8,6 +8,8 @@ import { SessionKeys, SessionService } from "../../services/session";
 import { Script } from "../script";
 import { TunshellClient } from "../tunshell-client";
 import { LocationService, RELAY_SERVERS, RelayServer } from "../../services/location";
+import { WebUrlService } from "../../services/direct-web-url";
+import Link from "next/link";
 
 const scriptService = new InstallScriptService();
 const localOptions = InstallScriptService.getOptions(InstallScriptType.Local);
@@ -16,6 +18,8 @@ const targetOptions = InstallScriptService.getOptions(InstallScriptType.Target);
 const locationService = new LocationService();
 
 const sessionService = new SessionService();
+
+const urlService = new WebUrlService();
 
 enum State {
   Initial,
@@ -149,6 +153,7 @@ export const Wizard = () => {
                       <Button mode="inverted" onClick={() => setShowWebTerm(true)}>
                         Launch Shell
                       </Button>
+                      <Styled.LaunchShellLink target="_blank" href={urlService.createWebUrl(session)}>Shareable Link</Styled.LaunchShellLink>
                     </Styled.LaunchShell>
                   </>
                 ) : (

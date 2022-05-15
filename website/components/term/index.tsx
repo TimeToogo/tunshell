@@ -6,12 +6,14 @@ export interface TerminalEmulatorProps {
   fullScreen?: boolean;
   onEmulatorInitialised?: (emulator: TerminalEmulatorInterface, term: import("xterm").Terminal) => void;
   onClose?: () => void;
+  children?: any
 }
 
 export const TerminalEmulator: React.SFC<TerminalEmulatorProps> = ({
   fullScreen,
   onClose = () => {},
   onEmulatorInitialised = () => {},
+  children
 }) => {
   const viewportRef = useRef();
 
@@ -99,6 +101,7 @@ export const TerminalEmulator: React.SFC<TerminalEmulatorProps> = ({
           </Styled.Close>
           <Styled.TermViewport ref={viewportRef} />
         </Styled.Term>
+        {children}
       </Styled.FullScreenWrapper>
     );
   } else {

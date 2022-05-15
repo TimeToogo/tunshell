@@ -3,9 +3,9 @@ import * as Styled from "./styled";
 import { Container } from "../layout";
 import { COLOURS } from "../../theme/colours";
 
-export const Donate = () => {
+export const Donate = (props: any) => {
   return (
-    <Styled.Donate>
+    <Styled.Donate {...props}>
       <Container>
         <h4>Find this useful?</h4>
         <Styled.Button
