@@ -3,7 +3,7 @@ import { SessionKeys } from "./session";
 
 export class WebUrlService {
   public createWebUrl = (session: SessionKeys): string => {
-    return `${window.location.origin}/web#${session.localKey},${session.encryptionSecret},${session.relayServer.domain}`;
+    return `${window.location.origin}/term#${session.localKey},${session.encryptionSecret},${session.relayServer.domain}`;
   };
 
   public parseWebUrl = (urlString: string): SessionKeys | null => {
