@@ -41,6 +41,9 @@ main() {
     Darwin:x86_64*)    
         TARGET="x86_64-apple-darwin"
         ;;
+    Darwin:arm64*)    
+        TARGET="aarch64-apple-darwin"
+        ;;
     WindowsNT:x86_64*|MINGW64_NT*:x86_64*)
         TARGET="x86_64-pc-windows-msvc.exe"
         ;;

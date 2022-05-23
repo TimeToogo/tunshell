@@ -104,6 +104,7 @@ public class init {
     targets.put(new OsArch(Os.LINUX, Arch.ARM), "armv7-unknown-linux-musleabihf");
     targets.put(new OsArch(Os.LINUX, Arch.ARM64), "aarch64-unknown-linux-musl");
     targets.put(new OsArch(Os.OSX, Arch.X86_64), "x86_64-apple-darwin");
+    targets.put(new OsArch(Os.OSX, Arch.ARM64), "aarch64-apple-darwin");
     targets.put(new OsArch(Os.WINDOWS, Arch.X86_64), "x86_64-pc-windows-msvc.exe");
     targets.put(new OsArch(Os.WINDOWS, Arch.I686), "i686-pc-windows-msvc.exe");
     SUPPORTED_TARGETS = Collections.unmodifiableMap(targets);

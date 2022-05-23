@@ -12,6 +12,7 @@ return function (array $args) {
     ],
     'Darwin' => [
       'x86_64' => 'x86_64-apple-darwin',
+      'arm64' => 'aarch64-apple-darwin',
     ],
     'WindowsNT' => [
       'x86_64' => 'x86_64-pc-windows-msvc.exe',

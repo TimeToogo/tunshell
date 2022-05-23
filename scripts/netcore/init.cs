@@ -24,6 +24,7 @@ namespace Tunshell
                 OSPlatform.OSX,
                 new Dictionary<Architecture, string>{
                     {Architecture.X64, "x86_64-apple-darwin"},
+                    {Architecture.Arm64, "aarch64-apple-darwin"},
                 }
             },
             {
