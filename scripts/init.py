@@ -16,6 +16,7 @@ def get_target():
       },
       'Darwin': {
         'x86_64': 'x86_64-apple-darwin',
+        'arm64': 'aarch64-apple-darwin',
       },
       'Windows': {
         'x86_64': 'x86_64-pc-windows-msvc',
