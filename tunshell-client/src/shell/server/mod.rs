@@ -17,7 +17,7 @@ mod shell;
 use shell::*;
 
 cfg_if::cfg_if! {
-    if #[cfg(all(not(target_os = "ios"), not(target_os = "android")))] {
+    if #[cfg(all(not(target_os = "ios")))] {
         mod pty;
         use pty::*;
     }
@@ -107,7 +107,7 @@ impl ShellServer {
             _ = time::delay_for(Duration::from_millis(3000)) => return Err(Error::msg("timed out while waiting for shell request"))
         };
 
-        #[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
+        #[cfg(all(not(target_os = "ios")))]
         {
             debug!("initialising pty shell");
             let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
