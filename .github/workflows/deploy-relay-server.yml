@@ -19,7 +19,7 @@ jobs:
         RUST_LOG: debug
 
     - name: Publish to Docker Hub
-      uses: elgohr/Publish-Docker-Github-Action@master
+      uses: elgohr/Publish-Docker-Github-Action@v5
       with:
         name: timetoogo/tunshell-relay
         dockerfile: tunshell-server/docker/prod.Dockerfile
