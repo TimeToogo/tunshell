@@ -12,7 +12,7 @@ jobs:
     - uses: actions/checkout@v2
     
     - name: Run Tests
-      uses: elgohr/Publish-Docker-Github-Action@master
+      uses: elgohr/Publish-Docker-Github-Action@v5
       env:
         RUN_TESTS: true
       with:
