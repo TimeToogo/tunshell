@@ -458,7 +458,7 @@ mod tests {
     fn test_connect_write_then_close_one_side() {
         // TODO: fix flaky test
         if std::env::var("CI").is_ok() {
-            return; 
+            return;
         }
 
         Runtime::new().unwrap().block_on(async {

@@ -11,6 +11,8 @@ cfg_if::cfg_if! {
 mod proto;
 use proto::*;
 
+pub mod network;
+
 pub struct ShellKey {
     key: String,
 }

@@ -80,9 +80,9 @@ impl P2PConnection for UdpConnectionAdaptor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::{time::delay_for, runtime::Runtime};
     use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::{runtime::Runtime, time::delay_for};
 
     #[test]
     fn test_connect_simultaneous_open() {

@@ -7,7 +7,10 @@ use futures::TryFutureExt;
 use log::*;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::pin::Pin;
-use std::{time::Duration, task::{Context, Poll}};
+use std::{
+    task::{Context, Poll},
+    time::Duration,
+};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tunshell_shared::PeerJoinedPayload;
@@ -121,10 +124,10 @@ impl P2PConnection for TcpConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::FutureExt;
     use std::time::Duration;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::{runtime::Runtime, time::delay_for};
-    use futures::FutureExt;
 
     #[test]
     fn test_connect_via_connect() {

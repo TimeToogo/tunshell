@@ -1,7 +1,7 @@
 use crate::TunnelStream;
 use anyhow::Result;
 use async_trait::async_trait;
-use tunshell_shared::{PeerJoinedPayload};
+use tunshell_shared::PeerJoinedPayload;
 
 pub mod tcp;
 pub mod udp;

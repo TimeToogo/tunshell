@@ -13,8 +13,8 @@ use anyhow::{Error, Result};
 use futures::StreamExt;
 use remote_pty_common::channel;
 
-use crate::STOP_ON_SIGINT;
 use crate::shell::proto::{RemotePtyDataPayload, RemotePtyEventPayload, ShellServerMessage};
+use crate::STOP_ON_SIGINT;
 
 use super::ShellStream;
 

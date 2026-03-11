@@ -293,7 +293,7 @@ mod tests {
             length: 3,
             checksum: 0,
             payload: vec![1, 2, 3, 4],
-            resend_count: 0
+            resend_count: 0,
         };
 
         assert_eq!(packet.calculate_checksum(), 2061921599);

@@ -1,4 +1,6 @@
+use crate::shell::network::NetworkPeerConfig;
 use anyhow::Error;
+use tokio::net;
 use std::{convert::TryFrom, env, time::Duration};
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT: u64 = 10000; // ms
@@ -16,6 +18,7 @@ pub struct Config {
     echo_stdout: bool,
     enable_direct_connection: bool,
     dangerous_disable_relay_server_verification: bool,
+    network_peer_config: NetworkPeerConfig,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -75,6 +78,7 @@ impl Config {
             echo_stdout,
             enable_direct_connection: true,
             dangerous_disable_relay_server_verification: false,
+            network_peer_config: NetworkPeerConfig::default(),
         }
     }
 
@@ -87,6 +91,7 @@ impl Config {
         encryption_key: &str,
         enable_direct_connection: bool,
         echo_stdout: bool,
+        network_peer_config: NetworkPeerConfig,
     ) -> Self {
         Self {
             mode,
@@ -100,6 +105,7 @@ impl Config {
             enable_direct_connection,
             echo_stdout,
             dangerous_disable_relay_server_verification: false,
+            network_peer_config,
         }
     }
 
@@ -154,6 +160,10 @@ impl Config {
     pub fn set_dangerous_disable_relay_server_verification(&mut self, flag: bool) {
         log::warn!("disabling TLS cert verification for relay server");
         self.dangerous_disable_relay_server_verification = flag;
+    }
+
+    pub fn network_peer_config(&self) -> &NetworkPeerConfig {
+        &self.network_peer_config
     }
 }
 

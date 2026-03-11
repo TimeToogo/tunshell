@@ -326,7 +326,10 @@ impl Client {
     }
 
     async fn start_shell_client(&mut self, peer_socket: Box<dyn TunnelStream>) -> Result<u8> {
-        let mut client = crate::ShellClient::new(self.host_shell.take().unwrap())?;
+        let mut client = crate::ShellClient::new(
+            self.host_shell.take().unwrap(),
+            self.config.network_peer_config().clone(),
+        )?;
         let result = client
             .connect(peer_socket, ShellKey::new(self.config.encryption_key()))
             .await;
@@ -351,6 +354,8 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
+    use crate::network::NetworkPeerConfig;
+
     use super::*;
     use tokio::runtime::Runtime;
 
@@ -365,6 +370,7 @@ mod tests {
             "test",
             true,
             false,
+            NetworkPeerConfig::default(),
         );
         let mut client = Client::new(config, HostShell::new().unwrap());
 

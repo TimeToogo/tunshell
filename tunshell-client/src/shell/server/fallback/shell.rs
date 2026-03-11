@@ -1,5 +1,6 @@
 use super::super::ShellStream;
 use super::{InputStream, Interpreter, OutputStream, Token};
+use crate::shell::network::NetworkPeerConfig;
 use crate::shell::{proto::WindowSize, server::shell::Shell};
 use anyhow::{Error, Result};
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ use tokio::task::JoinHandle;
 pub(crate) struct FallbackShell {
     _interpreter_task: JoinHandle<Result<()>>,
     state: SharedState,
+    network_peer_config: NetworkPeerConfig,
 }
 
 #[derive(Clone)]
@@ -36,12 +38,17 @@ pub(super) struct Inner {
 }
 
 impl FallbackShell {
-    pub(in super::super) fn new(_term: &str, size: WindowSize) -> Self {
+    pub(in super::super) fn new(
+        _term: &str,
+        size: WindowSize,
+        network_peer_config: NetworkPeerConfig,
+    ) -> Self {
         let state = SharedState::new(size);
 
         let mut shell = Self {
             _interpreter_task: Interpreter::start(state.clone()),
             state,
+            network_peer_config,
         };
 
         shell.write_notice().unwrap();
@@ -95,6 +102,10 @@ impl Shell for FallbackShell {
         state
             .exit_code
             .ok_or_else(|| Error::msg("shell has not closed"))
+    }
+
+    fn network_peer_config(&self) -> &NetworkPeerConfig {
+        &self.network_peer_config
     }
 
     fn custom_io_handling(&self) -> bool {

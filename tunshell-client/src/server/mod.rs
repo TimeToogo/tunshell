@@ -1,7 +1,7 @@
 cfg_if::cfg_if! {
     if #[cfg(not(target_arch = "wasm32"))] {
         use tokio::io::{AsyncRead, AsyncWrite};
-        
+
         pub trait AsyncIO : AsyncRead + AsyncWrite + Send + Unpin {}
 
         pub mod tcp_stream;
@@ -33,7 +33,7 @@ cfg_if::cfg_if! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ClientMode, Config};
+    use crate::{ClientMode, Config, network::NetworkPeerConfig};
     use tokio::runtime::Runtime;
 
     #[test]
@@ -46,7 +46,8 @@ mod tests {
             443,
             "test",
             true,
-            false
+            false,
+            NetworkPeerConfig::default(),
         );
 
         let result = Runtime::new()

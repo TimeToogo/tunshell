@@ -1,4 +1,4 @@
-use super::{UdpConnectionVars, UdpPacket, MAX_PACKET_SIZE, SequenceNumber, UdpPacketType};
+use super::{SequenceNumber, UdpConnectionVars, UdpPacket, UdpPacketType, MAX_PACKET_SIZE};
 use log::*;
 use std::cmp;
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,7 @@ impl UdpConnectionVars {
                 self.peer_ack_number,
                 self.peer_window
             );
-            
+
             self.window_wakers
                 .push((cx.waker().clone(), packet.end_sequence_number()));
             return Poll::Pending;
@@ -31,7 +31,7 @@ impl UdpConnectionVars {
         sequence_number < self.max_send_sequence_number()
     }
 
-    pub(super) fn max_send_sequence_number(&self ) -> SequenceNumber {
+    pub(super) fn max_send_sequence_number(&self) -> SequenceNumber {
         self.peer_ack_number + SequenceNumber(cmp::min(self.peer_window, self.transit_window))
     }
 
@@ -40,7 +40,8 @@ impl UdpConnectionVars {
     }
 
     pub(super) fn wait_until_decongested(&mut self, waker: Waker) {
-        self.window_wakers.push((waker, self.sequence_number + SequenceNumber(1)));
+        self.window_wakers
+            .push((waker, self.sequence_number + SequenceNumber(1)));
     }
 
     pub(super) fn increase_transit_window_after_send(&mut self) {
@@ -71,7 +72,8 @@ impl UdpConnectionVars {
         let max_sequence_number = self.max_send_sequence_number();
 
         // Determine the number of packets we can now send form those are waiting.
-        let (ready_wakers, pending_wakers) = self.window_wakers
+        let (ready_wakers, pending_wakers) = self
+            .window_wakers
             .drain(..)
             .partition(|(_, end_sequence_number)| end_sequence_number < &max_sequence_number);
 
@@ -237,7 +239,7 @@ mod tests {
         if std::env::var("CI").is_ok() {
             return;
         }
-        
+
         Runtime::new().unwrap().block_on(async {
             let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 

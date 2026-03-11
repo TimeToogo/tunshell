@@ -2,8 +2,9 @@ use super::{
     ShellClientMessage, ShellClientStream, ShellServerMessage, StartShellPayload, WindowSize,
 };
 use crate::{
-    shell::proto::ShellStartedPayload, util::delay::delay_for, ShellKey,
-    TunnelStream,
+    shell::{network::NetworkPeerConfig, proto::ShellStartedPayload},
+    util::delay::delay_for,
+    ShellKey, TunnelStream,
 };
 use anyhow::{Context, Error, Result};
 use futures::stream::StreamExt;
@@ -32,13 +33,20 @@ cfg_if::cfg_if! {
 
 pub struct ShellClient {
     pub(crate) host_shell: HostShell,
+    pub(crate) network_peer_config: NetworkPeerConfig,
 }
 
 type ShellStream = ShellClientStream<Compat<Box<dyn TunnelStream>>>;
 
 impl ShellClient {
-    pub(crate) fn new(host_shell: HostShell) -> Result<ShellClient> {
-        Ok(ShellClient { host_shell })
+    pub(crate) fn new(
+        host_shell: HostShell,
+        network_peer_config: NetworkPeerConfig,
+    ) -> Result<ShellClient> {
+        Ok(ShellClient {
+            host_shell,
+            network_peer_config,
+        })
     }
 
     pub(crate) async fn connect(
@@ -66,6 +74,8 @@ impl ShellClient {
                 remote_pty_support: true,
                 #[cfg(not(unix))]
                 remote_pty_support: false,
+                // we invert the peer config because the remote will have the inverse view of the network
+                network_peer_config: self.network_peer_config.invert(),
             }))
             .await?;
 
@@ -134,6 +144,10 @@ impl ShellClient {
         let mut stdin = self.host_shell.stdin()?;
         let mut stdout = self.host_shell.stdout()?;
         let mut resize_watcher = self.host_shell.resize_watcher()?;
+        let (network_peer, mut network_peer_rx, mut network_peer_tx) =
+            crate::shell::network::NetworkPeer::new(self.network_peer_config.clone()).await;
+
+        tokio::spawn(network_peer.run());
 
         loop {
             info!("waiting for shell message");
@@ -157,6 +171,9 @@ impl ShellClient {
                         info!("received {} bytes from remote shell", payload.len());
                         stdout.write(payload.as_slice()).await?;
                     }
+                    Some(Ok(ShellServerMessage::Network(payload))) => {
+                        let _ = network_peer_tx.send(payload).await;
+                    }
                     Some(Ok(ShellServerMessage::Exited(code))) => {
                         info!("remote shell exited with code {}", code);
                         return Ok(code);
@@ -175,6 +192,12 @@ impl ShellClient {
                 size = resize_watcher.next() => match size {
                     Ok(size) => stream.write(&ShellClientMessage::Resize(WindowSize::from(size))).await?,
                     Err(err) => error!("Error received from terminal resize event: {}", err)
+                },
+                network_msg = network_peer_rx.recv() => match network_msg {
+                    Some(network_msg) => stream.write(&ShellClientMessage::Network(network_msg)).await?,
+                    None => {
+                        debug!("network peer channel closed");
+                    }
                 }
             }
         }
@@ -191,7 +214,7 @@ mod tests {
 
     #[test]
     fn test_new_shell_client() {
-        ShellClient::new(HostShell::new().unwrap()).unwrap();
+        ShellClient::new(HostShell::new().unwrap(), NetworkPeerConfig::default()).unwrap();
     }
 
     #[test]
@@ -209,7 +232,7 @@ mod tests {
 
             let mock_stream = Cursor::new(mock_data).compat();
 
-            ShellClient::new(HostShell::new().unwrap())
+            ShellClient::new(HostShell::new().unwrap(), NetworkPeerConfig::default())
                 .unwrap()
                 .connect(Box::new(mock_stream), ShellKey::new("MyKey"))
                 .await
@@ -226,7 +249,7 @@ mod tests {
 
             timeout(
                 Duration::from_millis(5000),
-                ShellClient::new(HostShell::new().unwrap())
+                ShellClient::new(HostShell::new().unwrap(), NetworkPeerConfig::default())
                     .unwrap()
                     .connect(Box::new(mock_stream), ShellKey::new("CorrectKey")),
             )
@@ -253,7 +276,7 @@ mod tests {
 
             timeout(
                 Duration::from_millis(5000),
-                ShellClient::new(HostShell::new().unwrap())
+                ShellClient::new(HostShell::new().unwrap(), NetworkPeerConfig::default())
                     .unwrap()
                     .connect(Box::new(mock_stream), ShellKey::new("CorrectKey")),
             )

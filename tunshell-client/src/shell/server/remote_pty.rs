@@ -4,6 +4,7 @@ use crate::shell::proto::{
 
 use super::shell::Shell;
 use super::ShellStream;
+use crate::shell::network::{NetworkPeer, NetworkPeerConfig};
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -29,6 +30,7 @@ pub struct RemotePtyShell {
     con_id: u32,
     read_tx: UnboundedSender<(u32, Result<Vec<u8>>)>,
     state: Option<StreamingState>,
+    network_peer_config: NetworkPeerConfig,
 }
 
 struct StreamingState {
@@ -38,7 +40,11 @@ struct StreamingState {
 }
 
 impl RemotePtyShell {
-    pub(super) async fn new(term: &str, color: bool) -> Result<Self> {
+    pub(super) async fn new(
+        term: &str,
+        color: bool,
+        network_peer_config: NetworkPeerConfig,
+    ) -> Result<Self> {
         info!("creating remote pty shell");
 
         let path = download_rpty_bash().await?;
@@ -72,11 +78,17 @@ impl RemotePtyShell {
                 sock_listener,
                 read_rx,
             }),
+            network_peer_config,
         })
     }
 
     async fn do_stream_io(mut self: Pin<&mut Self>, stream: &mut ShellStream) -> Result<()> {
         let mut state = self.state.take().unwrap();
+        let (mut network_peer, mut network_peer_rx, network_peer_tx) =
+            NetworkPeer::new(self.network_peer_config.clone()).await;
+
+        tokio::spawn(network_peer.run());
+
         loop {
             tokio::select! {
                 new_con = state.sock_listener.accept() => match new_con {
@@ -87,9 +99,18 @@ impl RemotePtyShell {
                     Some(new_read) => self.handle_new_read(stream, new_read.0, new_read.1).await?,
                     None => return Err(Error::msg("failed to read message"))
                 },
+                network_msg = network_peer_rx.recv() => match network_msg {
+                    Some(network_msg) => stream.write(&ShellServerMessage::Network(network_msg)).await?,
+                    None => {
+                        debug!("network peer channel closed");
+                    }
+                },
                 msg = stream.next() => match msg {
                     Some(Ok(ShellClientMessage::RemotePtyData(payload))) => {
                         self.handle_data(stream, payload).await?;
+                    }
+                    Some(Ok(ShellClientMessage::Network(payload))) => {
+                        let _ = network_peer_tx.send(payload);
                     }
                     Some(Ok(message)) => {
                         return Err(Error::msg(format!("received unexpected message from shell client {:?}", message)));
@@ -235,6 +256,10 @@ impl Shell for RemotePtyShell {
 
     fn exit_code(&self) -> Result<u8> {
         unreachable!()
+    }
+
+    fn network_peer_config(&self) -> &NetworkPeerConfig {
+        &self.network_peer_config
     }
 
     fn custom_io_handling(&self) -> bool {

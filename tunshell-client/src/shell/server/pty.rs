@@ -1,4 +1,5 @@
 use super::{get_default_shell, shell::Shell, DefaultShell, ShellStream};
+use crate::network::NetworkPeerConfig;
 use crate::shell::proto::WindowSize;
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
@@ -23,6 +24,7 @@ pub struct PtyShell {
     reader_rx: Receiver<Vec<u8>>,
     recv_buff: Vec<u8>,
     writer_tx: Sender<Option<Vec<u8>>>,
+    network_peer_config: NetworkPeerConfig,
 }
 
 #[derive(Clone)]
@@ -32,7 +34,12 @@ struct ShellState {
 }
 
 impl PtyShell {
-    pub(super) fn new(term: &str, shell: Option<&str>, size: WindowSize) -> Result<Self> {
+    pub(super) fn new(
+        term: &str,
+        shell: Option<&str>,
+        size: WindowSize,
+        network_peer_config: NetworkPeerConfig,
+    ) -> Result<Self> {
         info!("creating pty shell");
         let pty = panic::catch_unwind(|| {
             let pty_system = native_pty_system();
@@ -85,6 +92,7 @@ impl PtyShell {
             reader_rx,
             recv_buff: vec![],
             writer_tx,
+            network_peer_config,
         })
     }
 
@@ -214,6 +222,10 @@ impl Shell for PtyShell {
         }
     }
 
+    fn network_peer_config(&self) -> &NetworkPeerConfig {
+        &self.network_peer_config
+    }
+
     fn custom_io_handling(&self) -> bool {
         false
     }
@@ -334,8 +346,13 @@ mod tests {
     #[cfg(unix)]
     fn test_shell_pty_exit_on_error() {
         Runtime::new().unwrap().block_on(async {
-            let mut pty: PtyShell = PtyShell::new("", Some("/bin/bash"), WindowSize(80, 80))
-                .expect("Failed to initialise ShellPty");
+            let mut pty: PtyShell = PtyShell::new(
+                "",
+                Some("/bin/bash"),
+                WindowSize(80, 80),
+                NetworkPeerConfig::default(),
+            )
+            .expect("Failed to initialise ShellPty");
 
             tokio::time::delay_for(Duration::from_millis(10)).await;
 

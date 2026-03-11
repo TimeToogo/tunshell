@@ -5,20 +5,20 @@ mod negotiator;
 mod orchestrator;
 mod packet;
 mod receiver;
-mod sender;
 mod resender;
 mod rtt_estimator;
-mod state;
+mod sender;
 mod seq_number;
+mod state;
 
 use congestion::*;
 use negotiator::*;
 use orchestrator::*;
 use packet::*;
-use sender::*;
 use resender::*;
-use state::*;
+use sender::*;
 use seq_number::*;
+use state::*;
 
 pub use config::*;
 pub use connection::*;

@@ -1,5 +1,10 @@
-use super::{ShellClientMessage, ShellServerMessage, ShellServerStream, proto::ShellStartedPayload};
-use crate::{ShellKey, TunnelStream};
+use super::{
+    proto::ShellStartedPayload, ShellClientMessage, ShellServerMessage, ShellServerStream,
+};
+use crate::{
+    shell::network::{self, NetworkPeer, NetworkPeerConfig},
+    ShellKey, TunnelStream,
+};
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
 use log::*;
@@ -58,7 +63,9 @@ impl ShellServer {
         let (shell_type, mut shell) = self.start_shell(&mut stream).await?;
         info!("shell started");
 
-        stream.write(&ShellServerMessage::ShellStarted(shell_type)).await?;
+        stream
+            .write(&ShellServerMessage::ShellStarted(shell_type))
+            .await?;
 
         if shell.custom_io_handling() {
             shell.stream_io(&mut stream).await?;
@@ -96,7 +103,10 @@ impl ShellServer {
         }
     }
 
-    async fn start_shell(&self, stream: &mut ShellStream) -> Result<(ShellStartedPayload, Box<dyn Shell + Send>)> {
+    async fn start_shell(
+        &self,
+        stream: &mut ShellStream,
+    ) -> Result<(ShellStartedPayload, Box<dyn Shell + Send>)> {
         let request = tokio::select! {
             message = stream.next() => match message {
                 Some(Ok(ShellClientMessage::StartShell(request))) => request,
@@ -110,7 +120,12 @@ impl ShellServer {
         #[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
         {
             debug!("initialising pty shell");
-            let pty_shell = PtyShell::new(request.term.as_ref(), None, request.size.clone());
+            let pty_shell = PtyShell::new(
+                request.term.as_ref(),
+                None,
+                request.size.clone(),
+                request.network_peer_config.clone(),
+            );
 
             if let Ok(pty_shell) = pty_shell {
                 return Ok((ShellStartedPayload::LocalPty, Box::new(pty_shell)));
@@ -119,20 +134,35 @@ impl ShellServer {
             warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
         }
 
-        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        #[cfg(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
         if request.remote_pty_support {
             debug!("initialising remote pty shell");
-            let rpty_shell = RemotePtyShell::new(&request.term, request.color).await;
+            let rpty_shell = RemotePtyShell::new(
+                &request.term,
+                request.color,
+                request.network_peer_config.clone(),
+            )
+            .await;
 
             if let Ok(rpty_shell) = rpty_shell {
                 return Ok((ShellStartedPayload::RemotePty, Box::new(rpty_shell)));
             }
 
-            warn!("failed to init remote pty shell: {:?}", rpty_shell.err().unwrap());
+            warn!(
+                "failed to init remote pty shell: {:?}",
+                rpty_shell.err().unwrap()
+            );
         }
 
         debug!("falling back to in-built shell");
-        let fallback_shell = FallbackShell::new(request.term.as_ref(), request.size.clone());
+        let fallback_shell = FallbackShell::new(
+            request.term.as_ref(),
+            request.size.clone(),
+            request.network_peer_config.clone(),
+        );
 
         Ok((ShellStartedPayload::Fallback, Box::new(fallback_shell)))
     }
@@ -148,6 +178,11 @@ impl ShellServer {
         } else {
             None
         };
+
+        let (mut network_peer, mut network_peer_rx, mut network_peer_tx) =
+            NetworkPeer::new(shell.network_peer_config().clone()).await;
+
+        tokio::spawn(network_peer.run());
 
         loop {
             info!("waiting for shell message");
@@ -186,6 +221,10 @@ impl ShellServer {
                         info!("received window resize: {:?}", size);
                         shell.resize(size)?;
                     }
+                    Some(Ok(ShellClientMessage::Network(message))) => {
+                        debug!("received network message from client shell: {:?}", message);
+                        let _ = network_peer_tx.send(message).await;
+                    }
                     Some(Ok(message)) => {
                         return Err(Error::msg(format!("received unexpected message from shell client {:?}", message)));
                     }
@@ -196,7 +235,13 @@ impl ShellServer {
                         warn!("client shell stream ended");
                         break;
                     }
-                }
+                },
+                network_msg = network_peer_rx.recv() => match network_msg {
+                    Some(network_msg) => stream.write(&ShellServerMessage::Network(network_msg)).await?,
+                    None => {
+                        debug!("network peer channel closed");
+                    }
+                },
             }
         }
 
@@ -303,7 +348,8 @@ mod tests {
                     term: "TERM".to_owned(),
                     color: true,
                     size: WindowSize(50, 50),
-                    remote_pty_support: false
+                    remote_pty_support: false,
+                    network_peer_config: NetworkPeerConfig::default(),
                 })
                 .serialise()
                 .unwrap()
@@ -364,6 +410,7 @@ mod tests {
                     color: true,
                     size: WindowSize(50, 50),
                     remote_pty_support: false,
+                    network_peer_config: NetworkPeerConfig::default(),
                 })
                 .serialise()
                 .unwrap()

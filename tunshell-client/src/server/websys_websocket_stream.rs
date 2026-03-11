@@ -1,22 +1,21 @@
 use crate::Config;
 use anyhow::Result;
+use futures::future::poll_fn;
+use log::*;
 use std::{
-    cmp,
-    io,
+    cmp, io,
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll, Waker},
-    sync::{Arc, Mutex}
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{ErrorEvent, MessageEvent, WebSocket};
-use log::*;
-use futures::future::poll_fn;
 
 pub struct ServerStream {
-    state: Arc<Mutex<State>>
+    state: Arc<Mutex<State>>,
 }
 
 struct State {
@@ -67,7 +66,7 @@ enum ConnectionState {
     Connecting,
     Open,
     Closing,
-    Closed
+    Closed,
 }
 
 impl ServerStream {
@@ -75,11 +74,15 @@ impl ServerStream {
         let state = State::new();
         let state = Arc::new(Mutex::new(state));
 
-        let url = format!("wss://{}:{}/ws", config.relay_host(), config.relay_ws_port());
+        let url = format!(
+            "wss://{}:{}/ws",
+            config.relay_host(),
+            config.relay_ws_port()
+        );
         let ws = WebSocket::new(&url).unwrap();
 
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
-        
+
         // Recv
         {
             let state = Arc::clone(&state);
@@ -89,7 +92,7 @@ impl ServerStream {
                     let array = js_sys::Uint8Array::new(&abuf);
                     let len = array.byte_length() as usize;
                     debug!("message event, received arraybuffer of {} bytes", len);
-                    
+
                     let mut state = state.lock().unwrap();
 
                     state.recv_buff.extend_from_slice(&array.to_vec()[..]);
@@ -131,7 +134,7 @@ impl ServerStream {
             callback.forget();
         }
 
-        // Open 
+        // Open
         {
             let state = Arc::clone(&state);
             let callback = Closure::wrap(Box::new(move |_| {
@@ -153,19 +156,24 @@ impl ServerStream {
                     // Wait until data is written to stream
                     let data = poll_fn(|cx| {
                         let mut state = state.lock().unwrap();
-                        
-                        if state.send_buff.len() == 0 || state.con_state == ConnectionState::Connecting {
+
+                        if state.send_buff.len() == 0
+                            || state.con_state == ConnectionState::Connecting
+                        {
                             state.send_wakers.push(cx.waker().clone());
                             return Poll::Pending;
                         }
 
                         Poll::Ready(state.send_buff.drain(..).collect::<Vec<u8>>())
-                    }).await;
+                    })
+                    .await;
 
                     {
                         let state = state.lock().unwrap();
 
-                        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed {
+                        if state.con_state == ConnectionState::Closing
+                            || state.con_state == ConnectionState::Closed
+                        {
                             break;
                         }
                     }
@@ -186,17 +194,18 @@ impl ServerStream {
                 // Wait until signalled to close
                 poll_fn(|cx| {
                     let mut state = state.lock().unwrap();
-                    
+
                     if state.con_state != ConnectionState::Closing {
                         state.close_wakers.push(cx.waker().clone());
                         return Poll::Pending;
                     }
 
                     Poll::Ready(())
-                }).await;
+                })
+                .await;
 
                 debug!("closing socket");
-                
+
                 match ws.close() {
                     Ok(_) => debug!("successfully closed websocket"),
                     Err(err) => debug!("error while closing websocket: {:?}", err),
@@ -209,9 +218,7 @@ impl ServerStream {
             });
         }
 
-        Ok(Self {
-            state
-        })
+        Ok(Self { state })
     }
 }
 
@@ -224,7 +231,9 @@ impl AsyncRead for ServerStream {
         let mut state = self.state.lock().unwrap();
 
         if state.recv_buff.len() == 0 {
-            if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed {
+            if state.con_state == ConnectionState::Closing
+                || state.con_state == ConnectionState::Closed
+            {
                 return Poll::Ready(Ok(0));
             }
 
@@ -247,7 +256,8 @@ impl AsyncWrite for ServerStream {
     ) -> Poll<Result<usize, io::Error>> {
         let mut state = self.state.lock().unwrap();
 
-        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed {
+        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed
+        {
             return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
         }
 
@@ -261,14 +271,12 @@ impl AsyncWrite for ServerStream {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         debug!("shutting down websocket");
         let mut state = self.state.lock().unwrap();
 
-        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed {
+        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed
+        {
             state.close_wakers.push(cx.waker().clone());
             return Poll::Pending;
         }
@@ -283,7 +291,8 @@ impl Drop for ServerStream {
     fn drop(&mut self) {
         let mut state = self.state.lock().unwrap();
 
-        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed {
+        if state.con_state == ConnectionState::Closing || state.con_state == ConnectionState::Closed
+        {
             return;
         }
 

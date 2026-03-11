@@ -6,7 +6,7 @@ mod shell;
 
 pub(self) use byte_channel::*;
 pub(self) use input_stream::*;
-pub(self) use output_stream::*;
 pub(self) use interpreter::*;
+pub(self) use output_stream::*;
 
 pub(crate) use shell::*;

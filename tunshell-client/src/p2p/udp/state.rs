@@ -1,4 +1,4 @@
-use super::{SendEvent, UdpConnectionConfig, UdpPacket, SequenceNumber};
+use super::{SendEvent, SequenceNumber, UdpConnectionConfig, UdpPacket};
 use log::*;
 use std::collections::HashMap;
 use std::task::Waker;
@@ -52,7 +52,7 @@ pub(super) struct UdpConnectionVars {
     pub(super) reassembled_buffer: Vec<u8>,
 
     /// Task wakers which a waiting on new received buffer becoming available
-    pub (super) recv_wakers: Vec<Waker>,
+    pub(super) recv_wakers: Vec<Waker>,
 
     /// The current estimated round trip time of the connection.
     pub(super) rtt_estimate: Duration,
@@ -95,7 +95,7 @@ impl UdpConnectionVars {
             peer_ack_number: SequenceNumber(0),
             sent_packets: HashMap::new(),
             event_sender: None,
-            close_wakers: vec![]
+            close_wakers: vec![],
         }
     }
 

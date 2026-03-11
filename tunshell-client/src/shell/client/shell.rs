@@ -5,7 +5,10 @@ use futures::channel::mpsc::UnboundedReceiver;
 use futures::stream::StreamExt;
 use io::{AsyncReadExt, AsyncWriteExt};
 use log::*;
-use std::{thread::{self, JoinHandle}, env};
+use std::{
+    env,
+    thread::{self, JoinHandle},
+};
 use tokio::io;
 
 pub struct HostShellStdin {

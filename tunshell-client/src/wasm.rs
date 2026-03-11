@@ -1,37 +1,42 @@
-use crate::{Config, Client, ClientMode, HostShell};
+use crate::{Client, ClientMode, Config, HostShell};
+use js_sys::{Promise, Uint8Array};
+use log::*;
+use std::panic;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
-use js_sys::{Uint8Array, Promise};
 use wasm_bindgen_futures::JsFuture;
-use std::panic;
-use log::*;
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[wasm_bindgen] 
+#[wasm_bindgen]
 pub struct BrowserConfig {
     client_key: String,
     encryption_key: String,
     relay_server: String,
     term: TerminalEmulator,
-    terminate: Promise
+    terminate: Promise,
 }
 
 #[wasm_bindgen]
 impl BrowserConfig {
     #[wasm_bindgen(constructor)]
-    pub fn new(client_key: String, encryption_key: String, relay_server: String, term: TerminalEmulator, terminate: Promise) -> Self{
+    pub fn new(
+        client_key: String,
+        encryption_key: String,
+        relay_server: String,
+        term: TerminalEmulator,
+        terminate: Promise,
+    ) -> Self {
         Self {
             client_key,
             encryption_key,
             relay_server,
             term,
-            terminate
+            terminate,
         }
     }
 }
-
 
 #[wasm_bindgen(typescript_custom_section)]
 const TERMINAL_EMULATOR: &'static str = r#"
@@ -50,36 +55,25 @@ extern "C" {
     pub type TerminalEmulator;
 
     #[wasm_bindgen(method, js_name = data)]
-    pub async fn data(
-        this: &TerminalEmulator,
-    ) -> JsValue;
+    pub async fn data(this: &TerminalEmulator) -> JsValue;
 
     #[wasm_bindgen(method, js_name = resize)]
-    pub async fn resize(
-        this: &TerminalEmulator,
-    ) -> JsValue;
+    pub async fn resize(this: &TerminalEmulator) -> JsValue;
 
     #[wasm_bindgen(method, js_name = write)]
-    pub async fn write(
-        this: &TerminalEmulator,
-        data: Uint8Array,
-    );
+    pub async fn write(this: &TerminalEmulator, data: Uint8Array);
 
     #[wasm_bindgen(method, js_name = size)]
-    pub fn size(
-        this: &TerminalEmulator
-    ) -> JsValue;
+    pub fn size(this: &TerminalEmulator) -> JsValue;
 
     #[wasm_bindgen(method, js_name = clone)]
-    pub fn clone(
-        this: &TerminalEmulator
-    ) -> TerminalEmulator;
+    pub fn clone(this: &TerminalEmulator) -> TerminalEmulator;
 }
 
 #[wasm_bindgen]
 pub async fn tunshell_init_client(config: BrowserConfig) {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    
+
     if let Err(err) = console_log::init_with_level(log::Level::Debug) {
         warn!("failed to set log level: {}", err);
     }
@@ -94,9 +88,8 @@ pub async fn tunshell_init_client(config: BrowserConfig) {
         443,
         &config.encryption_key,
         false,
-        false
+        false,
     );
-
 
     let mut client = Client::new(config, host_shell);
     let terminate = JsFuture::from(terminate);

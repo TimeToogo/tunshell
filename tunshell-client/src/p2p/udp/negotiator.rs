@@ -343,7 +343,10 @@ mod tests {
             let con1 = task.await.unwrap();
 
             assert_eq!(sync_packet.sequence_number, con1.sequence_number);
-            assert_eq!(sync_packet.sequence_number, con1.peer_ack_number + SequenceNumber(1));
+            assert_eq!(
+                sync_packet.sequence_number,
+                con1.peer_ack_number + SequenceNumber(1)
+            );
             assert_eq!(con1.peer_window, 5000);
             assert_eq!(con1.state, UdpConnectionState::SentSync);
         });
@@ -403,7 +406,10 @@ mod tests {
             let con1 = task.await.unwrap();
 
             assert_eq!(reply_packet.sequence_number, con1.sequence_number);
-            assert_eq!(reply_packet.sequence_number, con1.peer_ack_number + SequenceNumber(1));
+            assert_eq!(
+                reply_packet.sequence_number,
+                con1.peer_ack_number + SequenceNumber(1)
+            );
             assert_eq!(con1.peer_window, 5000);
             assert_eq!(con1.state, UdpConnectionState::WaitingForSync);
         });

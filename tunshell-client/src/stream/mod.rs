@@ -9,7 +9,6 @@ pub use relay_stream::*;
 
 pub trait TunnelStream: AsyncRead + AsyncWrite + Send + Unpin {}
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

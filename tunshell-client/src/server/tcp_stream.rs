@@ -1,13 +1,13 @@
 use crate::Config;
 use anyhow::{bail, Context as AnyhowContext, Result};
-use std::{time::Duration, net::ToSocketAddrs};
+use std::{net::ToSocketAddrs, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
 
 pub struct TcpServerStream {
-    inner: TcpStream
+    inner: TcpStream,
 }
 
 impl TcpServerStream {

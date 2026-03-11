@@ -1,5 +1,4 @@
 use crate::stream::TunnelStream;
-use tunshell_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
 use futures::stream::Stream;
 use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -8,6 +7,7 @@ use std::result::Result as StdResult;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tunshell_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
 
 pub struct RelayStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin> {
     message_stream: Arc<Mutex<MessageStream<ClientMessage, ServerMessage, S>>>,
@@ -159,10 +159,10 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> TunnelStream fo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tunshell_shared::Message;
     use futures::io::Cursor;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;
+    use tunshell_shared::Message;
 
     #[test]
     fn test_relay_stream_read_valid_messages() {
