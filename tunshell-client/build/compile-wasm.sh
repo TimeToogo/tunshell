@@ -26,4 +26,4 @@ mv Cargo.toml.new Cargo.toml
 
 wasm-pack build
 mkdir -p ../website/services/wasm/
-cp -aR pkg/* ../website/services/wasm/
+cp -vaR pkg/* ../website/services/wasm/
