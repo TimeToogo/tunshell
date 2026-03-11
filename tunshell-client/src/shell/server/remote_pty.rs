@@ -84,7 +84,7 @@ impl RemotePtyShell {
 
     async fn do_stream_io(mut self: Pin<&mut Self>, stream: &mut ShellStream) -> Result<()> {
         let mut state = self.state.take().unwrap();
-        let (mut network_peer, mut network_peer_rx, network_peer_tx) =
+        let (mut network_peer, mut network_peer_rx, mut network_peer_tx) =
             NetworkPeer::new(self.network_peer_config.clone(), NetworkPeerRole::Server).await;
 
         tokio::spawn(network_peer.run());
