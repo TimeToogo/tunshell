@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
-import { TerminalEmulator as TerminalEmulatorInterface } from "../../services/wasm/tunshell_client";
+import type { TerminalEmulator as TerminalEmulatorInterface } from "../../services/wasm-client";
 import * as Styled from "./styled";
 
 export interface TerminalEmulatorProps {
@@ -58,7 +58,9 @@ export const TerminalEmulator = ({
     initialisedTerm.loadAddon(fitAddon);
     initialisedTerm.open(viewportRef.current);
 
-    await new Promise((r) => initialisedTerm.writeln("Welcome to the tunshell web terminal\r\n", r));
+    await new Promise<void>((resolve) =>
+      initialisedTerm.writeln("Welcome to the tunshell web terminal\r\n", () => resolve()),
+    );
 
     setTerm(initialisedTerm);
     setFitAddon(fitAddon);
@@ -82,7 +84,7 @@ export const TerminalEmulator = ({
             stop.dispose();
           });
         }),
-      write: (data) => new Promise<void>((r) => term.write(data, r)),
+      write: (data) => new Promise<void>((resolve) => term.write(data, () => resolve())),
       size: () => new Uint16Array([term.cols, term.rows]),
       clone: () => ({ ...emulator }),
     };

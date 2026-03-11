@@ -1,16 +1,14 @@
-import { TerminalEmulator } from "./wasm/tunshell_client";
+import { loadTunshellClientModule, TerminalEmulator, TunshellClientModule } from "./wasm-client";
 import { SessionKeys } from "./session";
 
-type ClientModule = typeof import("./wasm/tunshell_client");
-
 export class TunshellWasm {
-  private module: ClientModule;
-  private terminateCallback: () => void | undefined;
+  private module: TunshellClientModule;
+  private terminateCallback?: () => void;
 
   constructor() {}
 
   init = async () => {
-    let module = await import("./wasm/tunshell_client").catch((e) => {
+    let module = await loadTunshellClientModule().catch((e) => {
       console.error(e);
       throw e;
     });
@@ -19,8 +17,8 @@ export class TunshellWasm {
   };
 
   connect = async (session: SessionKeys, emulator: TerminalEmulator) => {
-    let terminatePromise = new Promise((resolve) => {
-      this.terminateCallback = resolve;
+    let terminatePromise = new Promise<void>((resolve) => {
+      this.terminateCallback = () => resolve();
     });
 
     const config = new this.module.BrowserConfig(

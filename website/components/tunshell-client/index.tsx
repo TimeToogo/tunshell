@@ -1,7 +1,7 @@
 import dynamic from "next/dynamic";
 import { TunshellWasm } from "../../services/tunshell-wasm";
 import { useEffect, useState } from "react";
-import { TerminalEmulator as TerminalEmulatorInterface } from "../../services/wasm/tunshell_client";
+import type { TerminalEmulator as TerminalEmulatorInterface } from "../../services/wasm-client";
 import { TerminalEmulator } from "../term";
 import { SessionKeys } from "../../services/session";
 
@@ -46,4 +46,5 @@ export const TunshellClient = dynamic<TunshellClientProps>({
       );
     };
   },
+  ssr: false,
 });
