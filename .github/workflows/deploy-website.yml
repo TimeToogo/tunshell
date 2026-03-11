@@ -45,7 +45,7 @@ jobs:
       working-directory: website
     
     - name: Deploy to S3 (wasm)
-      run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE out/ s3://tunshell-web/
+      run: aws s3 cp --recursive --content-type application/wasm --exclude "*" --include "*.wasm" --acl=public-read --cache-control max-age=7200 --metadata-directive REPLACE services/wasm/ s3://tunshell-web/wasm/
       working-directory: website
     
     - name: Invalidate CloudFront
