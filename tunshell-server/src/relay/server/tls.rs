@@ -117,7 +117,7 @@ mod tests {
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         runtime::Runtime,
-        time::delay_for
+        time::delay_for,
     };
     use tokio_rustls::{client, TlsConnector};
 

@@ -258,7 +258,10 @@ fn parse_network_binding(value: &str) -> Result<NetworkPeerBinding, Error> {
         )));
     };
 
-    if local.contains("->") || local.contains("<-") || remote.contains("->") || remote.contains("<-")
+    if local.contains("->")
+        || local.contains("<-")
+        || remote.contains("->")
+        || remote.contains("<-")
     {
         return Err(Error::msg(format!(
             "network binding contains multiple direction arrows: {}",

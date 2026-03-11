@@ -132,7 +132,7 @@ impl Message for ServerMessage {
             Self::StartRelayMode => vec![],
             Self::Relay(payload) => payload.data.clone(),
         };
-        
+
         RawMessage::new(type_id, data)
     }
 

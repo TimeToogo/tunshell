@@ -114,9 +114,15 @@ async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection)
         (ClientMessage::DirectConnectBound(ports1), ClientMessage::DirectConnectBound(ports2)) => {
             (ports1, ports2)
         }
-        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectBound(_)) => return Ok(false),
-        (ClientMessage::DirectConnectBound(_), ClientMessage::DirectConnectFailed) => return Ok(false),
-        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectFailed) => return Ok(false),
+        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectBound(_)) => {
+            return Ok(false)
+        }
+        (ClientMessage::DirectConnectBound(_), ClientMessage::DirectConnectFailed) => {
+            return Ok(false)
+        }
+        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectFailed) => {
+            return Ok(false)
+        }
         msgs @ _ => {
             return Err(Error::msg(format!(
                 "unexpected message while attempting to bind for direct connection: {:?}",

@@ -1,4 +1,9 @@
-use crate::{Client, ClientMode, Config, HostShell};
+mod wasm_bindgen_futures {
+    pub use ::js_sys;
+    pub use ::wasm_bindgen_futures::*;
+}
+
+use crate::{network::NetworkPeerConfig, Client, ClientMode, Config, HostShell};
 use js_sys::{Promise, Uint8Array};
 use log::*;
 use std::panic;
@@ -71,33 +76,39 @@ extern "C" {
 }
 
 #[wasm_bindgen]
-pub async fn tunshell_init_client(config: BrowserConfig) {
-    panic::set_hook(Box::new(console_error_panic_hook::hook));
+pub fn tunshell_init_client(config: BrowserConfig) -> Promise {
+    wasm_bindgen_futures::future_to_promise(async move {
+        panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    if let Err(err) = console_log::init_with_level(log::Level::Debug) {
-        warn!("failed to set log level: {}", err);
-    }
+        if let Err(err) = console_log::init_with_level(log::Level::Debug) {
+            warn!("failed to set log level: {}", err);
+        }
 
-    let host_shell = HostShell::new(config.term).unwrap();
-    let terminate = config.terminate;
-    let config = Config::new(
-        ClientMode::Local,
-        &config.client_key,
-        &config.relay_server,
-        5000,
-        443,
-        &config.encryption_key,
-        false,
-        false,
-    );
+        let host_shell = HostShell::new(config.term).unwrap();
+        let terminate = JsFuture::from(config.terminate);
+        let config = Config::new(
+            ClientMode::Local,
+            &config.client_key,
+            &config.relay_server,
+            5000,
+            443,
+            &config.encryption_key,
+            false,
+            false,
+            NetworkPeerConfig::default(),
+        );
 
-    let mut client = Client::new(config, host_shell);
-    let terminate = JsFuture::from(terminate);
+        let mut client = Client::new(config, host_shell);
 
-    tokio::select! {
-        res = client.start_session() => if let Err(err) = res {
-            client.println(&format!("\r\nError occurred during session: {:?}", err)).await;
-        },
-        _ = terminate => info!("terminating client...")
-    }
+        tokio::select! {
+            res = client.start_session() => {
+                if let Err(err) = res {
+                    client.println(&format!("\r\nError occurred during session: {:?}", err)).await;
+                }
+            }
+            _ = terminate => info!("terminating client...")
+        }
+
+        Ok(JsValue::UNDEFINED)
+    })
 }

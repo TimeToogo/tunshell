@@ -1,7 +1,7 @@
 use log::*;
 use serde::{Deserialize, Serialize};
-use warp::{reject, Rejection, Reply};
 use std::env;
+use warp::{reject, Rejection, Reply};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ResponsePayload<'a> {
@@ -19,7 +19,7 @@ pub(crate) async fn get_info() -> Result<Box<dyn Reply>, Rejection> {
         Ok(domain_name) => domain_name,
         Err(err) => {
             error!("error while retrieving domain env var: {}", err);
-            
+
             return Err(reject::custom(InternalError));
         }
     };

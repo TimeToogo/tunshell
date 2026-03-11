@@ -1,34 +1,11 @@
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    io,
-    net::{SocketAddr, ToSocketAddrs},
-};
+use std::fmt::Display;
 
 use anyhow::{Error, Result};
-use futures::{
-    future::{BoxFuture, FutureExt},
-    stream::{FuturesUnordered, StreamExt},
-};
-use log::{debug, info};
+use log::info;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
-    net::{
-        udp::{RecvHalf as UdpRecvHalf, SendHalf as UdpSendHalf},
-        TcpListener, TcpStream, UdpSocket,
-    },
-    sync::mpsc::{Receiver, Sender},
-};
+use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::shell::{proto::ConId, NetworkMessage};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SocketAddrPreference {
-    Any,
-    V4,
-    V6,
-}
+use crate::shell::NetworkMessage;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Copy)]
 pub enum NetworkPeerBindingDirection {
@@ -114,158 +91,188 @@ impl NetworkPeerConfig {
     }
 }
 
-type TcpAcceptEvent = (
-    usize,
-    NetworkPeerBinding,
-    TcpListener,
-    std::io::Result<(TcpStream, SocketAddr)>,
-);
-type TcpAcceptFuture = BoxFuture<'static, TcpAcceptEvent>;
-
-type TcpReadEvent = (ConId, ReadHalf<TcpStream>, std::io::Result<Vec<u8>>);
-type TcpReadFuture = BoxFuture<'static, TcpReadEvent>;
-
-type UdpReadEvent = (ConId, UdpRecvHalf, std::io::Result<(Vec<u8>, SocketAddr)>);
-type UdpReadFuture = BoxFuture<'static, UdpReadEvent>;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NetworkPeerRole {
     Client,
     Server,
 }
 
-struct UdpBindingState {
-    receiver: Option<UdpRecvHalf>,
-    sender: UdpSendHalf,
-    target_addr: SocketAddr,
-    bound_locally: bool,
-    last_peer_addr: Option<SocketAddr>,
-    pending_payloads: Vec<Vec<u8>>,
-}
+cfg_if::cfg_if! {
+    if #[cfg(not(target_arch = "wasm32"))] {
+        use std::{
+            collections::HashMap,
+            io,
+            net::{SocketAddr, ToSocketAddrs},
+        };
 
-pub struct NetworkPeer {
-    config: NetworkPeerConfig,
-    rx: Receiver<NetworkMessage>,
-    tx: Sender<NetworkMessage>,
-    tcp_listeners: Vec<(NetworkPeerBinding, TcpListener)>,
-    tcp_pending: HashMap<ConId, TcpStream>,
-    tcp_pending_writes: HashMap<ConId, Vec<Vec<u8>>>,
-    tcp_connections: HashMap<ConId, WriteHalf<TcpStream>>,
-    udp_bindings: HashMap<ConId, UdpBindingState>,
-    next_tcp_con_id: ConId,
-}
-
-impl NetworkPeer {
-    pub async fn new(
-        config: NetworkPeerConfig,
-        role: NetworkPeerRole,
-    ) -> (Self, Receiver<NetworkMessage>, Sender<NetworkMessage>) {
-        let (recv_tx, recv_rx) = tokio::sync::mpsc::channel(100);
-        let (send_tx, send_rx) = tokio::sync::mpsc::channel(100);
-        let peer = Self {
-            config,
-            rx: recv_rx,
-            tx: send_tx,
-            tcp_listeners: Vec::new(),
-            tcp_pending: HashMap::new(),
-            tcp_pending_writes: HashMap::new(),
-            tcp_connections: HashMap::new(),
-            udp_bindings: HashMap::new(),
-            next_tcp_con_id: match role {
-                NetworkPeerRole::Client => 1,
-                NetworkPeerRole::Server => 2,
+        use futures::{
+            future::{BoxFuture, FutureExt},
+            stream::{FuturesUnordered, StreamExt},
+        };
+        use log::debug;
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+            net::{
+                udp::{RecvHalf as UdpRecvHalf, SendHalf as UdpSendHalf},
+                TcpListener, TcpStream, UdpSocket,
             },
         };
 
-        (peer, send_rx, recv_tx)
-    }
+        use crate::shell::proto::ConId;
 
-    pub async fn run(mut self) -> Result<()> {
-        for (binding_idx, binding) in self.config.bindings.clone().into_iter().enumerate() {
-            if let Err(err) = self.setup_binding(binding_idx as ConId + 1, &binding).await {
-                info!("error setting up network peer binding {}: {}", binding, err);
-                self.notice(format!(
-                    "error setting up network peer binding {}: {}",
-                    binding, err
-                ))
-                .await?;
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum SocketAddrPreference {
+            Any,
+            V4,
+            V6,
+        }
+
+        type TcpAcceptEvent = (
+            usize,
+            NetworkPeerBinding,
+            TcpListener,
+            std::io::Result<(TcpStream, SocketAddr)>,
+        );
+        type TcpAcceptFuture = BoxFuture<'static, TcpAcceptEvent>;
+
+        type TcpReadEvent = (ConId, ReadHalf<TcpStream>, std::io::Result<Vec<u8>>);
+        type TcpReadFuture = BoxFuture<'static, TcpReadEvent>;
+
+        type UdpReadEvent = (ConId, UdpRecvHalf, std::io::Result<(Vec<u8>, SocketAddr)>);
+        type UdpReadFuture = BoxFuture<'static, UdpReadEvent>;
+
+        struct UdpBindingState {
+            receiver: Option<UdpRecvHalf>,
+            sender: UdpSendHalf,
+            target_addr: SocketAddr,
+            bound_locally: bool,
+            last_peer_addr: Option<SocketAddr>,
+            pending_payloads: Vec<Vec<u8>>,
+        }
+
+        pub struct NetworkPeer {
+            config: NetworkPeerConfig,
+            rx: Receiver<NetworkMessage>,
+            tx: Sender<NetworkMessage>,
+            tcp_listeners: Vec<(NetworkPeerBinding, TcpListener)>,
+            tcp_pending: HashMap<ConId, TcpStream>,
+            tcp_pending_writes: HashMap<ConId, Vec<Vec<u8>>>,
+            tcp_connections: HashMap<ConId, WriteHalf<TcpStream>>,
+            udp_bindings: HashMap<ConId, UdpBindingState>,
+            next_tcp_con_id: ConId,
+        }
+
+        impl NetworkPeer {
+            pub async fn new(
+                config: NetworkPeerConfig,
+                role: NetworkPeerRole,
+            ) -> (Self, Receiver<NetworkMessage>, Sender<NetworkMessage>) {
+                let (recv_tx, recv_rx) = tokio::sync::mpsc::channel(100);
+                let (send_tx, send_rx) = tokio::sync::mpsc::channel(100);
+                let peer = Self {
+                    config,
+                    rx: recv_rx,
+                    tx: send_tx,
+                    tcp_listeners: Vec::new(),
+                    tcp_pending: HashMap::new(),
+                    tcp_pending_writes: HashMap::new(),
+                    tcp_connections: HashMap::new(),
+                    udp_bindings: HashMap::new(),
+                    next_tcp_con_id: match role {
+                        NetworkPeerRole::Client => 1,
+                        NetworkPeerRole::Server => 2,
+                    },
+                };
+
+                (peer, send_rx, recv_tx)
             }
-        }
 
-        let mut tcp_accepts = FuturesUnordered::new();
-        for (listener_idx, (binding, listener)) in std::mem::take(&mut self.tcp_listeners)
-            .into_iter()
-            .enumerate()
-        {
-            tcp_accepts.push(accept_once(listener_idx, binding, listener));
-        }
-
-        let mut tcp_reads = FuturesUnordered::new();
-        let mut udp_reads = FuturesUnordered::new();
-        for (&con_id, binding) in self.udp_bindings.iter_mut() {
-            let receiver = binding
-                .receiver
-                .take()
-                .expect("udp receiver should be present when network peer starts");
-            udp_reads.push(recv_udp_once(con_id, receiver));
-        }
-
-        loop {
-            tokio::select! {
-                message = self.rx.recv() => match message {
-                    None => {
-                        debug!("network peer channel closed");
-                        break;
-                    }
-                    Some(message) => {
-                        debug!("received network message: {:?}", message);
-                        if let Err(err) = self.handle_message(message, &mut tcp_reads).await {
-                            info!("error handling network message: {}", err);
-                        }
-                    }
-                },
-                accept = tcp_accepts.next(), if !tcp_accepts.is_empty() => {
-                    if let Some((listener_idx, binding, listener, result)) = accept {
-                        tcp_accepts.push(accept_once(listener_idx, binding.clone(), listener));
-
-                        match result {
-                            Ok((stream, addr)) => {
-                                let con_id = self.next_tcp_con_id();
-                                self.tcp_pending.insert(con_id, stream);
-                                info!(
-                                    "accepted new TCP connection from {} on listener {}, assigned ConId {}",
-                                    addr, listener_idx, con_id
-                                );
-                                self.tx
-                                    .send(NetworkMessage::TcpConnect(
-                                        con_id,
-                                        binding.remote_addr.clone(),
-                                        binding.remote_port,
-                                    ))
-                                    .await?;
-                            }
-                            Err(err) => {
-                                info!("error accepting TCP connection on listener {}: {}", listener_idx, err);
-                            }
-                        }
-                    }
-                },
-                read = tcp_reads.next(), if !tcp_reads.is_empty() => {
-                    if let Some((con_id, reader, result)) = read {
-                        self.handle_tcp_read(con_id, reader, result, &mut tcp_reads).await?;
-                    }
-                },
-                read = udp_reads.next(), if !udp_reads.is_empty() => {
-                    if let Some((con_id, receiver, result)) = read {
-                        udp_reads.push(recv_udp_once(con_id, receiver));
-                        self.handle_udp_read(con_id, result).await?;
+            pub async fn run(mut self) -> Result<()> {
+                for (binding_idx, binding) in self.config.bindings.clone().into_iter().enumerate() {
+                    if let Err(err) = self.setup_binding(binding_idx as ConId + 1, &binding).await {
+                        info!("error setting up network peer binding {}: {}", binding, err);
+                        self.notice(format!(
+                            "error setting up network peer binding {}: {}",
+                            binding, err
+                        ))
+                        .await?;
                     }
                 }
-            }
-        }
 
-        Ok(())
-    }
+                let mut tcp_accepts = FuturesUnordered::new();
+                for (listener_idx, (binding, listener)) in std::mem::take(&mut self.tcp_listeners)
+                    .into_iter()
+                    .enumerate()
+                {
+                    tcp_accepts.push(accept_once(listener_idx, binding, listener));
+                }
+
+                let mut tcp_reads = FuturesUnordered::new();
+                let mut udp_reads = FuturesUnordered::new();
+                for (&con_id, binding) in self.udp_bindings.iter_mut() {
+                    let receiver = binding
+                        .receiver
+                        .take()
+                        .expect("udp receiver should be present when network peer starts");
+                    udp_reads.push(recv_udp_once(con_id, receiver));
+                }
+
+                loop {
+                    tokio::select! {
+                        message = self.rx.recv() => match message {
+                            None => {
+                                debug!("network peer channel closed");
+                                break;
+                            }
+                            Some(message) => {
+                                debug!("received network message: {:?}", message);
+                                if let Err(err) = self.handle_message(message, &mut tcp_reads).await {
+                                    info!("error handling network message: {}", err);
+                                }
+                            }
+                        },
+                        accept = tcp_accepts.next(), if !tcp_accepts.is_empty() => {
+                            if let Some((listener_idx, binding, listener, result)) = accept {
+                                tcp_accepts.push(accept_once(listener_idx, binding.clone(), listener));
+
+                                match result {
+                                    Ok((stream, addr)) => {
+                                        let con_id = self.next_tcp_con_id();
+                                        self.tcp_pending.insert(con_id, stream);
+                                        info!(
+                                            "accepted new TCP connection from {} on listener {}, assigned ConId {}",
+                                            addr, listener_idx, con_id
+                                        );
+                                        self.tx
+                                            .send(NetworkMessage::TcpConnect(
+                                                con_id,
+                                                binding.remote_addr.clone(),
+                                                binding.remote_port,
+                                            ))
+                                            .await?;
+                                    }
+                                    Err(err) => {
+                                        info!("error accepting TCP connection on listener {}: {}", listener_idx, err);
+                                    }
+                                }
+                            }
+                        },
+                        read = tcp_reads.next(), if !tcp_reads.is_empty() => {
+                            if let Some((con_id, reader, result)) = read {
+                                self.handle_tcp_read(con_id, reader, result, &mut tcp_reads).await?;
+                            }
+                        },
+                        read = udp_reads.next(), if !udp_reads.is_empty() => {
+                            if let Some((con_id, receiver, result)) = read {
+                                udp_reads.push(recv_udp_once(con_id, receiver));
+                                self.handle_udp_read(con_id, result).await?;
+                            }
+                        }
+                    }
+                }
+
+                Ok(())
+            }
 
     async fn setup_binding(&mut self, con_id: ConId, binding: &NetworkPeerBinding) -> Result<()> {
         info!("setting up network peer binding: {}", binding);
@@ -518,133 +525,133 @@ impl NetworkPeer {
         self.next_tcp_con_id = con_id + 2;
         con_id
     }
-}
-
-fn resolve_socket_addr(addr: &str, port: u16, preference: SocketAddrPreference) -> Result<SocketAddr> {
-    let mut addrs = (addr, port).to_socket_addrs()?;
-    let first_addr = addrs
-        .next()
-        .ok_or_else(|| Error::msg(format!("failed to resolve socket address {}:{}", addr, port)))?;
-
-    if preference == SocketAddrPreference::Any || socket_addr_matches_preference(first_addr, preference) {
-        return Ok(first_addr);
-    }
-
-    addrs
-        .find(|addr| socket_addr_matches_preference(*addr, preference))
-        .ok_or_else(|| Error::msg(format!("failed to resolve socket address {}:{}", addr, port)))
-}
-
-fn resolve_socket_addrs_for_connect(addr: &str, port: u16) -> Result<Vec<SocketAddr>> {
-    let mut addrs: Vec<_> = (addr, port).to_socket_addrs()?.collect();
-    if addrs.is_empty() {
-        return Err(Error::msg(format!(
-            "failed to resolve socket address {}:{}",
-            addr, port
-        )));
-    }
-
-    addrs.sort_by_key(|addr| addr.is_ipv4());
-    Ok(addrs)
-}
-
-fn socket_addr_matches_preference(addr: SocketAddr, preference: SocketAddrPreference) -> bool {
-    match preference {
-        SocketAddrPreference::Any => true,
-        SocketAddrPreference::V4 => addr.is_ipv4(),
-        SocketAddrPreference::V6 => addr.is_ipv6(),
-    }
-}
-
-fn udp_addr_preference(binding: &NetworkPeerBinding) -> SocketAddrPreference {
-    match binding.local_addr.as_str() {
-        "localhost" => SocketAddrPreference::Any,
-        addr if addr.contains(':') => SocketAddrPreference::V6,
-        addr if addr.parse::<std::net::Ipv4Addr>().is_ok() || addr == "0.0.0.0" => {
-            SocketAddrPreference::V4
         }
-        _ => SocketAddrPreference::Any,
-    }
-}
 
-fn udp_bind_addr(addr: &str, port: u16, target_addr: SocketAddr) -> String {
-    if addr == "localhost" {
-        match target_addr {
-            SocketAddr::V4(_) => format!("127.0.0.1:{}", port),
-            SocketAddr::V6(_) => format!("[::1]:{}", port),
+        fn resolve_socket_addr(addr: &str, port: u16, preference: SocketAddrPreference) -> Result<SocketAddr> {
+            let mut addrs = (addr, port).to_socket_addrs()?;
+            let first_addr = addrs
+                .next()
+                .ok_or_else(|| Error::msg(format!("failed to resolve socket address {}:{}", addr, port)))?;
+
+            if preference == SocketAddrPreference::Any || socket_addr_matches_preference(first_addr, preference) {
+                return Ok(first_addr);
+            }
+
+            addrs
+                .find(|addr| socket_addr_matches_preference(*addr, preference))
+                .ok_or_else(|| Error::msg(format!("failed to resolve socket address {}:{}", addr, port)))
         }
-    } else {
-        format!("{}:{}", addr, port)
-    }
-}
 
-fn udp_unspecified_bind_addr(target_addr: SocketAddr) -> &'static str {
-    match target_addr {
-        SocketAddr::V4(_) => "0.0.0.0:0",
-        SocketAddr::V6(_) => "[::]:0",
-    }
-}
+        fn resolve_socket_addrs_for_connect(addr: &str, port: u16) -> Result<Vec<SocketAddr>> {
+            let mut addrs: Vec<_> = (addr, port).to_socket_addrs()?.collect();
+            if addrs.is_empty() {
+                return Err(Error::msg(format!(
+                    "failed to resolve socket address {}:{}",
+                    addr, port
+                )));
+            }
 
-async fn connect_socket_addr(addr: &str, port: u16) -> io::Result<TcpStream> {
-    let addrs = resolve_socket_addrs_for_connect(addr, port)
-        .map_err(|err| io::Error::new(io::ErrorKind::AddrNotAvailable, err.to_string()))?;
-
-    let mut last_err = None;
-    for addr in addrs {
-        match TcpStream::connect(addr).await {
-            Ok(stream) => return Ok(stream),
-            Err(err) => last_err = Some(err),
+            addrs.sort_by_key(|addr| addr.is_ipv4());
+            Ok(addrs)
         }
-    }
 
-    Err(last_err.unwrap_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::AddrNotAvailable,
-            format!("failed to resolve socket address {}:{}", addr, port),
-        )
-    }))
-}
+        fn socket_addr_matches_preference(addr: SocketAddr, preference: SocketAddrPreference) -> bool {
+            match preference {
+                SocketAddrPreference::Any => true,
+                SocketAddrPreference::V4 => addr.is_ipv4(),
+                SocketAddrPreference::V6 => addr.is_ipv6(),
+            }
+        }
 
-fn accept_once(listener_idx: usize, binding: NetworkPeerBinding, mut listener: TcpListener) -> TcpAcceptFuture {
-    async move {
-        let result = listener.accept().await;
-        (listener_idx, binding, listener, result)
-    }
-    .boxed()
-}
+        fn udp_addr_preference(binding: &NetworkPeerBinding) -> SocketAddrPreference {
+            match binding.local_addr.as_str() {
+                "localhost" => SocketAddrPreference::Any,
+                addr if addr.contains(':') => SocketAddrPreference::V6,
+                addr if addr.parse::<std::net::Ipv4Addr>().is_ok() || addr == "0.0.0.0" => {
+                    SocketAddrPreference::V4
+                }
+                _ => SocketAddrPreference::Any,
+            }
+        }
 
-fn read_tcp_once(con_id: ConId, mut reader: ReadHalf<TcpStream>) -> TcpReadFuture {
-    async move {
-        let mut buff = [0u8; 4096];
-        let result = reader.read(&mut buff).await.map(|read| buff[..read].to_vec());
-        (con_id, reader, result)
-    }
-    .boxed()
-}
+        fn udp_bind_addr(addr: &str, port: u16, target_addr: SocketAddr) -> String {
+            if addr == "localhost" {
+                match target_addr {
+                    SocketAddr::V4(_) => format!("127.0.0.1:{}", port),
+                    SocketAddr::V6(_) => format!("[::1]:{}", port),
+                }
+            } else {
+                format!("{}:{}", addr, port)
+            }
+        }
 
-fn recv_udp_once(con_id: ConId, mut receiver: UdpRecvHalf) -> UdpReadFuture {
-    async move {
-        let mut buff = vec![0u8; 65535];
-        let result = receiver
-            .recv_from(buff.as_mut_slice())
-            .await
-            .map(|(read, peer_addr)| {
-                buff.truncate(read);
-                (buff, peer_addr)
-            });
-        (con_id, receiver, result)
-    }
-    .boxed()
-}
+        fn udp_unspecified_bind_addr(target_addr: SocketAddr) -> &'static str {
+            match target_addr {
+                SocketAddr::V4(_) => "0.0.0.0:0",
+                SocketAddr::V6(_) => "[::]:0",
+            }
+        }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        runtime::Runtime,
-        time::{delay_for, Duration},
-    };
+        async fn connect_socket_addr(addr: &str, port: u16) -> io::Result<TcpStream> {
+            let addrs = resolve_socket_addrs_for_connect(addr, port)
+                .map_err(|err| io::Error::new(io::ErrorKind::AddrNotAvailable, err.to_string()))?;
+
+            let mut last_err = None;
+            for addr in addrs {
+                match TcpStream::connect(addr).await {
+                    Ok(stream) => return Ok(stream),
+                    Err(err) => last_err = Some(err),
+                }
+            }
+
+            Err(last_err.unwrap_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::AddrNotAvailable,
+                    format!("failed to resolve socket address {}:{}", addr, port),
+                )
+            }))
+        }
+
+        fn accept_once(listener_idx: usize, binding: NetworkPeerBinding, mut listener: TcpListener) -> TcpAcceptFuture {
+            async move {
+                let result = listener.accept().await;
+                (listener_idx, binding, listener, result)
+            }
+            .boxed()
+        }
+
+        fn read_tcp_once(con_id: ConId, mut reader: ReadHalf<TcpStream>) -> TcpReadFuture {
+            async move {
+                let mut buff = [0u8; 4096];
+                let result = reader.read(&mut buff).await.map(|read| buff[..read].to_vec());
+                (con_id, reader, result)
+            }
+            .boxed()
+        }
+
+        fn recv_udp_once(con_id: ConId, mut receiver: UdpRecvHalf) -> UdpReadFuture {
+            async move {
+                let mut buff = vec![0u8; 65535];
+                let result = receiver
+                    .recv_from(buff.as_mut_slice())
+                    .await
+                    .map(|(read, peer_addr)| {
+                        buff.truncate(read);
+                        (buff, peer_addr)
+                    });
+                (con_id, receiver, result)
+            }
+            .boxed()
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+            use tokio::{
+                io::{AsyncReadExt, AsyncWriteExt},
+                runtime::Runtime,
+                time::{delay_for, Duration},
+            };
 
     fn reserve_tcp_port() -> u16 {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -828,4 +835,36 @@ mod tests {
         assert_eq!(udp_unspecified_bind_addr(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8080))), "[::]:0");
     }
 
+        }
+    } else {
+        pub struct NetworkPeer {
+            rx: Receiver<NetworkMessage>,
+            tx: Sender<NetworkMessage>,
+        }
+
+        impl NetworkPeer {
+            pub async fn new(
+                _config: NetworkPeerConfig,
+                _role: NetworkPeerRole,
+            ) -> (Self, Receiver<NetworkMessage>, Sender<NetworkMessage>) {
+                let (recv_tx, recv_rx) = tokio::sync::mpsc::channel(100);
+                let (send_tx, send_rx) = tokio::sync::mpsc::channel(100);
+
+                (
+                    Self {
+                        rx: recv_rx,
+                        tx: send_tx,
+                    },
+                    send_rx,
+                    recv_tx,
+                )
+            }
+
+            pub async fn run(self) -> Result<()> {
+                let _ = self.rx;
+                let _ = self.tx;
+                Ok(())
+            }
+        }
+    }
 }

@@ -33,7 +33,7 @@ cfg_if::cfg_if! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ClientMode, Config, network::NetworkPeerConfig};
+    use crate::{network::NetworkPeerConfig, ClientMode, Config};
     use tokio::runtime::Runtime;
 
     #[test]

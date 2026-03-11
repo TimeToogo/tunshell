@@ -260,9 +260,11 @@ pub(super) async fn start_remote_pty_master(
 ) -> Result<u8> {
     let _ignore_signals = IgnoreSignals::start();
     let (mut demuxer, listener) = ChannelDemuxer::new();
-    let (network_peer, mut network_peer_rx, mut network_peer_tx) =
-        NetworkPeer::new(network_peer_config, crate::shell::network::NetworkPeerRole::Client)
-            .await;
+    let (network_peer, mut network_peer_rx, mut network_peer_tx) = NetworkPeer::new(
+        network_peer_config,
+        crate::shell::network::NetworkPeerRole::Client,
+    )
+    .await;
 
     let mut server = tokio::task::spawn_blocking(move || {
         let ctx = context::Context::from_pair(STDIN_FD, STDIN_FD);

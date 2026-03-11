@@ -2,8 +2,8 @@ use anyhow::Result;
 use log::*;
 
 pub mod api;
-pub mod relay;
 pub mod db;
+pub mod relay;
 
 pub async fn start(relay_config: relay::Config) -> Result<()> {
     info!("starting tunshell server");
