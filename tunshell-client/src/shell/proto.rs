@@ -413,22 +413,6 @@ mod tests {
         assert_eq!(message, deserialised);
     }
 
-    // #[test]
-    // fn test_network_message_round_trip() {
-    //     let message = NetworkMessage::UdpListenResult(
-    //         "127.0.0.1".to_owned(),
-    //         31337,
-    //         Some("bind failed".to_owned()),
-    //     );
-    //     let serialised = message.serialise().unwrap();
-
-    //     assert_eq!(serialised.type_id(), 9);
-
-    //     let deserialised = NetworkMessage::deserialise(&serialised).unwrap();
-
-    //     assert_eq!(message, deserialised);
-    // }
-
     #[test]
     fn test_client_serialise_network() {
         let message = ShellClientMessage::Network(NetworkMessage::TcpSend(42, vec![1, 2, 3]));
@@ -445,16 +429,4 @@ mod tests {
 
         assert_eq!(message, deserialised);
     }
-
-    // #[test]
-    // fn test_server_serialise_network() {
-    //     let message = ShellServerMessage::Network(NetworkMessage::UdpAccept(7));
-    //     let serialised = message.serialise().unwrap();
-
-    //     assert_eq!(serialised.type_id(), 7);
-
-    //     let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
-
-    //     assert_eq!(message, deserialised);
-    // }
 }
