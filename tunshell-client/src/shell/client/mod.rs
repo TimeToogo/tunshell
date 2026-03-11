@@ -25,7 +25,7 @@ cfg_if::cfg_if! {
     }
 }
 cfg_if::cfg_if! {
-    if #[cfg(all(unix, not(target_os = "ios"), not(target_os = "android")))] {
+    if #[cfg(all(unix, not(target_os = "ios"), not(target_os = "android"), not(target_os = "freebsd")))] {
         mod remote_pty;
         use remote_pty::start_remote_pty_master;
     }
@@ -70,9 +70,9 @@ impl ShellClient {
                 term: self.host_shell.term().unwrap_or("".to_owned()),
                 color: self.host_shell.color().unwrap_or(false),
                 size: WindowSize::from(self.host_shell.size().await?),
-                #[cfg(all(unix, not(target_os = "ios"), not(target_os = "android")))]
+                #[cfg(all(unix, not(target_os = "ios"), not(target_os = "android"), not(target_os = "freebsd")))]
                 remote_pty_support: true,
-                #[cfg(not(all(unix, not(target_os = "ios"), not(target_os = "android"))))]
+                #[cfg(not(all(unix, not(target_os = "ios"), not(target_os = "android"), not(target_os = "freebsd"))))]
                 remote_pty_support: false,
                 // we invert the peer config because the remote will have the inverse view of the network
                 network_peer_config: self.network_peer_config.invert(),
@@ -93,7 +93,7 @@ impl ShellClient {
 
         let exit_code = if let ShellStartedPayload::RemotePty = response {
             cfg_if::cfg_if! {
-                if #[cfg(not(all(unix, not(target_os = "ios"), not(target_os = "android"))))] {
+                if #[cfg(not(all(unix, not(target_os = "ios"), not(target_os = "android"), not(target_os = "freebsd"))))] {
                     return Err(Error::msg("shell server started remote pty when not supported on local"));
                 } else {
                     info!("starting remote pty master");

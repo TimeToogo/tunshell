@@ -72,7 +72,7 @@ features = [
     "WebSocket",
 ]
 
-[target.'cfg(all(unix, not(target_os = "ios"), not(target_os = "android")))'.dependencies]
+[target.'cfg(all(unix, not(target_os = "ios"), not(target_os = "android"), not(target_os = "freebsd")))'.dependencies]
 remote-pty-common = { git = "https://github.com/TimeToogo/remote-pty" }
 remote-pty-master = { git = "https://github.com/TimeToogo/remote-pty" }
 
