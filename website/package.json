@@ -5,13 +5,14 @@
     "export": "next build && next export && ./post-export.sh"
   },
   "dependencies": {
+    "@types/react-dom": "^18.2.19",
     "base-x": "^3.0.8",
     "classnames": "^2.2.6",
     "easydropdown": "^4.2.0",
     "highlight.js": "^10.4.1",
     "next": "13.0.2",
-    "react": "16.13.1",
-    "react-dom": "16.13.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-typical": "^0.1.3",
     "styled-components": "^5.1.1",
     "xterm": "^4.8.1",
@@ -19,7 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^13.13.5",
-    "@types/react": "^16.9.34",
+    "@types/react": "^18.2.55",
     "@types/styled-components": "^5.1.2",
     "babel-plugin-styled-components": "^1.11.1",
     "typescript": "^3.8.3"

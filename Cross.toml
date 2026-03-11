@@ -6,6 +6,3 @@ passthrough = [
     "RUSTFLAGS",
     "CC",
 ]
-
-[target."x86_64-unknown-freebsd"]
-image = "rustembedded/cross:x86_64-unknown-freebsd"

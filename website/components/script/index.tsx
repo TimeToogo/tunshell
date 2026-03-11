@@ -8,7 +8,7 @@ interface Props {
 }
 
 export const Script: React.FC<Props> = ({ script, lang }) => {
-  const scriptRef = useRef();
+  const scriptRef = useRef<HTMLSpanElement | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

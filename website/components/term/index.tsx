@@ -6,16 +6,16 @@ export interface TerminalEmulatorProps {
   fullScreen?: boolean;
   onEmulatorInitialised?: (emulator: TerminalEmulatorInterface, term: import("xterm").Terminal) => void;
   onClose?: () => void;
-  children?: any
+  children?: React.ReactNode;
 }
 
-export const TerminalEmulator: React.SFC<TerminalEmulatorProps> = ({
+export const TerminalEmulator = ({
   fullScreen,
   onClose = () => {},
   onEmulatorInitialised = () => {},
   children
-}) => {
-  const viewportRef = useRef();
+}: TerminalEmulatorProps) => {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const [term, setTerm] = useState<import("xterm").Terminal>();
   const [fitAddon, setFitAddon] = useState<import("xterm-addon-fit").FitAddon>();

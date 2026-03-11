@@ -1,10 +1,12 @@
 import * as Styled from "./styled";
-import { HTMLAttributes } from "react";
+import { ButtonHTMLAttributes, PropsWithChildren } from "react";
 
 interface Props {
   mode?: "inverted" | "normal";
 }
 
-export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & Props> = ({ children, ...props }) => {
+type ButtonProps = PropsWithChildren<ButtonHTMLAttributes<HTMLButtonElement> & Props>;
+
+export const Button = ({ children, ...props }: ButtonProps) => {
   return <Styled.Button {...props}>{children}</Styled.Button>;
 };

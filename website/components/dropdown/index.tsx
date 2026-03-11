@@ -1,16 +1,16 @@
-import React, { HTMLAttributes, useRef, useEffect } from "react";
+import React, { PropsWithChildren, SelectHTMLAttributes, useRef, useEffect } from "react";
 import { DropdownContainer } from "./styled";
 
-interface Props {
-  onSelect: (string) => void;
+interface Props extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "onSelect"> {
+  onSelect: (value: string) => void;
   inline?: boolean;
   disabled?: boolean;
 }
 
-export const Dropdown: React.FC<
-  React.DetailedHTMLProps<HTMLAttributes<HTMLSelectElement>, HTMLSelectElement> & Props
-> = ({ children, onSelect, inline, disabled, ...props }) => {
-  const selectRef = useRef();
+type DropdownProps = PropsWithChildren<Props>;
+
+export const Dropdown = ({ children, onSelect, inline, disabled, ...props }: DropdownProps) => {
+  const selectRef = useRef<HTMLSelectElement | null>(null);
 
   useEffect(() => {
     if (!selectRef.current) {
@@ -32,7 +32,7 @@ export const Dropdown: React.FC<
 
   return (
     <DropdownContainer inline={inline} disabled={disabled}>
-      <select {...props} ref={selectRef}>
+      <select {...props} disabled={disabled} ref={selectRef}>
         {children}
       </select>
     </DropdownContainer>

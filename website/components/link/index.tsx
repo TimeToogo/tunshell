@@ -1,14 +1,17 @@
+import React, { AnchorHTMLAttributes, PropsWithChildren } from "react";
 import NextLink, { LinkProps } from "next/link";
 import * as Styled from "./styled";
 
-interface Props extends LinkProps {
-  a?: React.AnchorHTMLAttributes<HTMLAnchorElement>;
-}
+type Props = PropsWithChildren<
+  LinkProps & {
+    a?: AnchorHTMLAttributes<HTMLAnchorElement>;
+  }
+>;
 
-export const Link: React.FC<Props> = ({ children, a = {}, ...props }) => {
+export const Link = ({ children, a = {}, ...props }: Props) => {
   return (
     <Styled.Link>
-      <NextLink {...props}>
+      <NextLink legacyBehavior passHref {...props}>
         <a {...a}>{children}</a>
       </NextLink>
     </Styled.Link>

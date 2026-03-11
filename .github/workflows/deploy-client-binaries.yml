@@ -35,9 +35,6 @@ jobs:
             target: i586-unknown-linux-musl
             tests: true
           - platform: ubuntu-latest
-            target: mips-unknown-linux-musl
-            rustflags: --cfg openssl
-          - platform: ubuntu-latest
             target: x86_64-unknown-freebsd
             cc: x86_64-unknown-freebsd12-gcc
           # Apple
