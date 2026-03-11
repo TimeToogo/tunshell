@@ -2,7 +2,7 @@ use super::{
     proto::ShellStartedPayload, ShellClientMessage, ShellServerMessage, ShellServerStream,
 };
 use crate::{
-    shell::network::{self, NetworkPeer, NetworkPeerConfig},
+    shell::network::{self, NetworkPeer, NetworkPeerConfig, NetworkPeerRole},
     ShellKey, TunnelStream,
 };
 use anyhow::{Error, Result};
@@ -180,7 +180,7 @@ impl ShellServer {
         };
 
         let (mut network_peer, mut network_peer_rx, mut network_peer_tx) =
-            NetworkPeer::new(shell.network_peer_config().clone()).await;
+            NetworkPeer::new(shell.network_peer_config().clone(), NetworkPeerRole::Server).await;
 
         tokio::spawn(network_peer.run());
 

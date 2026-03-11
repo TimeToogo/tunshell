@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fmt::Display, net::{SocketAddr, ToSocketAddrs}};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    io,
+    net::{SocketAddr, ToSocketAddrs},
+};
 
 use anyhow::{Error, Result};
 use futures::{
@@ -17,6 +22,13 @@ use tokio::{
 };
 
 use crate::shell::{proto::ConId, NetworkMessage};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SocketAddrPreference {
+    Any,
+    V4,
+    V6,
+}
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Copy)]
 pub enum NetworkPeerBindingDirection {
@@ -116,12 +128,19 @@ type TcpReadFuture = BoxFuture<'static, TcpReadEvent>;
 type UdpReadEvent = (ConId, UdpRecvHalf, std::io::Result<(Vec<u8>, SocketAddr)>);
 type UdpReadFuture = BoxFuture<'static, UdpReadEvent>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NetworkPeerRole {
+    Client,
+    Server,
+}
+
 struct UdpBindingState {
     receiver: Option<UdpRecvHalf>,
     sender: UdpSendHalf,
     target_addr: SocketAddr,
     bound_locally: bool,
     last_peer_addr: Option<SocketAddr>,
+    pending_payloads: Vec<Vec<u8>>,
 }
 
 pub struct NetworkPeer {
@@ -130,13 +149,16 @@ pub struct NetworkPeer {
     tx: Sender<NetworkMessage>,
     tcp_listeners: Vec<(NetworkPeerBinding, TcpListener)>,
     tcp_pending: HashMap<ConId, TcpStream>,
+    tcp_pending_writes: HashMap<ConId, Vec<Vec<u8>>>,
     tcp_connections: HashMap<ConId, WriteHalf<TcpStream>>,
     udp_bindings: HashMap<ConId, UdpBindingState>,
+    next_tcp_con_id: ConId,
 }
 
 impl NetworkPeer {
     pub async fn new(
         config: NetworkPeerConfig,
+        role: NetworkPeerRole,
     ) -> (Self, Receiver<NetworkMessage>, Sender<NetworkMessage>) {
         let (recv_tx, recv_rx) = tokio::sync::mpsc::channel(100);
         let (send_tx, send_rx) = tokio::sync::mpsc::channel(100);
@@ -146,8 +168,13 @@ impl NetworkPeer {
             tx: send_tx,
             tcp_listeners: Vec::new(),
             tcp_pending: HashMap::new(),
+            tcp_pending_writes: HashMap::new(),
             tcp_connections: HashMap::new(),
             udp_bindings: HashMap::new(),
+            next_tcp_con_id: match role {
+                NetworkPeerRole::Client => 1,
+                NetworkPeerRole::Server => 2,
+            },
         };
 
         (peer, send_rx, recv_tx)
@@ -191,7 +218,7 @@ impl NetworkPeer {
                         break;
                     }
                     Some(message) => {
-                        info!("received network message: {:?}", message);
+                        debug!("received network message: {:?}", message);
                         if let Err(err) = self.handle_message(message, &mut tcp_reads).await {
                             info!("error handling network message: {}", err);
                         }
@@ -252,15 +279,6 @@ impl NetworkPeer {
             }
             (NetworkPeerBindingDirection::LocalToRemote, NetworkPeerProtocol::Udp)
             | (NetworkPeerBindingDirection::RemoteToLocal, NetworkPeerProtocol::Udp) => {
-                let bind_addr = match binding.direction {
-                    NetworkPeerBindingDirection::LocalToRemote => {
-                        format!("{}:{}", binding.local_addr, binding.local_port)
-                    }
-                    NetworkPeerBindingDirection::RemoteToLocal => "0.0.0.0:0".to_owned(),
-                };
-
-                let socket = UdpSocket::bind(bind_addr).await?;
-                let (receiver, sender) = socket.split();
                 let target_addr = resolve_socket_addr(
                     match binding.direction {
                         NetworkPeerBindingDirection::LocalToRemote => &binding.remote_addr,
@@ -270,7 +288,19 @@ impl NetworkPeer {
                         NetworkPeerBindingDirection::LocalToRemote => binding.remote_port,
                         NetworkPeerBindingDirection::RemoteToLocal => binding.local_port,
                     },
+                    udp_addr_preference(binding),
                 )?;
+                let bind_addr = match binding.direction {
+                    NetworkPeerBindingDirection::LocalToRemote => {
+                        udp_bind_addr(&binding.local_addr, binding.local_port, target_addr)
+                    }
+                    NetworkPeerBindingDirection::RemoteToLocal => {
+                        udp_unspecified_bind_addr(target_addr).to_owned()
+                    }
+                };
+
+                let socket = UdpSocket::bind(bind_addr).await?;
+                let (receiver, sender) = socket.split();
 
                 self.udp_bindings.insert(
                     con_id,
@@ -280,6 +310,7 @@ impl NetworkPeer {
                         target_addr,
                         bound_locally: binding.direction == NetworkPeerBindingDirection::LocalToRemote,
                         last_peer_addr: None,
+                        pending_payloads: Vec::new(),
                     },
                 );
             }
@@ -301,9 +332,9 @@ impl NetworkPeer {
     ) -> Result<()> {
         match message {
             NetworkMessage::TcpConnect(con_id, addr, port) => {
-                match TcpStream::connect(resolve_socket_addr(&addr, port)?).await {
+                match connect_socket_addr(&addr, port).await {
                     Ok(stream) => {
-                        self.activate_tcp_connection(con_id, stream, tcp_reads);
+                        self.activate_tcp_connection(con_id, stream, tcp_reads).await?;
                         self.tx
                             .send(NetworkMessage::TcpConnectResult(con_id, None))
                             .await?;
@@ -325,8 +356,9 @@ impl NetworkPeer {
                 };
 
                 match err {
-                    None => self.activate_tcp_connection(con_id, stream, tcp_reads),
+                    None => self.activate_tcp_connection(con_id, stream, tcp_reads).await?,
                     Some(err) => {
+                        self.tcp_pending_writes.remove(&con_id);
                         self.notice(format!(
                             "failed to establish remote tcp connection {}: {}",
                             con_id, err
@@ -338,6 +370,11 @@ impl NetworkPeer {
             NetworkMessage::TcpSend(con_id, payload) | NetworkMessage::TcpRecv(con_id, payload) => {
                 if let Some(stream) = self.tcp_connections.get_mut(&con_id) {
                     stream.write_all(payload.as_slice()).await?;
+                } else if self.tcp_pending.contains_key(&con_id) {
+                    self.tcp_pending_writes
+                        .entry(con_id)
+                        .or_insert_with(Vec::new)
+                        .push(payload);
                 } else {
                     self.notice(format!("tcp connection {} not found", con_id))
                         .await?;
@@ -345,12 +382,15 @@ impl NetworkPeer {
             }
             NetworkMessage::TcpClose(con_id) => {
                 self.tcp_pending.remove(&con_id);
+                self.tcp_pending_writes.remove(&con_id);
                 self.tcp_connections.remove(&con_id);
             }
             NetworkMessage::UdpSend(con_id, payload) | NetworkMessage::UdpRecv(con_id, payload) => {
                 self.handle_udp_payload(con_id, payload).await?;
             }
-            NetworkMessage::Notice(_) => {}
+            NetworkMessage::Notice(_notice) => {
+
+            }
         }
 
         Ok(())
@@ -396,6 +436,13 @@ impl NetworkPeer {
             Ok((payload, peer_addr)) => {
                 if binding.bound_locally {
                     binding.last_peer_addr = Some(peer_addr);
+                    let pending_payloads = std::mem::take(&mut binding.pending_payloads);
+                    for pending_payload in pending_payloads {
+                        binding
+                            .sender
+                            .send_to(pending_payload.as_slice(), &peer_addr)
+                            .await?;
+                    }
                 }
 
                 self.tx.send(NetworkMessage::UdpSend(con_id, payload)).await?;
@@ -420,14 +467,15 @@ impl NetworkPeer {
         if binding.bound_locally {
             match binding.last_peer_addr {
                 Some(peer_addr) => {
+                    debug!("sending UDP payload to {}:{}", peer_addr.ip(), peer_addr.port());
                     binding.sender.send_to(payload.as_slice(), &peer_addr).await?;
                 }
                 None => {
-                    self.notice(format!("udp binding {} has no local peer yet", con_id))
-                        .await?;
+                    binding.pending_payloads.push(payload);
                 }
             }
         } else {
+            debug!("sending UDP payload to {}:{}", binding.target_addr.ip(), binding.target_addr.port());
             binding
                 .sender
                 .send_to(payload.as_slice(), &binding.target_addr)
@@ -437,33 +485,124 @@ impl NetworkPeer {
         Ok(())
     }
 
-    fn activate_tcp_connection(
+    async fn activate_tcp_connection(
         &mut self,
         con_id: ConId,
         stream: TcpStream,
         tcp_reads: &mut FuturesUnordered<TcpReadFuture>,
-    ) {
+    ) -> Result<()> {
         let (reader, writer) = tokio::io::split(stream);
         self.tcp_connections.insert(con_id, writer);
-        tcp_reads.push(read_tcp_once(con_id, reader));
-    }
 
-    fn next_tcp_con_id(&self) -> ConId {
-        let mut con_id = self.config.bindings.len() as ConId + self.tcp_pending.len() as ConId + 1;
-        while self.tcp_pending.contains_key(&con_id) || self.tcp_connections.contains_key(&con_id)
-        {
-            con_id += 1;
+        if let Some(pending_writes) = self.tcp_pending_writes.remove(&con_id) {
+            let writer = self
+                .tcp_connections
+                .get_mut(&con_id)
+                .expect("tcp connection should exist before flushing pending writes");
+            for payload in pending_writes {
+                writer.write_all(payload.as_slice()).await?;
+            }
         }
 
+        tcp_reads.push(read_tcp_once(con_id, reader));
+        Ok(())
+    }
+
+    fn next_tcp_con_id(&mut self) -> ConId {
+        let mut con_id = self.next_tcp_con_id;
+        while self.tcp_pending.contains_key(&con_id) || self.tcp_connections.contains_key(&con_id)
+        {
+            con_id += 2;
+        }
+
+        self.next_tcp_con_id = con_id + 2;
         con_id
     }
 }
 
-fn resolve_socket_addr(addr: &str, port: u16) -> Result<SocketAddr> {
-    (addr, port)
-        .to_socket_addrs()?
+fn resolve_socket_addr(addr: &str, port: u16, preference: SocketAddrPreference) -> Result<SocketAddr> {
+    let mut addrs = (addr, port).to_socket_addrs()?;
+    let first_addr = addrs
         .next()
+        .ok_or_else(|| Error::msg(format!("failed to resolve socket address {}:{}", addr, port)))?;
+
+    if preference == SocketAddrPreference::Any || socket_addr_matches_preference(first_addr, preference) {
+        return Ok(first_addr);
+    }
+
+    addrs
+        .find(|addr| socket_addr_matches_preference(*addr, preference))
         .ok_or_else(|| Error::msg(format!("failed to resolve socket address {}:{}", addr, port)))
+}
+
+fn resolve_socket_addrs_for_connect(addr: &str, port: u16) -> Result<Vec<SocketAddr>> {
+    let mut addrs: Vec<_> = (addr, port).to_socket_addrs()?.collect();
+    if addrs.is_empty() {
+        return Err(Error::msg(format!(
+            "failed to resolve socket address {}:{}",
+            addr, port
+        )));
+    }
+
+    addrs.sort_by_key(|addr| addr.is_ipv4());
+    Ok(addrs)
+}
+
+fn socket_addr_matches_preference(addr: SocketAddr, preference: SocketAddrPreference) -> bool {
+    match preference {
+        SocketAddrPreference::Any => true,
+        SocketAddrPreference::V4 => addr.is_ipv4(),
+        SocketAddrPreference::V6 => addr.is_ipv6(),
+    }
+}
+
+fn udp_addr_preference(binding: &NetworkPeerBinding) -> SocketAddrPreference {
+    match binding.local_addr.as_str() {
+        "localhost" => SocketAddrPreference::Any,
+        addr if addr.contains(':') => SocketAddrPreference::V6,
+        addr if addr.parse::<std::net::Ipv4Addr>().is_ok() || addr == "0.0.0.0" => {
+            SocketAddrPreference::V4
+        }
+        _ => SocketAddrPreference::Any,
+    }
+}
+
+fn udp_bind_addr(addr: &str, port: u16, target_addr: SocketAddr) -> String {
+    if addr == "localhost" {
+        match target_addr {
+            SocketAddr::V4(_) => format!("127.0.0.1:{}", port),
+            SocketAddr::V6(_) => format!("[::1]:{}", port),
+        }
+    } else {
+        format!("{}:{}", addr, port)
+    }
+}
+
+fn udp_unspecified_bind_addr(target_addr: SocketAddr) -> &'static str {
+    match target_addr {
+        SocketAddr::V4(_) => "0.0.0.0:0",
+        SocketAddr::V6(_) => "[::]:0",
+    }
+}
+
+async fn connect_socket_addr(addr: &str, port: u16) -> io::Result<TcpStream> {
+    let addrs = resolve_socket_addrs_for_connect(addr, port)
+        .map_err(|err| io::Error::new(io::ErrorKind::AddrNotAvailable, err.to_string()))?;
+
+    let mut last_err = None;
+    for addr in addrs {
+        match TcpStream::connect(addr).await {
+            Ok(stream) => return Ok(stream),
+            Err(err) => last_err = Some(err),
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::AddrNotAvailable,
+            format!("failed to resolve socket address {}:{}", addr, port),
+        )
+    }))
 }
 
 fn accept_once(listener_idx: usize, binding: NetworkPeerBinding, mut listener: TcpListener) -> TcpAcceptFuture {
@@ -496,4 +635,197 @@ fn recv_udp_once(con_id: ConId, mut receiver: UdpRecvHalf) -> UdpReadFuture {
         (con_id, receiver, result)
     }
     .boxed()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        runtime::Runtime,
+        time::{delay_for, Duration},
+    };
+
+    fn reserve_tcp_port() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        port
+    }
+
+    fn reserve_udp_port() -> u16 {
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let port = socket.local_addr().unwrap().port();
+        drop(socket);
+        port
+    }
+
+    async fn bridge_network_messages(
+        mut from_a: Receiver<NetworkMessage>,
+        to_b: Sender<NetworkMessage>,
+        mut from_b: Receiver<NetworkMessage>,
+        to_a: Sender<NetworkMessage>,
+    ) {
+        let mut to_b = to_b;
+        let mut to_a = to_a;
+
+        loop {
+            tokio::select! {
+                message = from_a.recv() => match message {
+                    Some(message) => {
+                        let _ = to_b.send(message).await;
+                    }
+                    None => break,
+                },
+                message = from_b.recv() => match message {
+                    Some(message) => {
+                        let _ = to_a.send(message).await;
+                    }
+                    None => break,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_tcp_network_peer_round_trip() {
+        Runtime::new().unwrap().block_on(async {
+            let local_port = reserve_tcp_port();
+            let remote_port = reserve_tcp_port();
+
+            let binding = NetworkPeerBinding {
+                direction: NetworkPeerBindingDirection::LocalToRemote,
+                protocol: NetworkPeerProtocol::Tcp,
+                local_addr: "127.0.0.1".to_owned(),
+                local_port,
+                remote_addr: "127.0.0.1".to_owned(),
+                remote_port,
+            };
+            let config = NetworkPeerConfig::new(vec![binding]);
+
+            let (local_peer, local_rx, local_tx) =
+                NetworkPeer::new(config.clone(), NetworkPeerRole::Client).await;
+            let (remote_peer, remote_rx, remote_tx) =
+                NetworkPeer::new(config.invert(), NetworkPeerRole::Server).await;
+
+            tokio::spawn(local_peer.run());
+            tokio::spawn(remote_peer.run());
+            tokio::spawn(bridge_network_messages(local_rx, remote_tx, remote_rx, local_tx));
+
+            let service_handle = tokio::spawn(async move {
+                let mut listener = TcpListener::bind(("127.0.0.1", remote_port)).await.unwrap();
+                let (mut socket, _) = listener.accept().await.unwrap();
+
+                let mut buff = [0u8; 128];
+                let read = socket.read(&mut buff).await.unwrap();
+                assert_eq!(&buff[..read], b"hello");
+
+                socket.write_all(b"world").await.unwrap();
+            });
+
+            delay_for(Duration::from_millis(50)).await;
+
+            let mut client = TcpStream::connect(("127.0.0.1", local_port)).await.unwrap();
+            client.write_all(b"hello").await.unwrap();
+
+            let mut buff = [0u8; 128];
+            let read = client.read(&mut buff).await.unwrap();
+            assert_eq!(&buff[..read], b"world");
+
+            service_handle.await.unwrap();
+
+        });
+    }
+
+    #[test]
+    fn test_tcp_con_ids_are_partitioned_by_role() {
+        Runtime::new().unwrap().block_on(async {
+            let (mut client_peer, _, _) =
+                NetworkPeer::new(NetworkPeerConfig::default(), NetworkPeerRole::Client).await;
+            let (mut server_peer, _, _) =
+                NetworkPeer::new(NetworkPeerConfig::default(), NetworkPeerRole::Server).await;
+
+            assert_eq!(client_peer.next_tcp_con_id(), 1);
+            assert_eq!(client_peer.next_tcp_con_id(), 3);
+            assert_eq!(server_peer.next_tcp_con_id(), 2);
+            assert_eq!(server_peer.next_tcp_con_id(), 4);
+        });
+    }
+
+    #[test]
+    fn test_udp_network_peer_round_trip() {
+        Runtime::new().unwrap().block_on(async {
+            let local_port = reserve_udp_port();
+            let remote_port = reserve_udp_port();
+
+            let binding = NetworkPeerBinding {
+                direction: NetworkPeerBindingDirection::LocalToRemote,
+                protocol: NetworkPeerProtocol::Udp,
+                local_addr: "127.0.0.1".to_owned(),
+                local_port,
+                remote_addr: "127.0.0.1".to_owned(),
+                remote_port,
+            };
+            let config = NetworkPeerConfig::new(vec![binding]);
+
+            let (local_peer, local_rx, local_tx) =
+                NetworkPeer::new(config.clone(), NetworkPeerRole::Client).await;
+            let (remote_peer, remote_rx, remote_tx) =
+                NetworkPeer::new(config.invert(), NetworkPeerRole::Server).await;
+
+            tokio::spawn(local_peer.run());
+            tokio::spawn(remote_peer.run());
+            tokio::spawn(bridge_network_messages(local_rx, remote_tx, remote_rx, local_tx));
+
+            let service_handle = tokio::spawn(async move {
+                let mut socket = UdpSocket::bind(("127.0.0.1", remote_port)).await.unwrap();
+                let mut buff = [0u8; 128];
+                let (read, addr) = socket.recv_from(&mut buff).await.unwrap();
+                assert_eq!(&buff[..read], b"ping");
+                socket.send_to(b"pong", &addr).await.unwrap();
+            });
+
+            delay_for(Duration::from_millis(50)).await;
+
+            let mut socket = UdpSocket::bind(("127.0.0.1", 0)).await.unwrap();
+            socket.send_to(b"ping", &SocketAddr::from(([127, 0, 0, 1], local_port))).await.unwrap();
+
+            let mut buff = [0u8; 128];
+            let (read, _) = socket.recv_from(&mut buff).await.unwrap();
+            assert_eq!(&buff[..read], b"pong");
+
+            service_handle.await.unwrap();
+
+        });
+    }
+
+    #[test]
+    fn test_resolve_socket_addrs_for_connect_prefers_ipv6_then_ipv4() {
+        let addrs = resolve_socket_addrs_for_connect("localhost", 5050).unwrap();
+
+        let first_ipv4 = addrs.iter().position(|addr| addr.is_ipv4());
+        let last_ipv6 = addrs.iter().rposition(|addr| addr.is_ipv6());
+
+        if let (Some(first_ipv4), Some(last_ipv6)) = (first_ipv4, last_ipv6) {
+            assert!(last_ipv6 < first_ipv4);
+        }
+    }
+
+    #[test]
+    fn test_udp_bind_addr_uses_ipv4_for_localhost_v4_target() {
+        assert_eq!(
+            udp_bind_addr("localhost", 5050, SocketAddr::from(([127, 0, 0, 1], 8080))),
+            "127.0.0.1:5050"
+        );
+    }
+
+    #[test]
+    fn test_udp_bind_addr_uses_ipv6_for_localhost_v6_target() {
+        assert_eq!(
+            udp_bind_addr("localhost", 5050, SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8080))),
+            "[::1]:5050"
+        );
+        assert_eq!(udp_unspecified_bind_addr(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 8080))), "[::]:0");
+    }
+
 }

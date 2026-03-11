@@ -13,7 +13,10 @@ use anyhow::{Error, Result};
 use futures::StreamExt;
 use remote_pty_common::channel;
 
-use crate::shell::proto::{RemotePtyDataPayload, RemotePtyEventPayload, ShellServerMessage};
+use crate::shell::{
+    network::{NetworkPeer, NetworkPeerConfig},
+    proto::{RemotePtyDataPayload, RemotePtyEventPayload, ShellClientMessage, ShellServerMessage},
+};
 use crate::STOP_ON_SIGINT;
 
 use super::ShellStream;
@@ -251,9 +254,15 @@ impl Drop for IgnoreSignals {
     }
 }
 
-pub(super) async fn start_remote_pty_master(mut stream: ShellStream) -> Result<u8> {
+pub(super) async fn start_remote_pty_master(
+    mut stream: ShellStream,
+    network_peer_config: NetworkPeerConfig,
+) -> Result<u8> {
     let _ignore_signals = IgnoreSignals::start();
     let (mut demuxer, listener) = ChannelDemuxer::new();
+    let (network_peer, mut network_peer_rx, mut network_peer_tx) =
+        NetworkPeer::new(network_peer_config, crate::shell::network::NetworkPeerRole::Client)
+            .await;
 
     let mut server = tokio::task::spawn_blocking(move || {
         let ctx = context::Context::from_pair(STDIN_FD, STDIN_FD);
@@ -263,18 +272,26 @@ pub(super) async fn start_remote_pty_master(mut stream: ShellStream) -> Result<u
             .map_err(|_| Error::msg("failed to join server"))?;
         Ok(0u8)
     });
+    tokio::spawn(network_peer.run());
 
     loop {
         tokio::select! {
             res = &mut server => return res.unwrap_or_else(|_| Err(Error::msg("failed join server"))),
             msg = stream.next() => match msg {
                 Some(Ok(ShellServerMessage::RemotePtyEvent(msg))) => demuxer.handle(msg)?,
+                Some(Ok(ShellServerMessage::Network(msg))) => {
+                    let _ = network_peer_tx.send(msg).await;
+                }
                 Some(Ok(ShellServerMessage::Exited(code))) => return Ok(code),
                 None => return Err(Error::msg("shell server stream finished unexpectedly")),
                 _ => return Err(Error::msg("received unexpected message from shell server stream"))
             },
             msg = demuxer.next() => {
-                stream.write(&crate::shell::proto::ShellClientMessage::RemotePtyData(msg?)).await?;
+                stream.write(&ShellClientMessage::RemotePtyData(msg?)).await?;
+            }
+            msg = network_peer_rx.recv() => match msg {
+                Some(msg) => stream.write(&ShellClientMessage::Network(msg)).await?,
+                None => {}
             }
         };
     }

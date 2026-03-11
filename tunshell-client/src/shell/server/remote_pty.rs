@@ -4,7 +4,7 @@ use crate::shell::proto::{
 
 use super::shell::Shell;
 use super::ShellStream;
-use crate::shell::network::{NetworkPeer, NetworkPeerConfig};
+use crate::shell::network::{NetworkPeer, NetworkPeerConfig, NetworkPeerRole};
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -85,7 +85,7 @@ impl RemotePtyShell {
     async fn do_stream_io(mut self: Pin<&mut Self>, stream: &mut ShellStream) -> Result<()> {
         let mut state = self.state.take().unwrap();
         let (mut network_peer, mut network_peer_rx, network_peer_tx) =
-            NetworkPeer::new(self.network_peer_config.clone()).await;
+            NetworkPeer::new(self.network_peer_config.clone(), NetworkPeerRole::Server).await;
 
         tokio::spawn(network_peer.run());
 

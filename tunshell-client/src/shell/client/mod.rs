@@ -97,7 +97,7 @@ impl ShellClient {
                     return Err(Error::msg("shell server started remote pty when not supported on local"));
                 } else {
                     info!("starting remote pty master");
-                    start_remote_pty_master(stream).await
+                    start_remote_pty_master(stream, self.network_peer_config.clone()).await
                 }
             }
         } else {
@@ -145,7 +145,11 @@ impl ShellClient {
         let mut stdout = self.host_shell.stdout()?;
         let mut resize_watcher = self.host_shell.resize_watcher()?;
         let (network_peer, mut network_peer_rx, mut network_peer_tx) =
-            crate::shell::network::NetworkPeer::new(self.network_peer_config.clone()).await;
+            crate::shell::network::NetworkPeer::new(
+                self.network_peer_config.clone(),
+                crate::shell::network::NetworkPeerRole::Client,
+            )
+            .await;
 
         tokio::spawn(network_peer.run());
 
