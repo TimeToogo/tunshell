@@ -32,3 +32,11 @@ cfg_if::cfg_if! {
         pub static STOP_ON_SIGINT: AtomicBool = AtomicBool::new(true);
     }
 }
+
+// Older getrandom releases call open64 on Linux. Musl dropped that exported
+// symbol, so provide a minimal compatibility entrypoint for musl targets.
+#[cfg(all(target_os = "linux", target_env = "musl"))]
+#[no_mangle]
+pub unsafe extern "C" fn open64(path: *const libc::c_char, oflag: libc::c_int) -> libc::c_int {
+    libc::open(path, oflag)
+}
