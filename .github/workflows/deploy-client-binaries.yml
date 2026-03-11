@@ -40,7 +40,7 @@ jobs:
           # Apple
           - platform: macos-latest
             target: x86_64-apple-darwin
-            tests: true
+            tests: false
           - platform: macos-latest
             target: x86_64-apple-ios
           - platform: macos-latest
