@@ -48,6 +48,7 @@ pub(super) struct StartShellPayload {
     pub(super) color: bool,
     pub(super) size: WindowSize,
     pub(super) remote_pty_support: bool,
+    #[serde(default)]
     pub(super) network_peer_config: NetworkPeerConfig,
 }
 
