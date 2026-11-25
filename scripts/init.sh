@@ -4,7 +4,7 @@
 set -e
 
 main() {
-    case "$(uname -s):$(uname -m):$(uname -v):$(uname -a)" in
+    case "$(uname -s):$(uname -m):$(uname -r):$(uname -a)" in
     Linux:x86_64*)     
         TARGET="x86_64-unknown-linux-musl"
         ;;
@@ -17,7 +17,7 @@ main() {
     Linux:arm*)     
         TARGET="armv7-unknown-linux-musleabihf"
         ;;
-    Linux:i686:iSH*)
+    Linux:i686:*-ish:*)
         TARGET="ish"
         ;;
     Linux:i686*)     
