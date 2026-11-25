@@ -11,16 +11,10 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: '3.1.x'
     - name: Compile .NET Core init DLL
       run: ./build.sh
       working-directory: scripts/netcore
       
-    - uses: actions/setup-java@v1
-      with:
-        java-version: '10'
     - name: Compile Java init JAR
       run: ./build.sh
       working-directory: scripts/java
